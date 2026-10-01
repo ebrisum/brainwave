@@ -52,10 +52,11 @@ def list_courses():
     if jobs.COURSES_DIR.exists():
         for d in sorted(jobs.COURSES_DIR.iterdir()):
             m = d / "manifest.json"
-            if d.name.startswith("c_") and m.exists():
-                j = json.loads(m.read_text())
+            partial = d / "manifest.partial.json"
+            if d.name.startswith("c_") and (m.exists() or partial.exists()):
+                j = json.loads((m if m.exists() else partial).read_text())
                 out.append({"courseId": j["courseId"], "name": j["name"], "stats": j["stats"], "tier": j["tier"], "eventStart": j.get("eventStart"),
-                            "climbs": len(j["segments"]["climbs"])})
+                            "climbs": len(j["segments"]["climbs"]), "building": not m.exists()})
     return out
 
 
@@ -118,6 +119,8 @@ def manifest(cid: str):
     d = _course_dir(cid)
     m = d / "manifest.json"
     if not m.exists():
+        if (d / "manifest.partial.json").exists():
+            return FileResponse(d / "manifest.partial.json", media_type="application/json", headers={"X-RidePrep-Partial": "1"})
         raise HTTPException(409, "build still running")
     return FileResponse(m, media_type="application/json")
 
@@ -131,9 +134,12 @@ def files(cid: str, path: str):
     if os.environ.get("STORAGE") == "minio" and (d / "manifest.json").exists():
         from .storage import signed_url
         return RedirectResponse(signed_url(d.name, path))
+    if not target.exists() and path == "manifest.json" and (d / "manifest.partial.json").exists():
+        # Progressive streaming: ride the Quick tier while the full bake continues
+        return FileResponse(d / "manifest.partial.json", media_type="application/json", headers={"Cache-Control": "no-cache", "X-RidePrep-Partial": "1"})
     if not target.exists():
         raise HTTPException(404, "not found")
-    immutable = path not in ("weather.json", "chunks/status.json", "manifest.json")
+    immutable = path not in ("weather.json", "chunks/status.json", "chunks/index.json", "manifest.json")
     return FileResponse(target, headers={"Cache-Control": "public, max-age=31536000, immutable" if immutable else "no-cache"})
 
 

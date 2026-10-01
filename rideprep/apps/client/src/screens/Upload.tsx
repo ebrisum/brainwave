@@ -85,6 +85,10 @@ export function Upload() {
           {warnings.length > 0 && <details><summary>{warnings.length} warnings</summary><ul>{warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></details>}
           {error && <p className="warn">{error}</p>}
           {state === "done" && courseId && <button className="primary" onClick={() => go("briefing", { courseId })}>Open course briefing</button>}
+          {state === "building" && courseId && rows.quick?.status === "done" && (
+            <p>Quick tier ready — <button className="primary" onClick={() => go("briefing", { courseId })}>Open briefing now</button>{" "}
+              <span className="muted">baked chunks stream in while you ride.</span></p>
+          )}
         </section>
       )}
     </main>

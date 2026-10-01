@@ -52,6 +52,8 @@ export interface Manifest {
   climatology: { file: string };
   attribution: string[];
   warnings?: { stage: string; code: string; message: string }[];
+  /** Present while the full bake is still running (progressive streaming). */
+  partial?: boolean;
 }
 
 export interface QuickBuilding { h: number; z: number; type: string; roof: string; near: boolean; ring: [number, number][] }

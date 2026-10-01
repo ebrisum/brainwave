@@ -14,7 +14,8 @@ from ..pipeline import BuildContext
 from .common import load_route
 
 # Excluded from the content hash: live weather and build logs (timings)
-NON_DETERMINISTIC = {"weather.json", "climatology.json", "build_log.json", "report.html", "manifest.json", ".state.json", "chunks/status.json"}
+NON_DETERMINISTIC = {"weather.json", "climatology.json", "build_log.json", "report.html", "manifest.json", ".state.json", "chunks/status.json",
+                     "manifest.partial.json"}
 
 
 class ValidationError(RuntimeError):
@@ -47,7 +48,7 @@ def build_manifest(ctx: BuildContext) -> dict:
     if ctx.path("chunks/index.json").exists():
         chunks = ctx.read_json("chunks/index.json")["chunks"]
         chunks = [{k: c[k] for k in ("id", "sStart", "sEnd", "status", "lod", "origin", "lodDistancesM")} for c in chunks]
-        far = "far_terrain.glb"
+        far = "far_terrain.glb" if ctx.path("far_terrain.glb").exists() else None
     else:
         from .common import chunk_ranges
         chunks = [{"id": k, "sStart": a, "sEnd": b, "status": "quick", "lod": []} for k, a, b in chunk_ranges(meta["stats"]["distanceM"], ctx.config.tunables.chunk_length_m)]
@@ -84,6 +85,17 @@ def build_manifest(ctx: BuildContext) -> dict:
         "attribution": attribution, "elevationSources": meta.get("elevationSources", []), "barometric": meta.get("barometric"),
         "warnings": warnings,
     }
+
+
+def write_partial_manifest(ctx: BuildContext) -> None:
+    """Progressive streaming: a manifest the client can ride with while the full bake continues (spec §2, §10.1)."""
+    try:
+        m = build_manifest(ctx)
+    except FileNotFoundError:
+        return
+    m["partial"] = True
+    m["contentHash"] = "0" * 64
+    ctx.write_json("manifest.partial.json", m, indent=None)
 
 
 def check_integrity(ctx: BuildContext, m: dict) -> list[str]:
@@ -159,6 +171,7 @@ def run(ctx: BuildContext) -> list[str]:
     from ..report import write_report
     write_report(ctx, m)
     ctx.write_json("manifest.json", m, indent=1)  # last, atomic
+    ctx.path("manifest.partial.json").unlink(missing_ok=True)
     return ["manifest.json", "report.html", "files.json"]
 
 

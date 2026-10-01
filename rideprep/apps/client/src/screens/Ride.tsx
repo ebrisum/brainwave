@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { poseAt } from "@rideprep/course-format";
+import { ChunkRef, poseAt } from "@rideprep/course-format";
 import { courseFetcher } from "../api";
 import { ElevationProfile } from "../components/ElevationProfile";
 import { MiniMap } from "../components/MiniMap";
@@ -27,6 +27,7 @@ export function Ride() {
     if (!courseId || !ref.current) return;
     let disposed = false;
     let world: World | undefined;
+    let poll: ReturnType<typeof setInterval> | undefined;
     (async () => {
       const course = await getCourse(courseId);
       const quick = await getQuick(courseId);
@@ -58,6 +59,17 @@ export function Ride() {
       world.start();
       if (useSession && !session!.isStarted) session!.start();
       setReady(true);
+      if (course.manifest.partial) {
+        // Progressive streaming: pick up chunks as the server bakes them
+        const f = courseFetcher(courseId);
+        poll = setInterval(async () => {
+          try {
+            const idx = JSON.parse(new TextDecoder().decode(await f("chunks/index.json"))) as { chunks: ChunkRef[] };
+            world?.chunks.setChunks(idx.chunks);
+            if (idx.chunks.every((c) => c.status === "baked")) clearInterval(poll);
+          } catch { /* index not written yet */ }
+        }, 5000);
+      }
     })().catch((e) => console.error(e));
     const onResize = () => worldRef.current?.resize();
     window.addEventListener("resize", onResize);
@@ -65,6 +77,7 @@ export function Ride() {
     return () => {
       disposed = true;
       clearInterval(fpsTimer);
+      if (poll) clearInterval(poll);
       window.removeEventListener("resize", onResize);
       worldRef.current?.dispose();
       worldRef.current = undefined;

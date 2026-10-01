@@ -78,6 +78,13 @@ def test_resume_after_kill_during_bake(tmp_path):
     done_ids = [k.stem for k in (d / "chunks" / ".keys").glob("c*.txt")]
     finished = {f"{c}_lod0.glb": (d / "chunks" / f"{c}_lod0.glb").stat().st_mtime_ns for c in done_ids}
     assert 10 <= len(finished) < 85
+    # Progressive streaming: a partial manifest and a chunk index with baked + pending chunks exist mid-bake
+    partial = json.loads((d / "manifest.partial.json").read_text())
+    assert partial["partial"] is True and not (d / "manifest.json").exists()
+    idx = json.loads((d / "chunks" / "index.json").read_text())
+    states = {c["status"] for c in idx["chunks"]}
+    assert states == {"baked", "pending"}
+    assert idx["chunks"][0]["status"] == "baked"  # ride order: the start is baked first
     time.sleep(0.05)
     res = build(gpx, tmp_path, "--resume")
     events = [json.loads(l) for l in res.stdout.splitlines() if l.startswith("{")]
@@ -86,6 +93,7 @@ def test_resume_after_kill_during_bake(tmp_path):
     for name, mt in finished.items():
         assert (d / "chunks" / name).stat().st_mtime_ns == mt, f"{name} was re-baked"
     assert run_cli("validate", d).returncode == 0
+    assert not (d / "manifest.partial.json").exists()
 
 
 def test_degradation_without_osm(tmp_path):

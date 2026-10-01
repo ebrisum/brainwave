@@ -81,6 +81,14 @@ def build_chunk_specs(ctx: BuildContext) -> list[dict]:
     return specs
 
 
+def write_index(ctx: BuildContext, specs, status, version, mode) -> list[dict]:
+    """chunks/index.json, rewritten as chunks finish so clients can stream them in ride order during the bake."""
+    chunks = [{"id": sp["id"], "sStart": sp["sStart"], "sEnd": sp["sEnd"], "origin": sp["origin"], "status": status[sp["id"]],
+               "lod": [f"chunks/c{sp['id']}_lod{l}.glb" for l in range(3)], "lodDistancesM": sp["lodDistancesM"]} for sp in specs]
+    ctx.write_json("chunks/index.json", {"baker": version, "mode": mode, "chunks": chunks})
+    return chunks
+
+
 def run(ctx: BuildContext) -> list[str]:
     specs = build_chunk_specs(ctx)
     out_dir = ctx.path("chunks")
@@ -105,6 +113,9 @@ def run(ctx: BuildContext) -> list[str]:
         todo.append((sp, key))
         status[sp["id"]] = "pending"
     ctx.write_json("chunks/status.json", {"chunks": status})
+    write_index(ctx, specs, status, version, mode)
+    from .validate import write_partial_manifest
+    write_partial_manifest(ctx)
     workers = max(1, min(ctx.options.workers, len(todo), os.cpu_count() or 1))
     done = 0
     # Test hook: simulate the build being killed after N chunks (tests/test_pipeline.py::test_resume)
@@ -127,6 +138,7 @@ def run(ctx: BuildContext) -> list[str]:
                     status[cid] = "baked"
                     done += 1
                     ctx.write_json("chunks/status.json", {"chunks": status})
+                    write_index(ctx, specs, status, version, mode)
                     ctx.progress_frac(done / len(todo), f"chunk {cid}")
                     if kill_after and done >= kill_after:
                         for f2 in futs:
@@ -139,6 +151,7 @@ def run(ctx: BuildContext) -> list[str]:
                 status[cid] = "baked"
                 done += 1
                 ctx.write_json("chunks/status.json", {"chunks": status})
+                write_index(ctx, specs, status, version, mode)
                 ctx.progress_frac(done / len(todo), f"chunk {cid}")
                 check_kill()
     # Far field terrain
@@ -147,8 +160,6 @@ def run(ctx: BuildContext) -> list[str]:
     with rasterio.open(ctx.path("corridor/dem_far.tif")) as ds:
         zf = ds.read(1).astype(np.float64)
     ctx.write_bytes("far_terrain.glb", bake_far_terrain(zf, idx["far"]["bounds"], (0, 0, 0)))
-    chunks = [{"id": sp["id"], "sStart": sp["sStart"], "sEnd": sp["sEnd"], "origin": sp["origin"], "status": status[sp["id"]],
-               "lod": [f"chunks/c{sp['id']}_lod{l}.glb" for l in range(3)], "lodDistancesM": sp["lodDistancesM"]} for sp in specs]
-    ctx.write_json("chunks/index.json", {"baker": version, "mode": mode, "chunks": chunks})
+    chunks = write_index(ctx, specs, status, version, mode)
     outs = ["chunks/index.json", "far_terrain.glb"] + [f for c in chunks for f in c["lod"]]
     return outs

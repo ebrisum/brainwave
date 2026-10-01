@@ -247,6 +247,8 @@ def run(ctx: BuildContext) -> list[str]:
     mats = json.loads(resources.files("gpx2course").joinpath("data/materials.json").read_text())
     ctx.write_json("materials.json", mats, indent=1)
     outs += ["quick/buildings.json", "quick/roads.json", "quick/water.json", "materials.json"]
+    from .validate import write_partial_manifest
+    write_partial_manifest(ctx)  # the rider can start on the Quick tier now
     return outs
 
 

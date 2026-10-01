@@ -1,0 +1,35 @@
+{
+  "name": "@rideprep/ride-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "ride-core": "./dist/ride-core.mjs"
+  },
+  "scripts": {
+    "start": "tsx src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json",
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node22 --external:@abandonware/noble --outfile=dist/ride-core.mjs '--banner:js=import{createRequire as __cr}from\"node:module\";const require=__cr(import.meta.url);'"
+  },
+  "dependencies": {
+    "@msgpack/msgpack": "3.1.3",
+    "@rideprep/ble": "workspace:*",
+    "@rideprep/course-format": "workspace:*",
+    "@rideprep/metrics": "workspace:*",
+    "@rideprep/physics": "workspace:*",
+    "ws": "8.22.0"
+  },
+  "optionalDependencies": {
+    "@abandonware/noble": "1.9.2-26"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.2",
+    "@types/node": "26.6.3",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3",
+    "tsx": "4.23.15",
+    "esbuild": "0.28.2"
+  }
+}
