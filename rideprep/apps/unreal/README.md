@@ -42,6 +42,17 @@ Coordinates: `UE.X = E·100, UE.Y = −N·100, UE.Z = U·100` (cm, left-handed, 
 (`EnuToUe`) everywhere. glTF chunks use the package's glTF convention (X east, Y up, Z south); `glTFRuntime`
 is configured with `TransformBaseType = YForward` — verify the basis once on the target engine version.
 
+## Photoreal mode (real world) and cockpit
+
+Tick **Photoreal** on `RidePrepWorld` and launch with `-GoogleTilesKey=<key>` (Map Tiles API). Google Photorealistic 3D
+Tiles stream through Cesium for Unreal; the georeference is re-anchored at the rider every 750 m (origin = rider lat/lon,
+actor yawed by −grid convergence) and height-calibrated with line traces at the road. Generated terrain/vegetation/chunks
+are hidden; road ribbon, markers and rider stay. The rider switches to **Cockpit** (camera at eye height, cockpit mesh +
+bike-computer widget attached to the camera, pedalling bob, corner roll). `TilesetUrlOverride` accepts any tileset — e.g. a
+package's `devtiles/tileset.json` (`gpx2course dev-tileset`) to test without a key.
+
+Regional style: colours from the package's `materials.json` tint the road material (`BaseColor` parameter).
+
 ## Editor mode ("hero courses")
 
 `Scripts/import_course.py` builds a World Partition level from `unreal/` (16-bit heightmaps 505×505 at 8 m, weight maps,

@@ -14,7 +14,7 @@ offline fixtures unless noted.
 | M6 | Unreal runtime target | Code complete, not compiled — `RidePrepRuntime` plugin, stage 11 exports. Engine-independent maths and MessagePack are compiled and tested natively; ENU↔UE round trip and cross-renderer position tests pass. Needs UE 5.8 to build and visually verify. |
 | M7 | Graphics polish | Partial — true-sun sky, soft shadows near the rider, fog from visibility, rain particles, wet road, wind-driven vegetation sway shader, rider with cadence/lean/standing/tuck, five cameras incl. flyover, quality presets with auto-detect and dynamic resolution. Missing: bloom/SSAO, flags, wheel spray, licensed rider asset. |
 | M8 | Preparation and analysis | Done — optimiser + scenario comparison, target band in HUD, ERG on a course, trainer calibration check (§9.4), post-ride analysis, FIT/TCX/GPX export, ghost rider. |
-| M9 | Extras | Partial — Unreal editor import script (untested). Not started: Photoreal mode, Electron app, street imagery. |
+| M9 | Extras | Mostly done — **Photoreal mode** (Google 3D Tiles) in the web client (verified with an ECEF stand-in tileset: anchoring + height calibration) and in Unreal via Cesium (code, not compiled here); **cockpit view**; **video mode** (sync recorded rides, play at virtual speed — verified in the browser); Mapillary street photos in the briefing; regional style profiles; Unreal editor import script (untested). Not started: Electron app. |
 
 ## Demo notes
 

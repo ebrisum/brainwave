@@ -74,4 +74,4 @@ struct FRidePrepStreamState
 };
 
 UENUM(BlueprintType)
-enum class ERidePrepCamera : uint8 { Chase, FirstPerson, Side, Drone, Flyover };
+enum class ERidePrepCamera : uint8 { Chase, FirstPerson, Side, Drone, Flyover, Cockpit };

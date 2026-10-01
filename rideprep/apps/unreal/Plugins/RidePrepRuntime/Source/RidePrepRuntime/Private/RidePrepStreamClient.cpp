@@ -98,6 +98,6 @@ void URidePrepStreamClient::SendEnd() { Send(RidePrep::EncodeCommand("end")); }
 void URidePrepStreamClient::SendDifficulty(float Value) { Send(RidePrep::EncodeCommand("difficulty", "value", Value)); }
 void URidePrepStreamClient::SendCamera(ERidePrepCamera Mode)
 {
-    static const char* Names[] = { "chase", "first", "side", "drone", "flyover" };
+    static const char* Names[] = { "chase", "first", "side", "drone", "flyover", "cockpit" };
     Send(RidePrep::EncodeCommand("camera", "mode", 0, Names[(int32)Mode]));
 }

@@ -38,7 +38,7 @@ export interface StreamState {
 export type StreamCommand =
   | { type: "pause" }
   | { type: "resume" }
-  | { type: "camera"; mode: "chase" | "first" | "side" | "drone" | "flyover" }
+  | { type: "camera"; mode: "chase" | "cockpit" | "first" | "side" | "drone" | "flyover" }
   | { type: "difficulty"; value: number }
   | { type: "end" };
 

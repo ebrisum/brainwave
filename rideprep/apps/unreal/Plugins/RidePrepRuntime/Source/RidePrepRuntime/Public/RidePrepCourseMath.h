@@ -71,4 +71,41 @@ inline double CompassToUeYawDeg(double BearingRad) { return BearingRad * 57.2957
 // Rider lean (rad) for speed v (m/s) and radius r (m).
 inline double LeanAngle(double V, double R) { return (std::isfinite(R) && R > 0) ? std::atan(V * V / (9.80665 * R)) : 0.0; }
 
+// Course frame (transverse Mercator at the origin, k0 = 1, WGS84) → latitude/longitude in degrees.
+// Mirrors packages/course-format/src/geo.ts (Snyder 1987); sub-millimetre within ±200 km of the origin.
+inline void LocalToLatLon(double Lat0, double Lon0, double X, double Y, double& OutLat, double& OutLon) {
+    const double A = 6378137.0, F = 1 / 298.257223563, E2 = F * (2 - F), EP2 = E2 / (1 - E2), Rad = 3.141592653589793 / 180.0;
+    auto Arc = [&](double Phi) {
+        const double E4 = E2 * E2, E6 = E4 * E2;
+        return A * ((1 - E2 / 4 - 3 * E4 / 64 - 5 * E6 / 256) * Phi - (3 * E2 / 8 + 3 * E4 / 32 + 45 * E6 / 1024) * std::sin(2 * Phi)
+                    + (15 * E4 / 256 + 45 * E6 / 1024) * std::sin(4 * Phi) - (35 * E6 / 3072) * std::sin(6 * Phi));
+    };
+    const double M = Arc(Lat0 * Rad) + Y;
+    const double Mu = M / (A * (1 - E2 / 4 - 3 * E2 * E2 / 64 - 5 * E2 * E2 * E2 / 256));
+    const double E1 = (1 - std::sqrt(1 - E2)) / (1 + std::sqrt(1 - E2));
+    const double Phi1 = Mu + (3 * E1 / 2 - 27 * std::pow(E1, 3) / 32) * std::sin(2 * Mu) + (21 * E1 * E1 / 16 - 55 * std::pow(E1, 4) / 32) * std::sin(4 * Mu)
+                        + (151 * std::pow(E1, 3) / 96) * std::sin(6 * Mu) + (1097 * std::pow(E1, 4) / 512) * std::sin(8 * Mu);
+    const double S1 = std::sin(Phi1), C1 = std::cos(Phi1), T1v = std::tan(Phi1);
+    const double Cc = EP2 * C1 * C1, T1 = T1v * T1v;
+    const double N1 = A / std::sqrt(1 - E2 * S1 * S1);
+    const double R1 = A * (1 - E2) / std::pow(1 - E2 * S1 * S1, 1.5);
+    const double D = X / N1;
+    const double Lat = Phi1 - (N1 * T1v / R1) * (D * D / 2 - (5 + 3 * T1 + 10 * Cc - 4 * Cc * Cc - 9 * EP2) * std::pow(D, 4) / 24
+                                                + (61 + 90 * T1 + 298 * Cc + 45 * T1 * T1 - 252 * EP2 - 3 * Cc * Cc) * std::pow(D, 6) / 720);
+    const double Lon = (D - (1 + 2 * T1 + Cc) * std::pow(D, 3) / 6 + (5 - 2 * Cc + 28 * T1 - 3 * Cc * Cc + 8 * EP2 + 24 * T1 * T1) * std::pow(D, 5) / 120) / C1;
+    OutLat = Lat / Rad;
+    OutLon = Lon0 + Lon / Rad;
+}
+
+// Grid convergence at a course-frame point: azimuth (deg, clockwise from true north) of grid north.
+// A georeference whose ENU north must line up with the course grid is yawed by −convergence in UE.
+inline double GridConvergenceDeg(double Lat0, double Lon0, double X, double Y) {
+    double La0, Lo0, La1, Lo1;
+    LocalToLatLon(Lat0, Lon0, X, Y, La0, Lo0);
+    LocalToLatLon(Lat0, Lon0, X, Y + 100.0, La1, Lo1);
+    const double Rad = 3.141592653589793 / 180.0;
+    const double DE = (Lo1 - Lo0) * std::cos(La0 * Rad), DN = La1 - La0;
+    return std::atan2(DE, DN) / Rad;
+}
+
 }  // namespace RidePrep

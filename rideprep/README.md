@@ -43,6 +43,11 @@ cd services/course-builder && GPX2COURSE_OFFLINE=1 pytest
 `gpx2course build --help` lists every option (`--tier`, `--targets`, `--weather forecast|historical:<date>|climatology|manual:<file>`,
 `--resume`, `--from-stage`, `--only-stage`, `--dry-run`, `--progress json`, `--workers`, `--config`).
 
+## Real-world view
+
+Photoreal (Google 3D Tiles, as in Google Earth), video mode (real footage at your speed), cockpit view, street-level
+photos and per-country styling: see `docs/REAL_WORLD_VIEW.md` — including how to build and run the Unreal version.
+
 ## Status
 
 See `docs/MILESTONES.md` for what is done, measured budgets and what still needs real hardware (Bluetooth trainer,

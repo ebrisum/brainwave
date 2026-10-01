@@ -25,10 +25,15 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<USkeletalMeshComponent> Mesh;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<USpringArmComponent> Arm;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UCameraComponent> Camera;
+    /** Cockpit: handlebars/hands mesh and a bike-computer widget attached to the camera (assign in the rider BP). */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<class UStaticMeshComponent> Cockpit;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<class UWidgetComponent> BikeComputer;
     UPROPERTY(BlueprintReadOnly) float CrankAngle = 0;
     UPROPERTY(BlueprintReadOnly) float LeanDeg = 0;
     UPROPERTY(BlueprintReadOnly) float Standing = 0;
     UPROPERTY(BlueprintReadOnly) float Tuck = 0;
     UPROPERTY(BlueprintReadOnly) float WheelSpinDeg = 0;
     UPROPERTY(BlueprintReadOnly) ERidePrepCamera CameraMode = ERidePrepCamera::Chase;
+private:
+    float BobPhase = 0;
 };

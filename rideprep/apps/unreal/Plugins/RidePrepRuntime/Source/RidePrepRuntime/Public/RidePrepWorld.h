@@ -38,6 +38,18 @@ public:
     UPROPERTY(EditAnywhere, Category = "RidePrep|Streaming") float ChunkBehindM = 500;
     UPROPERTY(EditAnywhere, Category = "RidePrep|Streaming") float VegetationRadiusM = 3000;
 
+    /**
+     * Real-world view: Google Photorealistic 3D Tiles (what Google Earth shows) streamed through Cesium for Unreal,
+     * anchored to the course frame at the rider and height-calibrated by line traces at the road. Our generated terrain,
+     * buildings, vegetation and chunks are hidden; the road ribbon, markers and rider stay. Runtime streaming only.
+     * The key can also come from the command line: -GoogleTilesKey=... (never commit it).
+     */
+    UPROPERTY(EditAnywhere, Category = "RidePrep|Photoreal") bool bPhotoreal = false;
+    UPROPERTY(EditAnywhere, Category = "RidePrep|Photoreal") FString GoogleApiKey;
+    /** Any 3D Tiles URL instead of Google (e.g. a package's devtiles/tileset.json for testing without a key). */
+    UPROPERTY(EditAnywhere, Category = "RidePrep|Photoreal") FString TilesetUrlOverride;
+    UPROPERTY(EditAnywhere, Category = "RidePrep|Photoreal") float ReanchorDistanceM = 750;
+
     UPROPERTY(BlueprintReadOnly) TObjectPtr<URidePrepCourse> Course;
     UPROPERTY(BlueprintReadOnly) TObjectPtr<URidePrepStreamClient> Stream;
     UPROPERTY(BlueprintReadOnly) TObjectPtr<ARidePrepRider> Rider;
@@ -56,6 +68,16 @@ private:
     void UpdateChunks(double S);
     void UpdateEnvironment(const FRidePrepStreamState& S);
     UMaterialInterface* Material(FName Id) const;
+    void SetupPhotoreal();
+    void UpdatePhotoreal(double S);
+    void ApplyStyle();
+    TMap<FName, FLinearColor> StyleColors;
+    UPROPERTY() TObjectPtr<AActor> Tileset;
+    UPROPERTY() TObjectPtr<AActor> Georeference;
+    double AnchorS = -1e9;
+    double VerticalOffsetCm = 0;
+    bool bHeightCalibrated = false;
+    double LastCalibration = 0;
 
     UPROPERTY() TMap<FIntPoint, TObjectPtr<UProceduralMeshComponent>> TerrainTiles;
     TSet<FIntPoint> TerrainLoading;

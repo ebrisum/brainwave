@@ -7,7 +7,7 @@ public class RidePrepRuntime : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         CppStandard = CppStandardVersion.Cpp20;
-        PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "UMG", "ProceduralMeshComponent" });
+        PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "UMG", "ProceduralMeshComponent", "Slate", "SlateCore" });
         PrivateDependencyModuleNames.AddRange(new[] { "WebSockets", "Json", "JsonUtilities", "ImageWrapper", "RenderCore" });
 
         // Optional integrations: compiled in when the plugins are present in the project.

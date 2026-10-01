@@ -50,3 +50,13 @@ One line each: what was decided and why. Newest at the bottom of each section.
 - UE 5.8 pinned (current release; last UE5 line before UE6). glTFRuntime (MIT) and Cesium for Unreal are optional plugins detected at build time.
 - Blender 5.2 LTS pinned in the worker image; the bake script was exercised with the `bpy` 5.0.1 Python module (same API) in CI-less testing.
 - Docker Compose images use pinned tags except Valhalla (`valhalla-scripted:latest`, pin a digest in production) — no verified version tag was reachable from the build environment.
+
+## Real-world view
+- Photoreal = Google Photorealistic 3D Tiles streamed at runtime (3DTilesRendererJS in the web client, Cesium for Unreal) — the only source of real 3D imagery of an arbitrary course that may legally be shown live; Street View cannot be used to build a riding view under its terms.
+- Tiles are anchored at the rider (affine ECEF → course frame from the exact inverse projection's Jacobian) and re-anchored every 750 m — curvature error stays < 5 cm near the rider instead of hundreds of metres at the far end of a 180 km course.
+- Height is calibrated by raycasting the tiles at the road (median of road − surface over ±60 m) rather than trusting a geoid model — absorbs geoid undulation and photogrammetry bias; roofs/trees over the road are outvoted by the median.
+- In photoreal mode our road ribbon stays on top (polygon offset) — photogrammetric road surfaces are blurry and often contain parked cars; the exact road width/surface matters for race prep.
+- A dev stand-in tileset (`gpx2course dev-tileset`) built from package data with a fake 46.5 m geoid offset tests the full photoreal path without an API key.
+- Video mode maps recorded rides to course distance (forward-only matching, earliest pass on loops); the video file never leaves the rider's device — avoids hosting large files and footage rights issues.
+- Cockpit bars are pulled into the lower third of the frame (real eye-to-bar geometry falls outside a 60° field of view), as other cycling sims do.
+- Regional style profiles are chosen from coarse country bounding boxes (smallest first) or "alpine" above 1200 m; borders are approximate, so `style = "<code>"` in the config overrides.

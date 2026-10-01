@@ -19,7 +19,14 @@
 #include "glTFRuntimeAssetActor.h"
 #include "glTFRuntimeFunctionLibrary.h"
 #endif
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Misc/CommandLine.h"
+#include "Misc/FileHelper.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #if WITH_CESIUM
+#include "Cesium3DTileset.h"
 #include "CesiumGeoreference.h"
 #include "Kismet/GameplayStatics.h"
 #endif
@@ -98,7 +105,9 @@ bool ARidePrepWorld::LoadCourse(const FString& Dir)
         Rider = GetWorld()->SpawnActor<ARidePrepRider>(RiderClass, Course->PositionAtS(0), FRotator(0, Course->YawAtS(0), 0));
         if (APlayerController* PC = GetWorld()->GetFirstPlayerController()) PC->Possess(Rider);
     }
+    ApplyStyle();
     BuildRoad();
+    if (bPhotoreal) SetupPhotoreal();
     // Partition vegetation into cells (added to HISMs as the rider approaches)
     for (int32 k = 0; k < Course->Instances.Num(); ++k)
     {
@@ -322,7 +331,8 @@ void ARidePrepWorld::Tick(float Dt)
     const FRidePrepStreamState& St = Stream->Latest;
     const double S = Stream->IsConnected() ? Stream->InterpolatedS(FPlatformTime::Seconds()) : 0.0;
     if (Rider) Rider->ApplyState(St, Course->PositionAtS(S), Course->YawAtS(S), Dt);
-    if (FMath::Abs(S - LastStreamS) > 50.0)
+    if (bPhotoreal) UpdatePhotoreal(S);
+    if (!bPhotoreal && FMath::Abs(S - LastStreamS) > 50.0)
     {
         LastStreamS = S;
         const RidePrep::RoutePose P = RidePrep::PoseAt(Course->Route, S);
@@ -331,4 +341,119 @@ void ARidePrepWorld::Tick(float Dt)
         UpdateChunks(S);
     }
     UpdateEnvironment(St);
+}
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Regional style (materials.json from the package: colours chosen for the country/terrain by gpx2course)
+
+void ARidePrepWorld::ApplyStyle()
+{
+    FString Text;
+    TSharedPtr<FJsonObject> J;
+    if (!FFileHelper::LoadFileToString(Text, *FPaths::Combine(Course->Dir, TEXT("materials.json"))) ||
+        !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), J) || !J.IsValid()) return;
+    for (const auto& KV : J->GetObjectField(TEXT("materials"))->Values)
+    {
+        const TArray<TSharedPtr<FJsonValue>>& C = KV.Value->AsObject()->GetArrayField(TEXT("baseColor"));
+        if (C.Num() == 3)
+            StyleColors.Add(FName(*KV.Key), FLinearColor::FromSRGBColor(FColor(C[0]->AsNumber() * 255, C[1]->AsNumber() * 255, C[2]->AsNumber() * 255)));
+    }
+    // Tint the road material (expects a vector parameter "BaseColor"); other ids are tinted when their meshes load.
+    if (Assets && StyleColors.Contains(TEXT("road_asphalt")))
+        if (UMaterialInterface* Road = Assets->RoadMaterial.LoadSynchronous())
+        {
+            UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Road, this);
+            MID->SetVectorParameterValue(TEXT("BaseColor"), StyleColors[TEXT("road_asphalt")]);
+            Assets->RoadMaterial = MID;
+        }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Photoreal mode
+
+void ARidePrepWorld::SetupPhotoreal()
+{
+#if WITH_CESIUM
+    FString Key = GoogleApiKey;
+    FParse::Value(FCommandLine::Get(), TEXT("GoogleTilesKey="), Key);
+    FString Url = TilesetUrlOverride;
+    if (Url.IsEmpty())
+    {
+        if (Key.IsEmpty())
+        {
+            UE_LOG(LogTemp, Error, TEXT("RidePrep: photoreal needs GoogleApiKey or -GoogleTilesKey=... (Map Tiles API)"));
+            bPhotoreal = false;
+            return;
+        }
+        Url = FString::Printf(TEXT("https://tile.googleapis.com/v1/3dtiles/root.json?key=%s"), *Key);
+    }
+    ACesiumGeoreference* Geo = ACesiumGeoreference::GetDefaultGeoreference(this);
+    Georeference = Geo;
+    ACesium3DTileset* T = GetWorld()->SpawnActor<ACesium3DTileset>();
+    T->SetTilesetSource(ETilesetSource::FromUrl);
+    T->SetUrl(Url);
+    T->SetCreatePhysicsMeshes(true);  // needed for the height calibration line traces
+    T->SetGeoreference(Geo);
+    Tileset = T;
+    // Our generated layers give way to the real world; road ribbon, markers and rider stay
+    for (auto& KV : TerrainTiles) KV.Value->SetVisibility(false);
+    TerrainRadiusM = 0;
+    VegetationRadiusM = -1e9;
+    ChunkAheadM = -1e9;
+    if (Rider) Rider->SetCameraMode(ERidePrepCamera::Cockpit);
+#else
+    UE_LOG(LogTemp, Error, TEXT("RidePrep: photoreal mode needs the Cesium for Unreal plugin in Plugins/"));
+    bPhotoreal = false;
+#endif
+}
+
+void ARidePrepWorld::UpdatePhotoreal(double S)
+{
+#if WITH_CESIUM
+    ACesiumGeoreference* Geo = Cast<ACesiumGeoreference>(Georeference);
+    if (!Geo) return;
+    const RidePrep::RoutePose P = RidePrep::PoseAt(Course->Route, S);
+    if (FMath::Abs(S - AnchorS) > ReanchorDistanceM)
+    {
+        // Re-anchor: the georeference origin is the rider's lat/lon; its actor sits at the rider's course-frame position,
+        // yawed by −grid convergence so true north lines up with the course grid. Earth curvature never accumulates.
+        double Lat, Lon;
+        RidePrep::LocalToLatLon(Course->OriginLat, Course->OriginLon, P.X, P.Y, Lat, Lon);
+        double N = 0;
+        Course->Manifest->GetObjectField(TEXT("origin"))->TryGetNumberField(TEXT("geoidUndulation"), N);
+        Geo->SetOriginLongitudeLatitudeHeight(FVector(Lon, Lat, P.Z + N));
+        const RidePrep::Vec3d U = RidePrep::EnuToUe(P.X, P.Y, P.Z);
+        const double Yaw = -RidePrep::GridConvergenceDeg(Course->OriginLat, Course->OriginLon, P.X, P.Y);
+        Geo->SetActorTransform(FTransform(FRotator(0, Yaw, 0), FVector(U.X, U.Y, U.Z + VerticalOffsetCm)));
+        AnchorS = S;
+        bHeightCalibrated = false;
+    }
+    // Height calibration: trace down at road samples; the median of (road − tile surface) absorbs geoid and data bias
+    const double Now = FPlatformTime::Seconds();
+    if (!bHeightCalibrated && Now - LastCalibration > 0.5)
+    {
+        LastCalibration = Now;
+        TArray<double> D;
+        for (int32 k = -4; k <= 4; ++k)
+        {
+            const RidePrep::RoutePose Q = RidePrep::PoseAt(Course->Route, FMath::Max(0.0, S + k * 15.0));
+            const RidePrep::Vec3d U = RidePrep::EnuToUe(Q.X, Q.Y, Q.Z);
+            FHitResult Hit;
+            FCollisionQueryParams Params;
+            if (Rider) Params.AddIgnoredActor(Rider);
+            for (UProceduralMeshComponent* R : RoadSections) Params.AddIgnoredComponent(R);
+            if (GetWorld()->LineTraceSingleByChannel(Hit, FVector(U.X, U.Y, U.Z + 40000), FVector(U.X, U.Y, U.Z - 40000), ECC_Visibility, Params))
+                D.Add(U.Z - Hit.ImpactPoint.Z);
+        }
+        if (D.Num() >= 4)
+        {
+            D.Sort();
+            const double Med = D[D.Num() / 2];
+            VerticalOffsetCm += Med;
+            Geo->SetActorLocation(Geo->GetActorLocation() + FVector(0, 0, Med));
+            bHeightCalibrated = FMath::Abs(Med) < 25.0;
+        }
+    }
+#endif
 }
