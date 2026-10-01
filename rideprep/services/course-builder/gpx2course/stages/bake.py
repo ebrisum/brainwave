@@ -107,6 +107,13 @@ def run(ctx: BuildContext) -> list[str]:
     ctx.write_json("chunks/status.json", {"chunks": status})
     workers = max(1, min(ctx.options.workers, len(todo), os.cpu_count() or 1))
     done = 0
+    # Test hook: simulate the build being killed after N chunks (tests/test_pipeline.py::test_resume)
+    kill_after = int(os.environ.get("GPX2COURSE_KILL_AFTER_CHUNKS", "0"))
+
+    def check_kill():
+        if kill_after and done >= kill_after:
+            raise KeyboardInterrupt(f"simulated kill after {done} chunks")
+
     keys = {sp["id"]: key for sp, key in todo}
     args = [(str(out_dir / ".inputs" / f"c{sp['id']}.json"), str(out_dir), mode) for sp, _ in todo]  # ride order
     if todo:
@@ -121,6 +128,10 @@ def run(ctx: BuildContext) -> list[str]:
                     done += 1
                     ctx.write_json("chunks/status.json", {"chunks": status})
                     ctx.progress_frac(done / len(todo), f"chunk {cid}")
+                    if kill_after and done >= kill_after:
+                        for f2 in futs:
+                            f2.cancel()
+                        check_kill()
         else:
             for a in args:
                 cid, _ = _bake_one(a)
@@ -129,6 +140,7 @@ def run(ctx: BuildContext) -> list[str]:
                 done += 1
                 ctx.write_json("chunks/status.json", {"chunks": status})
                 ctx.progress_frac(done / len(todo), f"chunk {cid}")
+                check_kill()
     # Far field terrain
     import rasterio
     idx = ctx.read_json("corridor/index.json")

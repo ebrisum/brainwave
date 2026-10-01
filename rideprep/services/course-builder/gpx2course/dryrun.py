@@ -12,9 +12,9 @@ from .ingest import read_course
 from .pipeline import BuildOptions
 
 # Seconds per km per stage on one worker, calibrated on the fixtures (see docs/MILESTONES.md); fixed overheads in seconds.
-COST_PER_KM = {"ingest": 0.002, "match": 0.01, "profile": 0.02, "corridor": 0.12, "structure": 0.01, "wind": 0.35, "weather": 0.0,
-               "quick": 0.08, "bake": 0.25, "export-web": 0.01, "export-unreal": 0.06, "validate": 0.02}
-PARALLEL = {"wind", "bake"}
+COST_PER_KM = {"ingest": 0.001, "match": 0.005, "profile": 0.002, "corridor": 0.26, "structure": 0.001, "wind": 0.065, "weather": 0.0,
+               "quick": 0.055, "bake": 0.012, "export-web": 0.0005, "export-unreal": 0.105, "validate": 0.002}
+PARALLEL = {"corridor", "wind", "bake"}
 OVERHEAD_S = {"weather": 1.0, "validate": 0.5, "corridor": 0.5}
 
 
