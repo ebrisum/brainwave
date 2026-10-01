@@ -1,0 +1,16 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "RidePrep Runtime",
+  "Description": "Runtime loader for gpx2course packages and the ride-core state stream (terrain, road, vegetation, chunks, rider, HUD).",
+  "Category": "Simulation",
+  "CanContainContent": true,
+  "Modules": [ { "Name": "RidePrepRuntime", "Type": "Runtime", "LoadingPhase": "Default" } ],
+  "Plugins": [
+    { "Name": "ProceduralMeshComponent", "Enabled": true },
+    { "Name": "WebSockets", "Enabled": true },
+    { "Name": "glTFRuntime", "Enabled": true, "Optional": true },
+    { "Name": "CesiumForUnreal", "Enabled": true, "Optional": true }
+  ]
+}

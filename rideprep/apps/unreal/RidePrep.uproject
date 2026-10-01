@@ -1,0 +1,17 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.8",
+  "Category": "",
+  "Description": "RidePrep high-fidelity renderer. Loads any gpx2course package at runtime; physics/BLE run in apps/ride-core.",
+  "Modules": [],
+  "Plugins": [
+    { "Name": "RidePrepRuntime", "Enabled": true },
+    { "Name": "ProceduralMeshComponent", "Enabled": true },
+    { "Name": "WebSockets", "Enabled": true },
+    { "Name": "glTFRuntime", "Enabled": true, "Optional": true, "MarketplaceURL": "https://github.com/rdeioris/glTFRuntime" },
+    { "Name": "CesiumForUnreal", "Enabled": true, "Optional": true },
+    { "Name": "PythonScriptPlugin", "Enabled": true },
+    { "Name": "EditorScriptingUtilities", "Enabled": true },
+    { "Name": "PCG", "Enabled": true }
+  ]
+}

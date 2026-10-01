@@ -93,3 +93,27 @@ describe.skipIf(!PKG)("built package", () => {
 describe("existence", () => {
   it("fixtures are present", () => expect(existsSync(join(ROOT, "fixtures/urban_cobbles_15k.gpx"))).toBe(true));
 });
+
+describe("native MessagePack decoder (Unreal plugin)", () => {
+  it("decodes a StreamState encoded by @msgpack/msgpack", async () => {
+    const { encode } = await import("@msgpack/msgpack");
+    const bin = join(tmpdir(), "rp_msgpack_dump");
+    try {
+      execFileSync("g++", ["-std=c++17", "-O2", "-o", bin, join(ROOT, "apps/unreal/Tests/msgpack_dump.cpp")]);
+    } catch {
+      console.warn("g++ unavailable; skipping");
+      return;
+    }
+    const msg = { type: "state", v: 1, seq: 123456, sentAt: Date.now(), t: 12.34, s: 1234.5678, pos: [-81234.25, 4567.5, 312.125], heading: 1.25, speed: 9.75,
+      power: 251, crank: 3.1, lean: -0.12, braking: true, gradePct: -3.5, wind: { u10: 6, dir10: 270, uRider: 3.25, dirRider: 268, wHead: -1.5, wCross: 2.75, gust: 1.1, shelter: 0.6 } };
+    const out = execFileSync(bin, { input: Buffer.from(encode(msg)) }).toString().trim().split(" ");
+    expect(out[0]).toBe("state");
+    expect(Number(out[1])).toBeCloseTo(1234.5678, 6);
+    expect(Number(out[2])).toBeCloseTo(9.75, 6);
+    expect(Number(out[3])).toBeCloseTo(-81234.25, 6);
+    expect(Number(out[4])).toBeCloseTo(312.125, 6);
+    expect(out[5]).toBe("1");
+    expect(Number(out[6])).toBeCloseTo(3.25, 6);
+    expect(Number(out[7])).toBe(123456);
+  });
+});
