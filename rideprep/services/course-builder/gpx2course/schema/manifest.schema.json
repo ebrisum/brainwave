@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rideprep.dev/schema/manifest-1.0.0.json",
+  "title": "RidePrep course package manifest",
+  "type": "object",
+  "required": ["schemaVersion", "courseId", "name", "pipelineVersion", "origin", "stats", "route", "wind", "segments", "terrain", "chunks",
+               "instances", "materialCatalogue", "exports", "weather", "climatology", "attribution", "contentHash", "tier"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "courseId": {"type": "string", "pattern": "^c_[0-9a-f]{20}$"},
+    "name": {"type": "string"},
+    "pipelineVersion": {"type": "string"},
+    "tier": {"enum": ["quick", "full"]},
+    "contentHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "eventStart": {"type": ["string", "null"]},
+    "origin": {
+      "type": "object", "required": ["lat", "lon", "hOrthometric", "verticalDatum"],
+      "properties": {"lat": {"type": "number", "minimum": -90, "maximum": 90}, "lon": {"type": "number", "minimum": -180, "maximum": 180},
+                     "hOrthometric": {"type": "number"}, "verticalDatum": {"type": "string"}, "geoidUndulation": {"type": ["number", "null"]},
+                     "frame": {"type": "string"}}
+    },
+    "stats": {
+      "type": "object", "required": ["distanceM", "ascentM", "descentM", "maxGradePct", "laps"],
+      "properties": {"distanceM": {"type": "number", "exclusiveMinimum": 0}, "ascentM": {"type": "number", "minimum": 0},
+                     "descentM": {"type": "number", "minimum": 0}, "maxGradePct": {"type": "number", "minimum": 0, "maximum": 100},
+                     "laps": {"type": "integer", "minimum": 1}}
+    },
+    "route": {
+      "type": "object", "required": ["file", "sampleSpacingM", "count", "arrays"],
+      "properties": {"file": {"type": "string"}, "sampleSpacingM": {"type": "number", "exclusiveMinimum": 0},
+                     "count": {"type": "integer", "minimum": 2},
+                     "arrays": {"type": "array", "minItems": 10, "items": {"type": "object", "required": ["name", "type", "offset"],
+                                "properties": {"name": {"type": "string"}, "type": {"enum": ["float32", "uint8"]}, "offset": {"type": "integer", "minimum": 0}}}}}
+    },
+    "wind": {
+      "type": "object", "required": ["file", "sampleSpacingM", "count", "directionBins", "layers", "encoding"],
+      "properties": {"file": {"type": "string"}, "sampleSpacingM": {"type": "number"}, "count": {"type": "integer"}, "directionBins": {"const": 16},
+                     "layers": {"type": "array", "items": {"enum": ["fRough", "shelter", "topo", "channel"]}}, "encoding": {"type": "string"}}
+    },
+    "segments": {"type": "object", "required": ["file", "climbs", "corners", "laps", "pois", "surfaceRuns"]},
+    "terrain": {"type": "object", "required": ["quickTier"]},
+    "chunks": {"type": "array", "items": {"type": "object", "required": ["id", "sStart", "sEnd", "status", "lod"],
+               "properties": {"status": {"enum": ["baked", "pending", "quick"]}, "lod": {"type": "array", "items": {"type": "string"}}}}},
+    "farField": {"type": ["string", "null"]},
+    "instances": {"type": "object", "required": ["file", "categories", "count", "recordBytes"]},
+    "materialCatalogue": {"type": "string"},
+    "exports": {"type": "object"},
+    "weather": {"type": "object", "required": ["file"]},
+    "climatology": {"type": "object", "required": ["file"]},
+    "attribution": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "warnings": {"type": "array"}
+  }
+}
