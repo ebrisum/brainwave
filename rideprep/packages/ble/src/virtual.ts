@@ -87,8 +87,15 @@ export class VirtualDevice implements BleDevice {
     const P = this.script.power(t);
     const hr = this.script.heartRate(t);
     const cad = this.script.cadence(t);
+    // Crank event time = when the last full revolution completed (not the notification time)
+    const before = Math.floor(this.crankRevs);
     this.crankRevs += (cad / 60) * dt;
-    this.crankTicks = (this.crankTicks + Math.round(dt * 1024)) & 0xffff;
+    const after = Math.floor(this.crankRevs);
+    if (after > before && cad > 0) {
+      const frac = this.crankRevs - after; // revolutions since the last completed one
+      const eventT = t - frac / (cad / 60);
+      this.crankTicks = Math.round(eventT * 1024) & 0xffff;
+    }
     if (this.services.includes(SERVICES.ftms))
       this.notify(SERVICES.ftms, CHARS.indoorBikeData, encodeIndoorBikeData({ speedKmh: 30, cadenceRpm: cad, powerW: P }));
     if (this.services.includes(SERVICES.cyclingPower))

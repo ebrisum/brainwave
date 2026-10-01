@@ -19,6 +19,10 @@ class Mesh:
     extras: dict = field(default_factory=dict)
 
 
+def srgb_to_linear(c: float) -> float:
+    return round(c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4, 6)
+
+
 def compute_normals(pos: np.ndarray, idx: np.ndarray) -> np.ndarray:
     tri = idx.reshape(-1, 3)
     a, b, c = pos[tri[:, 0]], pos[tri[:, 1]], pos[tri[:, 2]]
@@ -68,7 +72,8 @@ def write_glb(meshes: list[Mesh], materials: dict[str, dict], extras: dict | Non
         if m.material not in mat_index:
             spec = materials.get(m.material, {"baseColor": [0.6, 0.6, 0.6], "roughness": 0.9, "metallic": 0.0})
             mat_index[m.material] = len(gl_mats)
-            gl_mats.append({"name": m.material, "pbrMetallicRoughness": {"baseColorFactor": [*spec["baseColor"], 1.0],
+            lin = [srgb_to_linear(c) for c in spec["baseColor"]]  # glTF colour factors are linear
+            gl_mats.append({"name": m.material, "pbrMetallicRoughness": {"baseColorFactor": [*lin, 1.0],
                             "metallicFactor": spec.get("metallic", 0.0), "roughnessFactor": spec.get("roughness", 0.9)},
                             "extras": {"materialId": m.material}})
         pos = m.positions.astype(np.float32)

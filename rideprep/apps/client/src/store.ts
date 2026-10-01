@@ -1,0 +1,85 @@
+import { CDA_PRESETS, DEFAULT_RIDER, Position, RiderProfile } from "@rideprep/physics";
+import { create } from "zustand";
+import { Units } from "./units";
+
+export type Screen = "library" | "upload" | "briefing" | "pairing" | "ride" | "postride" | "settings";
+export type Quality = "low" | "medium" | "high" | "ultra";
+export type CameraMode = "chase" | "first" | "side" | "drone" | "flyover";
+
+export interface Settings {
+  units: Units;
+  rider: RiderProfile & { position: Position; maxHr: number; jersey: string; bike: "road" | "tt" };
+  quality: Quality;
+  trainerDifficulty: number;
+  corneringRealism: boolean;
+  gusts: boolean;
+}
+
+/** Live values the HUD shows; written by the ride session ~10×/s, never by React render. */
+export interface HudState {
+  t: number; s: number; speedMs: number; powerW: number; npW: number; ifactor: number; hr?: number; cadence?: number; ascentM: number;
+  lap: number; laps: number; wkg: number; targetLow?: number; targetHigh?: number; braking: boolean;
+  wind: { u10: number; dir10: number; uRider: number; wHead: number; wCross: number; shelter: number; gust: number };
+  tempC: number; feelsC: number; rho: number; gradePct: number; devices: Record<string, string>; paused: boolean; finished: boolean;
+  warnings: string[]; trainerMode?: string;
+}
+
+const STORAGE_KEY = "rideprep.settings.v1";
+const defaults: Settings = {
+  units: "metric",
+  rider: { ...DEFAULT_RIDER, position: "drops", maxHr: 190, jersey: "#f0b429", bike: "road" },
+  quality: "high",
+  trainerDifficulty: 1,
+  corneringRealism: true,
+  gusts: true,
+};
+
+function loadSettings(): Settings {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const s = JSON.parse(raw);
+      return { ...defaults, ...s, rider: { ...defaults.rider, ...s.rider } };
+    }
+  } catch {
+    /* private mode or corrupt: defaults */
+  }
+  return defaults;
+}
+
+export interface AppState {
+  screen: Screen;
+  courseId?: string;
+  buildId?: string;
+  settings: Settings;
+  hud?: HudState;
+  camera: CameraMode;
+  lastRideId?: string;
+  scenario: string;
+  plan?: { segmentM: number; watts: number[] };
+  go(screen: Screen, patch?: Partial<AppState>): void;
+  updateSettings(p: Partial<Settings>): void;
+  updateRider(p: Partial<Settings["rider"]>): void;
+  setHud(h: HudState): void;
+  setCamera(c: CameraMode): void;
+}
+
+export const useApp = create<AppState>((set, get) => ({
+  screen: "library",
+  settings: loadSettings(),
+  camera: "chase",
+  scenario: "weather",
+  go: (screen, patch) => set({ screen, ...patch }),
+  updateSettings: (p) => {
+    const settings = { ...get().settings, ...p };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)); } catch { /* ignore */ }
+    set({ settings });
+  },
+  updateRider: (p) => {
+    const rider = { ...get().settings.rider, ...p };
+    if (p.position) rider.cda = CDA_PRESETS[p.position];
+    get().updateSettings({ rider });
+  },
+  setHud: (hud) => set({ hud }),
+  setCamera: (camera) => set({ camera }),
+}));

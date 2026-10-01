@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   backoffMs, encodeCyclingPower, encodeHeartRate, encodeIndoorBikeData, encodeSimulation, lookaheadGrade, ManagedConnection,
   parseControlPointResponse, parseCsc, parseCyclingPower, parseHeartRate, parseIndoorBikeData, RevolutionRate, SensorHub,
-  toDataView, TrainerController, VirtualDevice, windResistanceCoefficient,
+  SERVICES, toDataView, TrainerController, VirtualDevice, windResistanceCoefficient,
 } from "../src";
 
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0").toUpperCase()).join(" ");
@@ -182,5 +182,21 @@ describe("reconnect", () => {
     expect(mc.state).toBe("connected");
     expect(setup).toHaveBeenCalledTimes(2);
     await mc.stop();
+  });
+});
+
+describe("virtual device", () => {
+  it("emits crank data that parses back to the scripted cadence", async () => {
+    let now = 0;
+    const hub = new SensorHub(() => now);
+    const dev = new VirtualDevice({ script: { power: () => 200, heartRate: () => 130, cadence: () => 88 }, services: [SERVICES.cyclingPower] });
+    await hub.attach(dev);
+    for (let k = 0; k < 80; k++) {
+      now = k * 250;
+      dev.emit(k * 0.25, 0.25);
+    }
+    expect(hub.r.cadenceSource).toBe("powerMeter");
+    expect(hub.r.cadenceRpm).toBeGreaterThan(85);
+    expect(hub.r.cadenceRpm).toBeLessThan(91);
   });
 });

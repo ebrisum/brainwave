@@ -13,7 +13,7 @@ import shapely
 
 from .gltf import Mesh, enu_to_gltf, write_glb
 
-BAKER_VERSION = "lite-1"
+BAKER_VERSION = "lite-2"
 
 
 def _ribbon(x, y, z, nx, ny, left, right, dz_left=0.0, dz_right=0.0):

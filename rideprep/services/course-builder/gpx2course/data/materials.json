@@ -18,7 +18,7 @@
     "terrain_crop":        {"baseColor": [0.55, 0.55, 0.28], "roughness": 0.95, "metallic": 0.0},
     "terrain_forest_floor":{"baseColor": [0.22, 0.30, 0.15], "roughness": 0.95, "metallic": 0.0},
     "terrain_bare":        {"baseColor": [0.55, 0.50, 0.42], "roughness": 0.95, "metallic": 0.0},
-    "terrain_built":       {"baseColor": [0.50, 0.48, 0.45], "roughness": 0.9,  "metallic": 0.0},
+    "terrain_built":       {"baseColor": [0.44, 0.47, 0.38], "roughness": 0.9,  "metallic": 0.0},
     "water":               {"baseColor": [0.12, 0.22, 0.30], "roughness": 0.05, "metallic": 0.0},
     "facade_brick":        {"baseColor": [0.55, 0.30, 0.22], "roughness": 0.85, "metallic": 0.0},
     "facade_plaster":      {"baseColor": [0.82, 0.78, 0.70], "roughness": 0.85, "metallic": 0.0},

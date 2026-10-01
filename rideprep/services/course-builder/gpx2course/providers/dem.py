@@ -121,7 +121,7 @@ class TiledCogSampler:
                     wt = ds.window_transform(win)
                     # pixel coordinates in the decimated array
                     inv = ~wt
-                    cols, rows = inv * (lon[sel], lat[sel])
+                    cols, rows = inv @ (lon[sel], lat[sel])
                     rows = rows * oh / h - 0.5
                     cols = cols * ow / wd - 0.5
                     out[sel] = map_coordinates(arr, [rows, cols], order=order, mode="nearest", cval=np.nan)

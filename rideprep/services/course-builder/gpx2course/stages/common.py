@@ -232,7 +232,7 @@ class CorridorRaster:
             if self.far is not None:
                 arr, tr = self.far
                 inv = ~tr
-                c, r = inv * (x[miss], y[miss])
+                c, r = inv @ (x[miss], y[miss])
                 out[miss] = map_coordinates(arr, [r - 0.5, c - 0.5], order=1, mode="nearest")
             else:
                 out[miss] = self.default
