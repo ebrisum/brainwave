@@ -84,6 +84,7 @@ def build_manifest(ctx: BuildContext) -> dict:
         "weather": {"file": "weather.json"}, "climatology": {"file": "climatology.json"},
         "attribution": attribution, "elevationSources": meta.get("elevationSources", []), "barometric": meta.get("barometric"),
         "warnings": warnings,
+        **({"riderDefaults": ctx.options.rider} if ctx.options.rider else {}),
     }
 
 

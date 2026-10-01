@@ -1,9 +1,32 @@
 import { useEffect, useState } from "react";
 import { segmentComparison, splitTimes, timeInPowerZones, toFit, toGpx, toTcx } from "@rideprep/metrics";
-import { cache } from "../courseCache";
+import { DEFAULT_CORNERING, predict, WeatherField, windEnvironment, WindModel } from "@rideprep/physics";
+import { cache, startEpochOf } from "../courseCache";
 import { ridesForCourse, StoredRide } from "../ride/recorder";
 import { useApp } from "../store";
 import { fmtDist, fmtDuration, fmtSpeed } from "../units";
+
+/**
+ * Race-prep costs (spec §12): replay the rider's actual per-500 m power through the predictor —
+ * ride weather vs calm (time lost to wind) and cornering on vs off (time lost to braking).
+ */
+function timeCosts(ride: StoredRide, rider: Parameters<typeof predict>[1]): { windS: number; brakingS: number } | undefined {
+  const c = cache.course;
+  if (!c || c.manifest.courseId !== ride.courseId || ride.records.length < 30) return undefined;
+  const seg = segmentComparison(ride.records, 500, []);
+  const watts = new Array(Math.ceil(c.manifest.stats.distanceM / 500)).fill(0).map((_, i) => seg.find((x) => x.index === i)?.actualW ?? seg[seg.length - 1].actualW);
+  const plan = { segmentM: 500, watts };
+  const start = startEpochOf(c);
+  const done = ride.records[ride.records.length - 1].s;
+  const t = (field: WeatherField, cornering: boolean) => {
+    const p = predict(c.route, rider, plan, windEnvironment(new WindModel(c.wind, field, { gusts: false })), {
+      startEpoch: start, cornering: { ...DEFAULT_CORNERING, enabled: cornering } });
+    const i = Math.min(Math.round(done / c.route.spacingM), c.route.count - 1);
+    return p.timeAtSample[i];
+  };
+  const calm = WeatherField.constant({ u10: 0, tempC: 15 });
+  return { windS: t(c.weather, true) - t(calm, true), brakingS: t(c.weather, true) - t(c.weather, false) };
+}
 
 function download(name: string, data: BlobPart, type: string) {
   const a = document.createElement("a");
@@ -28,6 +51,7 @@ export function PostRide() {
   const zones = timeInPowerZones(ride.records.map((r) => r.powerW), settings.rider.ftpW);
   const base = `${ride.courseName.replace(/\W+/g, "_")}_${new Date(ride.startedAt).toISOString().slice(0, 10)}`;
   const others = rides.filter((r) => r.id !== ride.id).slice(0, 4);
+  const costs = timeCosts(ride, settings.rider);
   return (
     <main className="page">
       <header className="pagehead">
@@ -44,6 +68,8 @@ export function PostRide() {
         <span><b>{Math.round(s.avgPowerW)} W</b>avg power</span><span><b>{Math.round(s.npW)} W</b>NP</span><span><b>{s.ifactor.toFixed(2)}</b>IF</span>
         <span><b>{Math.round(s.tss)}</b>TSS</span><span><b>{s.vi.toFixed(2)}</b>VI</span><span><b>{Math.round(s.kJ)}</b>kJ</span>
         <span><b>{Math.round(s.minWPrimeBalJ / 1000)} kJ</b>min W′bal</span><span><b>{fmtDuration(s.brakingTimeS)}</b>braking</span>
+        {costs && <span><b>{costs.windS >= 0 ? "+" : "−"}{fmtDuration(Math.abs(costs.windS))}</b>wind vs calm</span>}
+        {costs && <span><b>+{fmtDuration(costs.brakingS)}</b>lost to braking</span>}
         {s.avgHr && <span><b>{Math.round(s.avgHr)}</b>avg HR</span>}{s.decouplingPct !== undefined && <span><b>{s.decouplingPct.toFixed(1)} %</b>Pa:HR</span>}
       </div>
       <div className="grid2">

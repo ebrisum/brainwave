@@ -18,7 +18,33 @@ PARALLEL = {"corridor", "wind", "bake"}
 OVERHEAD_S = {"weather": 1.0, "validate": 0.5, "corridor": 0.5}
 
 
-def estimate(km: float, workers: int, tier: str, targets) -> dict:
+# Wall time of `_bench()` on the reference machine the COST_PER_KM table was calibrated on.
+REFERENCE_BENCH_S = 0.15
+
+
+def _bench() -> float:
+    """Small workload shaped like the heavy stages (KD-tree queries, map_coordinates, shapely predicates)."""
+    import shapely
+    from scipy.ndimage import map_coordinates
+    from scipy.spatial import cKDTree
+
+    rng = np.random.default_rng(0)
+    t0 = time.perf_counter()
+    pts = rng.random((20000, 2)) * 1000
+    cKDTree(pts).query(rng.random((60000, 2)) * 1000, k=3)
+    map_coordinates(rng.random((300, 300)), rng.random((2, 200000)) * 299, order=1)
+    polys = [shapely.box(x, y, x + 20, y + 20) for x, y in rng.random((2000, 2)) * 1000]
+    shapely.STRtree(polys).query(shapely.points(rng.random((50000, 2)) * 1000), predicate="within")
+    return time.perf_counter() - t0
+
+
+def machine_factor() -> float:
+    """>1 on slower machines. Median of three runs, clamped to a sane range."""
+    runs = sorted(_bench() for _ in range(3))
+    return float(min(max(runs[1] / REFERENCE_BENCH_S, 0.25), 6.0))
+
+
+def estimate(km: float, workers: int, tier: str, targets, factor: float = 1.0) -> dict:
     per = {}
     for st, c in COST_PER_KM.items():
         if tier == "quick" and st in ("bake", "export-web"):
@@ -27,7 +53,7 @@ def estimate(km: float, workers: int, tier: str, targets) -> dict:
             continue
         if st == "export-web" and "web" not in targets:
             continue
-        t = c * km / (min(workers, 16) * 0.8 if st in PARALLEL else 1) + OVERHEAD_S.get(st, 0.2)
+        t = factor * c * km / (min(workers, 16) * 0.8 if st in PARALLEL else 1) + OVERHEAD_S.get(st, 0.2)
         per[st] = round(t, 1)
     return per
 
@@ -60,7 +86,8 @@ def dry_run(path: Path, cfg: Config, opts: BuildOptions) -> dict:
     sources["dem"] = dem
     sources["landcover"] = "worldcover" if not cfg.offline and "worldcover" in cfg.providers.landcover else "osm-landcover"
     sources["weather"] = "open-meteo" if not cfg.offline else "generic climatology (offline)"
-    per = estimate(km, opts.workers, opts.tier, opts.targets)
+    factor = machine_factor()
+    per = estimate(km, opts.workers, opts.tier, opts.targets, factor)
     return {"name": opts.name or rc.name, "distanceKm": round(km, 2), "points": int(len(rc.lat)), "format": rc.source_format,
-            "sources": sources, "estimateS": per, "totalEstimateS": round(sum(per.values()), 1), "workers": opts.workers,
+            "sources": sources, "estimateS": per, "machineFactor": round(factor, 2), "totalEstimateS": round(sum(per.values()), 1), "workers": opts.workers,
             "dryRunS": round(time.time() - t0, 2)}

@@ -17,7 +17,8 @@ export class Terrain {
   stride: number;
   loadRadius = 4500;
 
-  constructor(private m: Manifest, private fetch: Fetcher, private cat: MaterialCatalogue, quality: string) {
+  constructor(private m: Manifest, private fetch: Fetcher, private cat: MaterialCatalogue, quality: string,
+              private route?: CourseProfile & { roadWidthM: Uint8Array }) {
     this.material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97, metalness: 0 });
     this.stride = quality === "ultra" ? 1 : quality === "low" ? 3 : 2;
     for (const [cls, mid] of Object.entries(cat.landcoverToMaterial)) this.lcColors.set(Number(cls), color(cat, mid));
@@ -109,6 +110,7 @@ export class Terrain {
         k++;
       }
     }
+    this.carveRoad(pos, cols, t, sp * s);
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     g.setAttribute("color", new THREE.BufferAttribute(col, 3));
@@ -121,6 +123,33 @@ export class Terrain {
     mesh.name = `terrain_${name}`;
     t.mesh = mesh;
     this.group.add(mesh);
+  }
+
+  /**
+   * Keep terrain below the road at the *render* resolution: interpolation between coarse vertices otherwise lets slopes
+   * poke through the road. Every vertex within (half width + one cell) of a route sample is lowered to road − 0.35 m.
+   */
+  private carveRoad(pos: Float32Array, cols: number, t: TileState, cell: number) {
+    const r = this.route;
+    if (!r) return;
+    const T = this.m.terrain.quickTier.tileSizeM;
+    const x0 = t.cx - T / 2, y1 = t.cy + T / 2;
+    for (let i = 0; i < r.count; i += 1) {
+      const rx = r.x[i], ry = r.y[i];
+      if (rx < x0 - 30 || rx > x0 + T + 30 || ry < y1 - T - 30 || ry > y1 + 30) continue;
+      const reach = r.roadWidthM[i] / 2 + cell;
+      const c0 = Math.max(0, Math.floor((rx - reach - x0) / cell)), c1 = Math.min(cols - 1, Math.ceil((rx + reach - x0) / cell));
+      const r0 = Math.max(0, Math.floor((y1 - ry - reach) / cell)), r1 = Math.min(cols - 1, Math.ceil((y1 - ry + reach) / cell));
+      const zr = r.z[i] - 0.35;
+      for (let row = r0; row <= r1; row++) {
+        for (let c = c0; c <= c1; c++) {
+          const vx = x0 + c * cell, vy = y1 - row * cell;
+          if ((vx - rx) ** 2 + (vy - ry) ** 2 > reach * reach) continue;
+          const k = (row * cols + c) * 3 + 1;
+          if (pos[k] > zr) pos[k] = zr;
+        }
+      }
+    }
   }
 
   /** Approximate ground height under a point from the route (used for camera clearance). */

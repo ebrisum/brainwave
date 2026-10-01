@@ -18,9 +18,10 @@ export function Ride() {
   const hud = useApp((s) => s.hud);
   const [ready, setReady] = useState(false);
   const [fps, setFps] = useState(0);
-  const [flySpeed, setFlySpeed] = useState(60);
+  const params = new URLSearchParams(location.search);
+  const [flySpeed, setFlySpeed] = useState(Number(params.get("fly") ?? 60));
   const flyover = camera === "flyover" && !cache.session?.isStarted;
-  const flyRef = useRef({ s: 0, speed: 60 });
+  const flyRef = useRef({ s: Number(params.get("s") ?? 0), speed: 60 });
   flyRef.current.speed = flySpeed;
 
   useEffect(() => {
@@ -112,9 +113,9 @@ export function Ride() {
       <canvas ref={ref} className="world" />
       {!ready && <div className="loading">Loading world…</div>}
       {flyover && course && (
-        <div className="hud flybar panel">
+        <div className="flybar panel">
           <b>Flyover</b> {fmtDist(flyRef.current.s, u)} · speed ×{flySpeed * 10}
-          <input type="range" min="2" max="20" value={flySpeed} onChange={(e) => setFlySpeed(Number(e.target.value))} aria-label="Flyover speed" />
+          <input type="range" min="0" max="20" value={flySpeed} onChange={(e) => setFlySpeed(Number(e.target.value))} aria-label="Flyover speed" />
           <button onClick={() => go("briefing", { camera: "chase" })}>Close</button>
         </div>
       )}

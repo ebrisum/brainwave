@@ -4,6 +4,7 @@ import { CameraMode, Quality } from "../store";
 import { Buildings } from "./Buildings";
 import { CameraRig } from "./CameraRig";
 import { ChunkStreamer } from "./ChunkStreamer";
+import { CourseMarkers } from "./CourseMarkers";
 import { preset } from "./quality";
 import { RiderAvatar } from "./RiderAvatar";
 import { Road } from "./Road";
@@ -33,6 +34,7 @@ export class World {
   skyw: SkyWeather;
   rider: RiderAvatar;
   ghost?: RiderAvatar;
+  markers: CourseMarkers;
   cameraMode: CameraMode = "chase";
   fps = 60;
   private raf = 0;
@@ -59,7 +61,7 @@ export class World {
     this.rig = new CameraRig(this.camera);
     const m = course.manifest;
     this.skyw = new SkyWeather(this.scene, q.shadowMap);
-    this.terrain = new Terrain(m, fetch, course.materials, quality);
+    this.terrain = new Terrain(m, fetch, course.materials, quality, course.route);
     this.terrain.loadRadius = Math.min(q.viewDistance * 0.4, 6000);
     this.road = new Road(course.route, course.materials, 500);
     this.road.addSideRoads(quick.roads);
@@ -71,6 +73,8 @@ export class World {
       if (b) b.visible = !baked;
     });
     this.rider = new RiderAvatar(rider.jersey, rider.bike);
+    this.markers = new CourseMarkers(course);
+    this.scene.add(this.markers.group);
     this.scene.add(this.terrain.group, this.road.group, this.vegetation.group, this.chunks.group, this.rider.root);
     if (this.buildings) this.scene.add(this.buildings.group);
     this.addWater(quick.water);
@@ -177,6 +181,7 @@ export class World {
     windUniforms.uWindDir.value.set(st.windToX / wl, -st.windToY / wl);
     windUniforms.uWindStrength.value = st.uRider;
     windUniforms.uGust.value = st.gust;
+    this.markers.update(dt, st.windToX / wl, st.windToY / wl, st.uRider * 1.6 * st.gust);
     this.skyw.set(st.sunElevationDeg, st.sunAzimuthDeg, st.cloud, st.visibilityM, st.rainMmH);
     this.skyw.followRider(riderPos);
     this.skyw.update(dt, (st.windToX / wl) * st.uRider, (-st.windToY / wl) * st.uRider);
