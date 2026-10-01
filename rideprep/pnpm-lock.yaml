@@ -18,6 +18,50 @@ importers:
         specifier: 5.0.3
         version: 5.0.3(@types/node@26.6.3)(vite@8.3.2(@types/node@26.6.3))
 
+  packages/ble:
+    devDependencies:
+      '@types/node':
+        specifier: 26.6.3
+        version: 26.6.3
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@26.6.3)(vite@8.3.2(@types/node@26.6.3))
+
+  packages/course-format:
+    dependencies:
+      '@rideprep/physics':
+        specifier: workspace:*
+        version: link:../physics
+    devDependencies:
+      '@types/node':
+        specifier: 26.6.3
+        version: 26.6.3
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@26.6.3)(vite@8.3.2(@types/node@26.6.3))
+
+  packages/metrics:
+    dependencies:
+      '@garmin/fitsdk':
+        specifier: 21.217.0
+        version: 21.217.0
+    devDependencies:
+      '@types/node':
+        specifier: 26.6.3
+        version: 26.6.3
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@26.6.3)(vite@8.3.2(@types/node@26.6.3))
+
   packages/physics:
     devDependencies:
       '@types/node':
@@ -31,6 +75,9 @@ importers:
         version: 5.0.3(@types/node@26.6.3)(vite@8.3.2(@types/node@26.6.3))
 
 packages:
+
+  '@garmin/fitsdk@21.217.0':
+    resolution: {integrity: sha512-oIkDo28Yrv8ZhJiOTBZWn8Cb9kIkcAx7oVfNtgqRuNvzbCyFWdLg1StUVECjIo9rbtpvTDuW8Jqd3PTnVapiAw==}
 
   '@jridgewell/resolve-uri@3.1.2':
     resolution: {integrity: sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==}
@@ -535,6 +582,8 @@ packages:
     hasBin: true
 
 snapshots:
+
+  '@garmin/fitsdk@21.217.0': {}
 
   '@jridgewell/resolve-uri@3.1.2': {}
 
