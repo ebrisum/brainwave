@@ -65,6 +65,17 @@ def build_parser() -> argparse.ArgumentParser:
     i.add_argument("course_id")
     i.add_argument("--out", default="./courses")
 
+    vs = sub.add_parser("video", help="sync a recorded ride (with its video) to the course for video mode")
+    vs.add_argument("course_id")
+    vs.add_argument("track", help="GPX/TCX/FIT with timestamps recorded during the filmed ride")
+    vs.add_argument("--name")
+    vs.add_argument("--video-offset", type=float, default=0.0, help="video time (s) at the track's first timestamp")
+    vs.add_argument("--out", default="./courses")
+
+    dt = sub.add_parser("dev-tileset", help="write a local ECEF 3D Tiles stand-in for photoreal mode (no API key needed)")
+    dt.add_argument("course_id")
+    dt.add_argument("--out", default="./courses")
+
     c = sub.add_parser("cache", help="manage regional dataset caches")
     csub = c.add_subparsers(dest="cache_cmd", required=True)
     cw = csub.add_parser("warm", help="prefetch DEM and land-cover tiles")
@@ -204,9 +215,25 @@ def cmd_cache(a) -> int:
     return 0
 
 
+def cmd_video(a) -> int:
+    from .videosync import map_track
+
+    r = map_track(_resolve_pkg(a.out, a.course_id), Path(a.track), a.name, a.video_offset)
+    print(f"video/{r['name']}.json: {r['sStart'] / 1000:.2f}–{r['sEnd'] / 1000:.2f} km ({r['coverage']:.0%} of the course), "
+          f"{len(r['points'])} sync points, median {r['medianSpeedMs'] * 3.6:.1f} km/h")
+    return 0
+
+
+def cmd_dev_tileset(a) -> int:
+    from .devtileset import build
+
+    print(build(_resolve_pkg(a.out, a.course_id)))
+    return 0
+
+
 def main(argv=None) -> int:
     a = build_parser().parse_args(argv)
-    return {"build": cmd_build, "weather": cmd_weather, "validate": cmd_validate, "inspect": cmd_inspect, "cache": cmd_cache}[a.cmd](a)
+    return {"dev-tileset": cmd_dev_tileset, "video": cmd_video, "build": cmd_build, "weather": cmd_weather, "validate": cmd_validate, "inspect": cmd_inspect, "cache": cmd_cache}[a.cmd](a)
 
 
 if __name__ == "__main__":

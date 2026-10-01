@@ -55,6 +55,7 @@ class Config:
     tunables: Tunables = field(default_factory=Tunables)
     cache_dir: Path = field(default_factory=lambda: Path(os.environ.get("GPX2COURSE_CACHE", Path.home() / ".cache" / "gpx2course")))
     offline: bool = False
+    style_override: str | None = None
     api_keys: dict[str, str] = field(default_factory=dict)
 
     @staticmethod
@@ -75,6 +76,8 @@ class Config:
                 setattr(obj, k, v)
         if "cache_dir" in data:
             self.cache_dir = Path(data["cache_dir"]).expanduser()
+        if "style" in data:
+            self.style_override = data["style"]
         if "offline" in data:
             self.offline = bool(data["offline"])
         self.api_keys.update(data.get("api_keys", {}))
@@ -82,4 +85,4 @@ class Config:
     def fingerprint(self) -> dict[str, Any]:
         """Parts of the config that affect outputs (used in stage cache keys)."""
         from dataclasses import asdict
-        return {"providers": asdict(self.providers), "tunables": asdict(self.tunables), "offline": self.offline}
+        return {"providers": asdict(self.providers), "tunables": asdict(self.tunables), "offline": self.offline, "style": self.style_override}

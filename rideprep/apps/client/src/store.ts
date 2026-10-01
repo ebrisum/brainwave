@@ -4,7 +4,8 @@ import { Units } from "./units";
 
 export type Screen = "library" | "upload" | "briefing" | "pairing" | "ride" | "postride" | "settings";
 export type Quality = "low" | "medium" | "high" | "ultra";
-export type CameraMode = "chase" | "first" | "side" | "drone" | "flyover";
+export type CameraMode = "chase" | "cockpit" | "side" | "drone" | "flyover";
+export type PhotorealSource = "off" | "google" | "dev" | "url";
 
 export interface Settings {
   units: Units;
@@ -13,6 +14,11 @@ export interface Settings {
   trainerDifficulty: number;
   corneringRealism: boolean;
   gusts: boolean;
+  /** Real-world view from 3D tiles. "dev" uses the package's local stand-in tileset (no key). */
+  photoreal: PhotorealSource;
+  googleApiKey: string;
+  tilesUrl: string;
+  mapillaryToken: string;
 }
 
 /** Live values the HUD shows; written by the ride session ~10×/s, never by React render. */
@@ -32,6 +38,10 @@ const defaults: Settings = {
   trainerDifficulty: 1,
   corneringRealism: true,
   gusts: true,
+  photoreal: "off",
+  googleApiKey: "",
+  tilesUrl: "",
+  mapillaryToken: "",
 };
 
 function loadSettings(): Settings {

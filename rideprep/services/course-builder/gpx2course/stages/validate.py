@@ -85,6 +85,7 @@ def build_manifest(ctx: BuildContext) -> dict:
         "attribution": attribution, "elevationSources": meta.get("elevationSources", []), "barometric": meta.get("barometric"),
         "warnings": warnings,
         **({"riderDefaults": ctx.options.rider} if ctx.options.rider else {}),
+        **({"style": ctx.read_json("style.json")} if ctx.path("style.json").exists() else {}),
     }
 
 

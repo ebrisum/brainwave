@@ -1,5 +1,6 @@
 # gpx2course configuration (pass with --config). Every key is optional.
 offline = false
+# style = "fr"   # force a regional style profile (nl, be, lu, fr, de, uk, dk, it, es, ch, at, alpine); default: from location/terrain
 cache_dir = "~/.cache/gpx2course"
 
 [providers]

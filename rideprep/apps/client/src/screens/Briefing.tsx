@@ -4,6 +4,7 @@ import { ClimatologyJson } from "@rideprep/physics";
 import { refreshWeather } from "../api";
 import { AnalysisResult, runAnalysis } from "../analysis/run";
 import { ElevationProfile, ExposureLegend, GradeLegend } from "../components/ElevationProfile";
+import { StreetPhotos } from "../components/StreetPhotos";
 import { WindRose } from "../components/WindRose";
 import { cache, getCourse, startEpochOf } from "../courseCache";
 import { useApp } from "../store";
@@ -181,6 +182,10 @@ export function Briefing() {
           <ul className="pois">{seg.pois.slice(0, 30).map((p, i) => <li key={i}>{fmtDist(p.s, u, 2)} · {p.name || p.type} <span className="muted">({p.type})</span></li>)}</ul>
         </section>
       </div>
+      <section className="card">
+        <h2>Street-level photos</h2>
+        <StreetPhotos course={course} token={settings.mapillaryToken} units={u} />
+      </section>
       <footer className="attribution">{m.attribution.join(" · ")}</footer>
     </main>
   );

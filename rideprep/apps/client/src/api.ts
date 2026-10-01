@@ -46,3 +46,21 @@ export async function refreshWeather(courseId: string, body: Record<string, unkn
 }
 
 export type { Manifest };
+
+export interface VideoInfo { name: string; source: string; sStart: number; sEnd: number; coverage: number; medianSpeedMs: number }
+
+export async function listVideos(courseId: string): Promise<VideoInfo[]> {
+  const r = await fetch(`${API}/courses/${courseId}/videos`);
+  return r.ok ? r.json() : [];
+}
+
+/** Sync a recorded ride (GPX/TCX/FIT with timestamps) to the course. The video itself never leaves the device. */
+export async function addVideoSync(courseId: string, track: File, name: string, videoOffsetS: number): Promise<VideoInfo> {
+  const fd = new FormData();
+  fd.append("track", track);
+  fd.append("name", name);
+  fd.append("video_offset", String(videoOffsetS));
+  const r = await fetch(`${API}/courses/${courseId}/videos`, { method: "POST", body: fd });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({ detail: r.statusText }))).detail);
+  return r.json();
+}

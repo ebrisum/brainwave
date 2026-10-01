@@ -31,6 +31,7 @@ def args():
     p.add_argument("--input", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--no-ao", action="store_true")
+    p.add_argument("--materials", default=CATALOGUE, help="package materials.json (regional style applied)")
     return p.parse_args(argv)
 
 
@@ -120,14 +121,16 @@ def build_road(spec, cat, ox, oy, oz):
             ribbon(bm, seg, 0.0, hw, 0.0, [-0.02 * w for w in hw])
             objs.append(new_object(f"road_{start}", bm, material(cat, mid)))
             start = i
-    # Edge lines on roads ≥ 5 m, dashed centre line ≥ 5.5 m
+    # Edge lines on roads ≥ 5 m, centre line ≥ 5.5 m — per regional marking style
+    mk = spec.get("markings") or {"edge": "solid", "centre": "dashed"}
     bm = bmesh.new()
-    for side in (-1, 1):
-        run = [k for k in range(len(pts)) if widths[k] * 2 >= 5 and not rt["cycleway"][k]]
+    for side in ((-1, 1) if mk.get("edge", "solid") != "none" else ()):
+        run = [k for k in range(len(pts)) if widths[k] * 2 >= 5 and not rt["cycleway"][k]
+               and (mk.get("edge") != "dashed" or (rt["s"][k] % 4.5) < 3.0)]
         if len(run) > 1:
             ribbon(bm, [pts[k] for k in run], [side * (widths[k] - 0.35) - 0.06 for k in run], [side * (widths[k] - 0.35) + 0.06 for k in run], 0.015, 0.015)
     for k in range(len(pts) - 1):
-        if widths[k] * 2 >= 5.5 and (rt["s"][k] % 12.0) < 3.0:
+        if mk.get("centre", "dashed") != "none" and widths[k] * 2 >= 5.5 and (rt["s"][k] % 12.0) < 3.0:
             ribbon(bm, [pts[k], pts[k + 1]], -0.06, 0.06, 0.02, 0.02)
     if bm.faces:
         objs.append(new_object("markings", bm, material(cat, "marking_white")))
@@ -252,7 +255,7 @@ def export(path, objs):
 def main():
     a = args()
     spec = json.load(open(a.input))
-    cat = json.load(open(CATALOGUE))
+    cat = json.load(open(a.materials))
     random.seed(spec.get("seed", 0))
     ox, oy, oz = spec["origin"]
     for lod, ratio in ((0, 1.0), (1, 0.5), (2, 0.2)):

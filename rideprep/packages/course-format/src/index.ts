@@ -5,3 +5,4 @@ export * from "./loader";
 export * from "./geo";
 export type { CourseProfile } from "@rideprep/physics";
 export * from "./stream";
+export * from "./globe";

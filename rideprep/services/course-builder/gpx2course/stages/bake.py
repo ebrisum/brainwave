@@ -19,7 +19,6 @@ from ..litebake import BAKER_VERSION, bake_chunk, bake_far_terrain
 from ..pipeline import BuildContext, stable_json
 from .common import CorridorRaster, chunk_ranges, load_route
 
-NL_BBOX = (3.2, 50.75, 7.3, 53.7)
 BLENDER_SCRIPT = Path(__file__).resolve().parents[2] / "blender" / "bake_chunk.py"
 
 
@@ -28,15 +27,16 @@ def blender_path() -> str | None:
 
 
 def _bake_one(args):
-    spec_path, out_dir, mode = args
+    spec_path, out_dir, mode, mats_path = args
     spec = json.loads(Path(spec_path).read_text())
     if mode == "blender":
-        cmd = [blender_path(), "-b", "--factory-startup", "--python", str(BLENDER_SCRIPT), "--", "--input", spec_path, "--out", out_dir]
+        cmd = [blender_path(), "-b", "--factory-startup", "--python", str(BLENDER_SCRIPT), "--", "--input", spec_path, "--out", out_dir,
+               "--materials", mats_path]
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
         if res.returncode != 0:
             raise RuntimeError(f"blender failed for chunk {spec['id']}: {res.stderr[-2000:]}")
         return spec["id"], [f"c{spec['id']}_lod{k}.glb" for k in range(3)]
-    mats = json.loads(resources.files("gpx2course").joinpath("data/materials.json").read_text())
+    mats = json.loads(Path(mats_path).read_text())
     return spec["id"], bake_chunk(spec, Path(out_dir), mats)
 
 
@@ -50,8 +50,8 @@ def build_chunk_specs(ctx: BuildContext) -> list[dict]:
     hw = r["roadWidthM"] / 2 + 4
     nx, ny = np.cos(r["headingRad"]), -np.sin(r["headingRad"])
     tz = (dem.sample(r["x"] + nx * hw, r["y"] + ny * hw) + dem.sample(r["x"] - nx * hw, r["y"] - ny * hw)) / 2
-    o = ctx.read_json("origin.json")
-    red = NL_BBOX[0] <= o["lon"] <= NL_BBOX[2] and NL_BBOX[1] <= o["lat"] <= NL_BBOX[3]
+    style = ctx.read_json("style.json")
+    red = bool(style.get("redCycleways"))
     highway = r["highway"]
     bridge = np.array([(b or "") not in ("", "no") for b in r["bridge"]])
     cyc = np.array([h == "cycleway" for h in highway])
@@ -72,7 +72,7 @@ def build_chunk_specs(ctx: BuildContext) -> list[dict]:
         b = min(r["count"] - 1, int(math.ceil(s1 / sp)) + 1)
         sl = slice(a, b + 1)
         origin = [round(float(r["x"][a])), round(float(r["y"][a])), round(float(r["z"][a]))]
-        specs.append({"id": k, "sStart": s0, "sEnd": s1, "origin": origin, "redCycleways": red, "seed": k,
+        specs.append({"id": k, "sStart": s0, "sEnd": s1, "origin": origin, "redCycleways": red, "markings": style.get("markings", {}), "seed": k,
                       "route": {"s": np.round(r["s"][sl], 2).tolist(), "x": np.round(r["x"][sl], 3).tolist(), "y": np.round(r["y"][sl], 3).tolist(),
                                 "z": np.round(r["z"][sl], 3).tolist(), "heading": np.round(r["headingRad"][sl], 5).tolist(),
                                 "width": r["roadWidthM"][sl].astype(int).tolist(), "surface": r["surfaceCode"][sl].astype(int).tolist(),
@@ -102,7 +102,7 @@ def run(ctx: BuildContext) -> list[str]:
     version = BAKER_VERSION if mode == "lite" else "blender-1"
     todo, status = [], {}
     for sp in specs:
-        key = hashlib.sha256((stable_json(sp) + version).encode()).hexdigest()
+        key = hashlib.sha256((stable_json(sp) + version + ctx.path("materials.json").read_text()).encode()).hexdigest()
         kp = out_dir / ".keys" / f"c{sp['id']}.txt"
         files = [f"c{sp['id']}_lod{l}.glb" for l in range(3)]
         if kp.exists() and kp.read_text() == key and all((out_dir / f).exists() for f in files):
@@ -126,7 +126,8 @@ def run(ctx: BuildContext) -> list[str]:
             raise KeyboardInterrupt(f"simulated kill after {done} chunks")
 
     keys = {sp["id"]: key for sp, key in todo}
-    args = [(str(out_dir / ".inputs" / f"c{sp['id']}.json"), str(out_dir), mode) for sp, _ in todo]  # ride order
+    mats_path = str(ctx.path("materials.json"))
+    args = [(str(out_dir / ".inputs" / f"c{sp['id']}.json"), str(out_dir), mode, mats_path) for sp, _ in todo]  # ride order
     if todo:
         if workers > 1:
             import multiprocessing as mp

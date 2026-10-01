@@ -164,3 +164,19 @@ def test_blender_bake(tmp_path):
     j = read_glb_json((d / "chunks" / "c0_lod0.glb").read_bytes())
     assert any("COLOR_0" in p["attributes"] for m in j["meshes"] for p in m["primitives"])  # baked AO
     assert {"materialId"} <= set(j["materials"][0].get("extras", {}))
+
+
+def test_video_sync(built, tmp_path):
+    """Map a timestamped ride onto the course (fixture GPX doubles as the camera ride): monotonic s and video time."""
+    from gpx2course.videosync import map_track
+
+    d = built["urban_cobbles_15k"][0]
+    target = tmp_path / d.name
+    shutil.copytree(d, target)
+    r = map_track(target, FIXTURES / "urban_cobbles_15k.gpx", "cam", video_offset_s=4.0)
+    pts = np.array(r["points"])
+    assert r["coverage"] > 0.95 and pts[0, 0] < 50
+    assert np.all(np.diff(pts[:, 0]) > 0) and np.all(np.diff(pts[:, 1]) > 0)
+    assert pts[0, 1] == pytest.approx(4.0, abs=2)
+    assert 6 < r["medianSpeedMs"] < 10  # fixture was recorded at ~7 m/s
+    assert (target / "video" / "cam.json").exists()

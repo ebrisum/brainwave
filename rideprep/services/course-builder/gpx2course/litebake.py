@@ -174,19 +174,23 @@ def bake_chunk(spec: dict, out_dir: Path, materials: dict) -> list[str]:
                     pos, idx, col = _merge([(p1, i1, None), (p2, i2, None)])
                     meshes.append(Mesh(f"road_{a}", str(mats[a]), enu_to_gltf(pos[:, 0], pos[:, 1], pos[:, 2]), idx, colors=col))
                 a = i
-        # Markings (LOD0 only): edge lines and dashed centre line on wider roads
+        # Markings (LOD0 only), per regional style: edge lines solid/dashed/none, centre dashed/none
+        mk = spec.get("markings") or {"edge": "solid", "centre": "dashed"}
         if lod == 0:
             wide = W >= 5.0
             parts = []
-            for side in (-1, 1):
+            ss_all = np.array(rt["s"])[sel]
+            for side in (-1, 1) if mk.get("edge", "solid") != "none" else ():
                 off = side * (W / 2 - 0.35)
                 m = wide & ~np.array([cyc[i] for i in sel])
+                if mk.get("edge") == "dashed":
+                    m &= np.mod(ss_all, 4.5) < 3.0
                 if m.sum() > 1:
                     for run in _runs(m):
                         cs = slice(run[0], run[1])
                         if run[1] - run[0] > 1:
                             parts.append(_ribbon(X[cs], Y[cs], Z[cs] + 0.045, NX[cs], NY[cs], off[cs] - 0.06, off[cs] + 0.06) + (None,))
-            centre = W >= 5.5
+            centre = (W >= 5.5) & (mk.get("centre", "dashed") != "none")
             ss = np.array(rt["s"])[sel]
             dash = (np.mod(ss, 12.0) < 3.0) & centre
             for run in _runs(dash):

@@ -2,6 +2,7 @@ import { LoadedCourse, loadCourse, loadQuickGeometry, QuickBuilding, QuickRoad, 
 import { courseFetcher } from "./api";
 import type { RideSession } from "./ride/RideSession";
 import type { AnalysisResult } from "./analysis/run";
+import type { VideoSyncJson } from "./ride/videoSync";
 
 /** Heavy objects live outside React/Zustand. */
 export const cache: {
@@ -10,6 +11,8 @@ export const cache: {
   quick?: { buildings: QuickBuilding[]; roads: QuickRoad[]; water: QuickWater[] };
   session?: RideSession;
   analysis?: AnalysisResult;
+  /** Video mode: synced footage chosen on the pairing screen (object URL of a local file). */
+  video?: { sync: VideoSyncJson; url: string };
 } = {};
 
 export async function getCourse(courseId: string): Promise<LoadedCourse> {

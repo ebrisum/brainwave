@@ -82,3 +82,12 @@ tr.sel td { background: rgba(240, 180, 41, 0.08); }
   .hud .mapbox, .hud .wind { display: none; }
   .hud .power { top: auto; bottom: 140px; left: 12px; transform: none; min-width: 0; }
 }
+
+.attribution3d { position: absolute; right: 12px; bottom: 132px; display: flex; gap: 8px; align-items: center; max-width: 55%;
+  font-size: 11px; color: #fff; text-shadow: 0 1px 2px #000; pointer-events: none; }
+.attribution3d img { height: 16px; }
+.photoreal-error { position: absolute; left: 50%; top: 140px; transform: translateX(-50%); color: var(--warn); }
+.ride video.ridevideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+.photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.photo { display: flex; flex-direction: column; gap: 4px; color: var(--fg); text-decoration: none; font-size: 13px; }
+.photo img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 8px; background: #0f1317; }

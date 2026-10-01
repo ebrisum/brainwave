@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { ChunkRef, poseAt } from "@rideprep/course-format";
-import { courseFetcher } from "../api";
+import { API, courseFetcher } from "../api";
 import { ElevationProfile } from "../components/ElevationProfile";
 import { MiniMap } from "../components/MiniMap";
 import { cache, getCourse, getQuick, startEpochOf } from "../courseCache";
 import { RenderState, World } from "../engine/World";
 import { solarPosition } from "../ride/solar";
+import { VideoSync } from "../ride/videoSync";
 import { CameraMode, useApp } from "../store";
 import { compass, fmtDist, fmtDuration, fmtElev, fmtTemp, fmtWind, speedUnit, speedValue } from "../units";
 
-const CAMS: CameraMode[] = ["chase", "first", "side", "drone", "flyover"];
+const CAMS: CameraMode[] = ["chase", "cockpit", "side", "drone", "flyover"];
 
 export function Ride() {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -17,11 +18,29 @@ export function Ride() {
   const { courseId, settings, camera, setCamera, go } = useApp();
   const hud = useApp((s) => s.hud);
   const [ready, setReady] = useState(false);
+  const [photorealError, setPhotorealError] = useState<string>();
+  const [attribution, setAttribution] = useState("");
   const [fps, setFps] = useState(0);
   const params = new URLSearchParams(location.search);
   const [flySpeed, setFlySpeed] = useState(Number(params.get("fly") ?? 60));
   const flyover = camera === "flyover" && !cache.session?.isStarted;
   const flyRef = useRef({ s: Number(params.get("s") ?? 0), speed: 60 });
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoActive, setVideoActive] = useState(false);
+  useEffect(() => {
+    const v = cache.video;
+    if (!v || !videoRef.current) return;
+    const sync = new VideoSync(v.sync);
+    const el = videoRef.current;
+    el.src = v.url;
+    el.muted = true;
+    const t = setInterval(() => {
+      const h = useApp.getState().hud;
+      if (!h) return;
+      setVideoActive(sync.control(el, h.s, h.speedMs, h.paused));
+    }, 100);
+    return () => clearInterval(t);
+  }, []);
   flyRef.current.speed = flySpeed;
 
   useEffect(() => {
@@ -55,6 +74,16 @@ export function Ride() {
       worldRef.current = world;
       world.cameraMode = camera;
       world.enableGhost(!!session?.opts.ghost);
+      const pr = params.get("photoreal") ?? settings.photoreal;
+      if (pr !== "off") {
+        try {
+          world.setPhotoreal(pr === "dev" ? { url: `${API}/courses/${courseId}/files/devtiles/tileset.json` }
+            : pr === "url" ? { url: settings.tilesUrl } : { apiKey: settings.googleApiKey });
+          if (camera === "chase" && !params.get("camera")) { world.cameraMode = "cockpit"; setCamera("cockpit"); }
+        } catch (e) {
+          setPhotorealError(String(e));
+        }
+      }
       await world.init();
       if (disposed) { world.dispose(); return; }
       world.start();
@@ -74,7 +103,11 @@ export function Ride() {
     })().catch((e) => console.error(e));
     const onResize = () => worldRef.current?.resize();
     window.addEventListener("resize", onResize);
-    const fpsTimer = setInterval(() => setFps(Math.round(worldRef.current?.fps ?? 0)), 1000);
+    const fpsTimer = setInterval(() => {
+      setFps(Math.round(worldRef.current?.fps ?? 0));
+      const pr = worldRef.current?.photoreal;
+      if (pr) setAttribution(pr.attributions());
+    }, 1000);
     return () => {
       disposed = true;
       clearInterval(fpsTimer);
@@ -110,7 +143,8 @@ export function Ride() {
 
   return (
     <div className="ride">
-      <canvas ref={ref} className="world" />
+      <canvas ref={ref} className="world" style={{ visibility: videoActive ? "hidden" : "visible" }} />
+      {cache.video && <video ref={videoRef} className="ridevideo" playsInline style={{ display: videoActive ? "block" : "none" }} />}
       {!ready && <div className="loading">Loading world…</div>}
       {flyover && course && (
         <div className="flybar panel">
@@ -136,6 +170,13 @@ export function Ride() {
           </div>
         </div>
       )}
+      {worldRef.current?.photoreal && (
+        <div className="attribution3d">
+          <img src="/google-logo.png" alt="Google" onError={(e) => { (e.target as HTMLImageElement).replaceWith(Object.assign(document.createElement("b"), { textContent: "Google" })); }} />
+          <span>{attribution}</span>
+        </div>
+      )}
+      {photorealError && <div className="photoreal-error panel">{photorealError}</div>}
       <div className="fps">{fps} fps</div>
     </div>
   );

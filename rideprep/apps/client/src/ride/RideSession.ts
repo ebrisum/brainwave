@@ -214,7 +214,7 @@ export class RideSession {
       s, speed: b.v, leanRad: turn, crankRad: this.crank, gradePct: b.gradePct, cadence: cad, powerW: b.powerW,
       windToX: Math.sin((toDeg * Math.PI) / 180), windToY: Math.cos((toDeg * Math.PI) / 180), uRider: b.wind.uRider, gust: b.wind.gust,
       sunElevationDeg: sun.elevationDeg, sunAzimuthDeg: sun.azimuthDeg, cloud: b.weather.cloudCover, visibilityM: b.weather.visibilityM,
-      rainMmH: b.weather.precipMmH, ghostS: this.ghostS(b.t),
+      rainMmH: b.weather.precipMmH, ghostS: this.ghostS(b.t), hr: this.hub.r.heartRateBpm,
     };
   }
 

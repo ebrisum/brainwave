@@ -15,6 +15,7 @@ from scipy.spatial import cKDTree
 from shapely.geometry import shape
 
 from ..pipeline import BuildContext
+from ..styles import apply_to_catalogue
 from .common import TILE_M, CorridorRaster, load_route
 
 VERT_RES = 10.0
@@ -59,8 +60,19 @@ def flatten_under_road(X, Y, Z, route_tree, route_xyz, half_width):
     return Zf.reshape(Z.shape)
 
 
+RESIDENTIAL = {"house", "detached", "semidetached_house", "terrace", "farm", "barn", "yes", "residential", "bungalow", "church"}
+
+
+def style_profile(ctx: BuildContext) -> dict:
+    from ..styles import choose
+    o = ctx.read_json("origin.json")
+    stats = ctx.read_json("route_meta.json")["stats"]
+    return choose(o["lat"], o["lon"], stats.get("maxElevationM", 0), ctx.config.style_override)
+
+
 def run(ctx: BuildContext) -> list[str]:
     r = load_route(ctx)
+    profile = style_profile(ctx)
     dem = CorridorRaster(ctx, "dem")
     lc = CorridorRaster(ctx, "lc")
     idx = ctx.read_json("corridor/index.json")
@@ -220,7 +232,8 @@ def run(ctx: BuildContext) -> list[str]:
             if len(ring) < 3:
                 continue
             zg = dem.sample(ring[:, 0], ring[:, 1])
-            qb.append({"h": p["_height"], "z": round(float(zg.min()), 2), "type": p.get("building", "yes"), "roof": p.get("roof:shape", "flat"),
+            roof = p.get("roof:shape") or (profile["roofDefault"] if p.get("building") in RESIDENTIAL else "flat")
+            qb.append({"h": p["_height"], "z": round(float(zg.min()), 2), "type": p.get("building", "yes"), "roof": roof,
                        "near": bool(pg.intersects(near)), "ring": np.round(ring, 2).tolist()})
     ctx.write_json("quick/buildings.json", {"buildings": qb})
     roads, water = [], []
@@ -245,8 +258,9 @@ def run(ctx: BuildContext) -> list[str]:
     ctx.write_json("quick/roads.json", {"roads": roads})
     ctx.write_json("quick/water.json", {"water": water})
     mats = json.loads(resources.files("gpx2course").joinpath("data/materials.json").read_text())
-    ctx.write_json("materials.json", mats, indent=1)
-    outs += ["quick/buildings.json", "quick/roads.json", "quick/water.json", "materials.json"]
+    ctx.write_json("materials.json", apply_to_catalogue(mats, profile), indent=1)
+    ctx.write_json("style.json", profile, indent=1)
+    outs += ["quick/buildings.json", "quick/roads.json", "quick/water.json", "materials.json", "style.json"]
     from .validate import write_partial_manifest
     write_partial_manifest(ctx)  # the rider can start on the Quick tier now
     return outs

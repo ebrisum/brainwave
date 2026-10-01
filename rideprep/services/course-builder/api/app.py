@@ -162,3 +162,30 @@ async def refresh_weather(cid: str, request: Request):
         args.append("--offline")
     await asyncio.to_thread(cli, args)
     return FileResponse(d / "weather.json", media_type="application/json")
+
+
+@app.get("/courses/{cid}/videos")
+def list_videos(cid: str):
+    d = _course_dir(cid)
+    return [json.loads(p.read_text()) | {"points": None} for p in sorted((d / "video").glob("*.json"))] if (d / "video").exists() else []
+
+
+@app.post("/courses/{cid}/videos")
+async def add_video(cid: str, track: UploadFile = File(...), name: str | None = Form(None), video_offset: float = Form(0.0)):
+    """Sync a recorded ride (GPX/TCX/FIT with timestamps) to the course; the video file itself stays on the rider's device."""
+    import tempfile
+
+    from gpx2course.videosync import map_track
+
+    d = _course_dir(cid)
+    suffix = Path(track.filename or "track.gpx").suffix.lower()
+    if suffix not in (".gpx", ".tcx", ".fit"):
+        raise HTTPException(400, "expected .gpx, .tcx or .fit")
+    with tempfile.TemporaryDirectory() as tmp:
+        p = Path(tmp) / f"track{suffix}"
+        p.write_bytes(await track.read())
+        try:
+            res = await asyncio.to_thread(map_track, d, p, name or Path(track.filename or "ride").stem, video_offset)
+        except ValueError as ex:
+            raise HTTPException(422, str(ex)) from ex
+    return res

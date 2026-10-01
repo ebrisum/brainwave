@@ -1,5 +1,5 @@
 import { CDA_PRESETS, Position } from "@rideprep/physics";
-import { useApp, Quality } from "../store";
+import { PhotorealSource, useApp, Quality } from "../store";
 
 export function Settings() {
   const { settings: s, updateSettings, updateRider, go } = useApp();
@@ -31,6 +31,18 @@ export function Settings() {
         <label>Trainer difficulty ({Math.round(s.trainerDifficulty * 100)} %)<input type="range" min="0" max="1.5" step="0.05" value={s.trainerDifficulty} onChange={(e) => updateSettings({ trainerDifficulty: num(e.target.value) })} /></label>
         <label className="check"><input type="checkbox" checked={s.corneringRealism} onChange={(e) => updateSettings({ corneringRealism: e.target.checked })} />Cornering realism (auto-brake)</label>
         <label className="check"><input type="checkbox" checked={s.gusts} onChange={(e) => updateSettings({ gusts: e.target.checked })} />Gusts</label>
+        <h2>Real-world view</h2>
+        <label>Photoreal source<select value={s.photoreal} onChange={(e) => updateSettings({ photoreal: e.target.value as PhotorealSource })}>
+          <option value="off">Off — generated world</option>
+          <option value="google">Google Photorealistic 3D Tiles</option>
+          <option value="dev">Dev stand-in (package tileset)</option>
+          <option value="url">Custom 3D Tiles URL</option>
+        </select></label>
+        {s.photoreal === "google" && <label>Google Maps Platform API key (Map Tiles API)<input type="password" value={s.googleApiKey} onChange={(e) => updateSettings({ googleApiKey: e.target.value })} /></label>}
+        {s.photoreal === "url" && <label>tileset.json URL<input value={s.tilesUrl} onChange={(e) => updateSettings({ tilesUrl: e.target.value })} /></label>}
+        <label>Mapillary client token (street photos in the briefing)<input type="password" value={s.mapillaryToken} onChange={(e) => updateSettings({ mapillaryToken: e.target.value })} /></label>
+        <p className="muted">Google tiles stream live and are never stored. They look best from a few metres up; at the roadside, trees and walls can look
+          smeared. Rural coverage varies. Your key stays in this browser only — restrict it to your domain in the Google Cloud console.</p>
         <p className="muted">Trainer difficulty scales only the grade sent to the trainer; the virtual speed always comes from the full physics.</p>
       </section>
     </main>

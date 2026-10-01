@@ -15,9 +15,10 @@ export class CameraRig {
     const p = new THREE.Vector3();
     const l = new THREE.Vector3();
     switch (mode) {
-      case "first":
-        p.copy(rider).addScaledVector(fwd, 0.1).add(new THREE.Vector3(0, 1.55, 0));
-        l.copy(ahead).add(new THREE.Vector3(0, 1.2, 0));
+      case "cockpit":
+        // Eye position over the bars; look ~25 m down the road
+        p.copy(rider).addScaledVector(fwd, 0.05).add(new THREE.Vector3(0, 1.48, 0)).add(this.eyeOffset);
+        l.copy(ahead).add(new THREE.Vector3(0, 1.0, 0));
         break;
       case "side":
         p.copy(rider).addScaledVector(right, 5).addScaledVector(fwd, 1.5).add(new THREE.Vector3(0, 1.3, 0));
@@ -37,13 +38,18 @@ export class CameraRig {
     }
     const minY = groundAt(p) + 0.8;
     if (p.y < minY) p.y = minY;
-    const k = this.init ? 1 - Math.exp(-dt * (mode === "first" ? 20 : 4)) : 1;
+    const k = this.init ? 1 - Math.exp(-dt * (mode === "cockpit" ? 30 : 4)) : 1;
     this.pos.lerp(p, k);
     this.look.lerp(l, this.init ? 1 - Math.exp(-dt * 6) : 1);
     this.init = true;
     this.camera.position.copy(this.pos);
     this.camera.lookAt(this.look);
+    if (mode === "cockpit") this.camera.rotateZ(this.roll);
   }
+
+  /** Cockpit extras set by the world each frame. */
+  eyeOffset = new THREE.Vector3();
+  roll = 0;
 
   reset() {
     this.init = false;
