@@ -1,0 +1,31 @@
+# gpx2course configuration (pass with --config). Every key is optional.
+offline = false
+cache_dir = "~/.cache/gpx2course"
+
+[providers]
+# Priority order; the first provider that covers an area wins (unavailable ones are skipped with a warning).
+dem = ["copernicus", "gpx"]           # add national LiDAR providers (AHN, RGE ALTI, DGM1, EA LiDAR) as they are implemented
+landcover = ["worldcover", "osm"]
+osm = ["sidecar", "pbf", "overpass"]  # pbf = local Geofabrik extracts (production); overpass = development only
+matcher = ["valhalla", "nearest-way"]
+weather = ["open-meteo"]
+
+[endpoints]
+valhalla_url = "http://valhalla:8002"
+osm_pbf_dir = "/data/osm"
+open_meteo_forecast = "https://api.open-meteo.com/v1/forecast"
+open_meteo_archive = "https://archive-api.open-meteo.com/v1/archive"
+
+[tunables]
+sample_spacing_m = 5.0
+wind_spacing_m = 10.0
+chunk_length_m = 500.0
+near_buffer_m = 150.0
+mid_buffer_m = 1500.0
+far_buffer_m = 10000.0
+wind_fetch_m = 2000.0
+max_grade_pct = 25.0
+climatology_years = 15
+
+[api_keys]
+# google_maps = "…"   # Photoreal mode only (runtime streaming; never cached or baked)

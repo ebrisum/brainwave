@@ -135,10 +135,17 @@ def _synthetic_rose(gc) -> list[list[float]]:
     return np.round(np.outer(w, speed), 5).tolist()
 
 
+def default_start(lon: float) -> datetime:
+    """No event date: tomorrow at ~10:00 local solar time (daylight for rides and briefing)."""
+    d = datetime.now(timezone.utc).date() + timedelta(days=1)
+    hour = int(round(10 - lon / 15)) % 24
+    return datetime(d.year, d.month, d.day, hour, tzinfo=timezone.utc)
+
+
 def run(ctx: BuildContext) -> list[str]:
     cfg = ctx.config
     ss, lat, lon, L = _points(ctx)
-    start = ctx.options.event_start or datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) + timedelta(days=1)
+    start = ctx.options.event_start or default_start(float(lon[0]))
     om = OpenMeteo(cfg.endpoints.open_meteo_forecast, cfg.endpoints.open_meteo_archive, cfg.cache_dir, cfg.tunables.network_timeout_s, cfg.offline)
     mid = len(lat) // 2
     clim = climatology(ctx, om, float(lat[mid]), float(lon[mid]), start)

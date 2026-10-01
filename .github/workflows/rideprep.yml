@@ -1,0 +1,44 @@
+name: rideprep
+on:
+  push:
+    paths: ["rideprep/**", ".github/workflows/rideprep.yml"]
+  pull_request:
+    paths: ["rideprep/**", ".github/workflows/rideprep.yml"]
+
+defaults:
+  run:
+    working-directory: rideprep
+
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e "services/course-builder[api,dev]"
+      - name: gpx2course --help
+        run: python -m gpx2course --help
+      - name: Pipeline + API tests (offline, fixtures)
+        working-directory: rideprep/services/course-builder
+        env: { GPX2COURSE_OFFLINE: "1" }
+        run: python -m pytest -q
+
+  typescript:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.28.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: rideprep/pnpm-lock.yaml }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e services/course-builder
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm -r typecheck
+      - name: Tests (physics, ble, metrics, course-format incl. native C++ cross-renderer test, ride-core, emulator)
+        run: pnpm -r test
+      - name: Build web client and ride core
+        run: pnpm --filter @rideprep/client build && pnpm --filter @rideprep/ride-core build

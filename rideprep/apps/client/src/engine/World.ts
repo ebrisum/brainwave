@@ -65,7 +65,7 @@ export class World {
     this.road.addSideRoads(quick.roads);
     this.buildings = quick.buildings.length ? new Buildings(quick.buildings, course.materials, course.route, 500) : undefined;
     this.vegetation = new Vegetation(course.instances, course.materials, quality, m.wind.leafOn ?? true);
-    this.chunks = new ChunkStreamer(m.chunks, fetch, (id, baked) => {
+    this.chunks = new ChunkStreamer(course.chunks, fetch, (id, baked) => {
       if (this.road.chunks[id]) this.road.chunks[id].visible = !baked;
       const b = this.buildings?.byChunk.get(id);
       if (b) b.visible = !baked;

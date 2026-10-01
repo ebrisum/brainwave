@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { WebBluetoothAdapter } from "@rideprep/ble";
-import { cache, getCourse } from "../courseCache";
+import { cache, getCourse, startEpochOf } from "../courseCache";
 import { DeviceKind, RideSession } from "../ride/RideSession";
 import { ridesForCourse } from "../ride/recorder";
 import { useApp } from "../store";
@@ -24,7 +24,7 @@ export function Pairing() {
       cache.session?.stop();
       const ev = course.manifest.eventStart;
       cache.session = new RideSession(course, {
-        rider: settings.rider, startEpoch: ev ? Date.parse(ev) / 1000 : Date.now() / 1000, cornering: settings.corneringRealism,
+        rider: settings.rider, startEpoch: startEpochOf(course), cornering: settings.corneringRealism,
         gusts: settings.gusts, difficulty: settings.trainerDifficulty, plan,
       }, (h) => useApp.getState().setHud(h), (id) => useApp.getState().go("postride", { lastRideId: id }));
     });

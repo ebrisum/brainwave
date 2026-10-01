@@ -5,7 +5,7 @@ import { refreshWeather } from "../api";
 import { AnalysisResult, runAnalysis } from "../analysis/run";
 import { ElevationProfile, ExposureLegend, GradeLegend } from "../components/ElevationProfile";
 import { WindRose } from "../components/WindRose";
-import { cache, getCourse } from "../courseCache";
+import { cache, getCourse, startEpochOf } from "../courseCache";
 import { useApp } from "../store";
 import { compass, fmtDist, fmtDuration, fmtElev, fmtSpeed, fmtTemp } from "../units";
 
@@ -24,10 +24,7 @@ export function Briefing() {
     getCourse(courseId).then(setCourse).catch((e) => setError(String(e)));
   }, [courseId]);
 
-  const startEpoch = useMemo(() => {
-    const ev = course?.manifest.eventStart ?? course?.weatherJson.t?.[0];
-    return typeof ev === "string" ? Date.parse(ev) / 1000 : ev ?? Date.now() / 1000;
-  }, [course]);
+  const startEpoch = useMemo(() => (course ? startEpochOf(course) : Date.now() / 1000), [course]);
 
   const analyse = (optimizeFor = scenario) => {
     if (!course) return;

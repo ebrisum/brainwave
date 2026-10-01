@@ -20,6 +20,8 @@ import unreal
 MAT_ROOT = "/Game/RidePrep/Materials"
 LANDSCAPE_MATERIAL = "/Game/RidePrep/Materials/M_Landscape"
 PCG_GRAPH = "/Game/RidePrep/PCG/PCG_Vegetation"
+HEIGHTMAP_BLIT = "/Game/RidePrep/Materials/M_HeightmapBlit"
+ROAD_SPLINE_BP = "/Game/RidePrep/Blueprints/BP_RoadSpline"  # SplineComponent + construction script spawning road spline meshes
 
 
 def parse():
@@ -49,24 +51,27 @@ def import_heightmap_tile(tile, ue, pkg_dir, level_name):
     tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_GRAYSCALE)
     tex.set_editor_property("srgb", False)
     size = ls["tileSizePx"]
-    rt = unreal.RenderingLibrary.create_render_target2d(unreal.EditorLevelLibrary.get_editor_world(), size, size, unreal.TextureRenderTargetFormat.RTF_R16F)
-    unreal.RenderingLibrary.draw_material_to_render_target  # noqa: B018 (API presence check)
+    world = unreal.EditorLevelLibrary.get_editor_world()
+    rt = unreal.RenderingLibrary.create_render_target2d(world, size, size, unreal.TextureRenderTargetFormat.RTF_R16F)
+    # M_HeightmapBlit: unlit material, texture parameter "Heightmap" → emissive (linear, no sRGB)
+    blit = unreal.KismetMaterialLibrary.create_dynamic_material_instance(world, unreal.load_asset(HEIGHTMAP_BLIT))
+    blit.set_texture_parameter_value("Heightmap", tex)
+    unreal.RenderingLibrary.draw_material_to_render_target(world, rt, blit)
     loc = unreal.Vector(*tile["ueLocationCm"])
     # Landscape scale: X/Y = resolution in cm per quad, Z = zScaleCm (UE maps 16-bit ±32768 to ±256·Z/100 m)
     scale = unreal.Vector(ls["resolutionM"] * 100, ls["resolutionM"] * 100, ls["zScaleCm"])
     land = unreal.EditorLevelLibrary.spawn_actor_from_class(unreal.Landscape, loc)
     land.set_actor_scale3d(scale)
     land.set_editor_property("landscape_material", unreal.load_asset(LANDSCAPE_MATERIAL))
-    unreal.RenderingLibrary.convert_render_target_to_texture2d_editor_only  # noqa: B018
     land.landscape_import_heightmap_from_render_target(rt, import_height_from_rg_channel=False)
     return land
 
 
 def build_road(pkg_dir, ue):
     spline = load_json(os.path.join(pkg_dir, "unreal", ue["roadSpline"]))
-    actor = unreal.EditorLevelLibrary.spawn_actor_from_class(unreal.Actor, unreal.Vector(0, 0, 0))
-    comp = unreal.SplineComponent()
-    actor.add_instance_component(comp) if hasattr(actor, "add_instance_component") else None
+    bp = unreal.EditorAssetLibrary.load_blueprint_class(ROAD_SPLINE_BP)
+    actor = unreal.EditorLevelLibrary.spawn_actor_from_class(bp, unreal.Vector(0, 0, 0))
+    comp = actor.get_component_by_class(unreal.SplineComponent)
     comp.clear_spline_points(False)
     for i, p in enumerate(spline["points"]):
         comp.add_spline_point(unreal.Vector(*p["p"]), unreal.SplineCoordinateSpace.WORLD, False)

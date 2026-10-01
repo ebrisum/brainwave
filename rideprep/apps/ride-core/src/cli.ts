@@ -26,7 +26,7 @@ if (!values.package) {
 }
 
 const course = await loadPackage(values.package);
-const ev = values["event-start"] ?? course.manifest.eventStart;
+const ev = values["event-start"] ?? course.manifest.eventStart ?? (course.weatherJson as { eventStart?: string }).eventStart;
 const engine = new RideEngine(course, {
   rider: { ...DEFAULT_RIDER, ftpW: Number(values.ftp), riderMassKg: Number(values.mass), cda: Number(values.cda) },
   startEpoch: ev ? Date.parse(ev) / 1000 : Date.now() / 1000,

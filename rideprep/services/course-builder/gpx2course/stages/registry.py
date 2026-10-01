@@ -22,9 +22,9 @@ STAGES = [
           deterministic=False),
     Stage("quick", "1", ["profile", "corridor", "structure"], quick.run, params=_event_params),
     Stage("bake", "1", ["quick", "structure"], bake.run, tiers=("full",)),
-    Stage("export-web", "1", ["bake"], export_web.run, tiers=("full",), needs_target="web"),
+    Stage("export-web", "2", ["bake"], export_web.run, tiers=("full",), needs_target="web"),
     Stage("export-unreal", "1", ["quick", "corridor", "profile", "bake"], export_unreal.run, needs_target="unreal"),
-    Stage("validate", "1", ["profile", "corridor", "structure", "wind", "weather", "quick", "bake", "export-web", "export-unreal"], validate.run),
+    Stage("validate", "2", ["profile", "corridor", "structure", "wind", "weather", "quick", "bake", "export-web", "export-unreal"], validate.run),
 ]
 
 STAGE_NAMES = [s.name for s in STAGES]

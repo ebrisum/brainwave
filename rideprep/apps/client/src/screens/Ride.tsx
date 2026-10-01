@@ -3,7 +3,7 @@ import { ChunkRef, poseAt } from "@rideprep/course-format";
 import { courseFetcher } from "../api";
 import { ElevationProfile } from "../components/ElevationProfile";
 import { MiniMap } from "../components/MiniMap";
-import { cache, getCourse, getQuick } from "../courseCache";
+import { cache, getCourse, getQuick, startEpochOf } from "../courseCache";
 import { RenderState, World } from "../engine/World";
 import { solarPosition } from "../ride/solar";
 import { CameraMode, useApp } from "../store";
@@ -34,7 +34,7 @@ export function Ride() {
       if (disposed) return;
       const session = cache.session;
       const o = course.manifest.origin;
-      const ev = course.manifest.eventStart ? Date.parse(course.manifest.eventStart) / 1000 : Date.now() / 1000;
+      const ev = startEpochOf(course);
       let lastT = performance.now();
       const flySource = (): RenderState => {
         const now = performance.now();

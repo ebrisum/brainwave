@@ -48,7 +48,13 @@ export class VirtualDevice implements BleDevice {
     this.connected = true;
     this.t0 = Date.now();
     const period = 1000 / (this.opts.rateHz ?? 4);
-    this.timer = setInterval(() => this.emit((Date.now() - this.t0) / 1000, period / 1000), period);
+    let last = 0;
+    this.timer = setInterval(() => {
+      // Use the real elapsed time: timers lag under load, and crank data must follow wall time
+      const t = (Date.now() - this.t0) / 1000;
+      this.emit(t, t - last);
+      last = t;
+    }, period);
   }
 
   async disconnect() {

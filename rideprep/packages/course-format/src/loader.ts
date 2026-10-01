@@ -24,7 +24,14 @@ export async function loadCourse(f: Fetcher) {
     f(manifest.instances.file).then((b) => decodeInstances(b, manifest)),
     json<MaterialCatalogue>(f, manifest.materialCatalogue),
   ]);
-  return { manifest, route, wind, weather: new WeatherField(weather), weatherJson: weather, climatology, instances, materials };
+  // Prefer the web export's meshopt-compressed chunks when present
+  let chunks = manifest.chunks;
+  if (manifest.exports.web) {
+    try {
+      chunks = (await json<{ chunks: Manifest["chunks"] }>(f, manifest.exports.web)).chunks;
+    } catch { /* fall back to the raw chunks */ }
+  }
+  return { manifest, route, wind, weather: new WeatherField(weather), weatherJson: weather, climatology, instances, materials, chunks };
 }
 
 export async function loadQuickGeometry(f: Fetcher, m: Manifest) {

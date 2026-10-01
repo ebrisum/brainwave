@@ -15,7 +15,7 @@ from .common import load_route
 
 # Excluded from the content hash: live weather and build logs (timings)
 NON_DETERMINISTIC = {"weather.json", "climatology.json", "build_log.json", "report.html", "manifest.json", ".state.json", "chunks/status.json",
-                     "manifest.partial.json"}
+                     "manifest.partial.json", "files.json"}
 
 
 class ValidationError(RuntimeError):

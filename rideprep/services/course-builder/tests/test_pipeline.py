@@ -151,3 +151,16 @@ def test_weather_refresh(built, tmp_path):
 def test_inspect(built):
     res = run_cli("inspect", built["forest_climb_40k"][0])
     assert "Climbs" in res.stdout and "Exposure" in res.stdout
+
+
+@pytest.mark.skipif(not os.environ.get("BLENDER_BIN"), reason="set BLENDER_BIN to a Blender LTS binary to test the full-tier Blender bake")
+def test_blender_bake(tmp_path):
+    from gpx2course.gltf import read_glb_json
+
+    build(FIXTURES / "urban_cobbles_15k.gpx", tmp_path, "--targets", "web")
+    d = package_dir(tmp_path)
+    idx = json.loads((d / "chunks" / "index.json").read_text())
+    assert idx["mode"] == "blender"
+    j = read_glb_json((d / "chunks" / "c0_lod0.glb").read_bytes())
+    assert any("COLOR_0" in p["attributes"] for m in j["meshes"] for p in m["primitives"])  # baked AO
+    assert {"materialId"} <= set(j["materials"][0].get("extras", {}))

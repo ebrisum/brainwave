@@ -200,3 +200,22 @@ describe("virtual device", () => {
     expect(hub.r.cadenceRpm).toBeLessThan(91);
   });
 });
+
+import { CalibrationCheck } from "../src";
+describe("calibration check", () => {
+  it("reports the trainer offset after 2 steady minutes on flat calm road", () => {
+    const c = new CalibrationCheck();
+    let r;
+    for (let t = 0; t <= 125; t++) r = c.add({ t, trainerW: 212 + (t % 3), referenceW: 200 + (t % 5), gradePct: 0.1, wHead: 0.2 });
+    expect(r?.verdict).toBe("check");
+    expect(r?.offsetPct).toBeGreaterThan(4);
+  });
+  it("restarts when the road is not flat", () => {
+    const c = new CalibrationCheck();
+    for (let t = 0; t < 100; t++) c.add({ t, trainerW: 200, referenceW: 200, gradePct: 0, wHead: 0 });
+    expect(c.add({ t: 100, trainerW: 200, referenceW: 200, gradePct: 3, wHead: 0 })).toBeUndefined();
+    let r;
+    for (let t = 101; t < 200; t++) r = c.add({ t, trainerW: 200, referenceW: 200, gradePct: 0, wHead: 0 });
+    expect(r).toBeUndefined();
+  });
+});

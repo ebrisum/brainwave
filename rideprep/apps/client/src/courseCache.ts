@@ -23,6 +23,12 @@ export async function getCourse(courseId: string): Promise<LoadedCourse> {
   return course;
 }
 
+/** Simulated start time: event date, else the weather file's start (pipeline default: tomorrow ~10:00 solar time). */
+export function startEpochOf(c: LoadedCourse): number {
+  const ev = c.manifest.eventStart ?? (c.weatherJson as { eventStart?: string }).eventStart;
+  return ev ? Date.parse(ev) / 1000 : Date.now() / 1000;
+}
+
 export async function getQuick(courseId: string) {
   const c = await getCourse(courseId);
   if (!cache.quick) cache.quick = await loadQuickGeometry(courseFetcher(courseId), c.manifest);

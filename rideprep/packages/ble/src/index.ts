@@ -8,3 +8,4 @@ export * from "./virtual";
 export * from "./webBluetooth";
 export * from "./reconnect";
 export * from "./sensors";
+export * from "./calibration";

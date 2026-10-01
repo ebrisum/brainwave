@@ -1,10 +1,10 @@
 import {
-  BleAdapter, BleDevice, CHARS, demoRider, lookaheadGrade, ManagedConnection, SensorHub, SERVICES, TrainerController, VirtualDeviceAdapter,
+  BleAdapter, BleDevice, CalibrationCheck, CHARS, demoRider, lookaheadGrade, ManagedConnection, SensorHub, SERVICES, TrainerController, VirtualDeviceAdapter,
   WebBluetoothAdapter, windResistanceCoefficient,
 } from "@rideprep/ble";
 import { LoadedCourse, localToLatLon } from "@rideprep/course-format";
 import { normalizedPower, RideRecord, summarize } from "@rideprep/metrics";
-import { courseLength, RiderProfile, sampleCourse, WeatherJson } from "@rideprep/physics";
+import { courseLength, powerForSpeed, RiderProfile, sampleCourse, WeatherJson } from "@rideprep/physics";
 import { HudState } from "../store";
 import { feelsLike } from "../units";
 import { PhysicsState, ToWorker } from "./protocol";
@@ -47,6 +47,7 @@ export class RideSession {
   private started = false;
   paused = false;
   warnings: string[] = [];
+  calibration = new CalibrationCheck();
   readonly startedAt = Date.now();
 
   constructor(public course: LoadedCourse, public opts: SessionOptions, private onHud: (h: HudState) => void, private onFinish: (id: string) => void) {
@@ -149,6 +150,15 @@ export class RideSession {
       gradePct: st.gradePct, windSpeed10: st.wind.u10, windDirDeg: st.wind.dir10, uRider: st.wind.uRider, wHead: st.wind.wHead, wCross: st.wind.wCross,
       shelter: st.wind.shelter, tempC: st.tempC, rho: st.rho, crrEff: st.crrEff, targetPowerW: this.targetPower(st.s), braking: st.braking,
     });
+    // Calibration check: trainer power vs power meter (or physics power for the trainer's own speed)
+    const tw = this.hub.r.trainerPowerW;
+    const ref = this.hub.r.meterPowerW ?? (this.hub.r.trainerSpeedKmh !== undefined
+      ? powerForSpeed(this.opts.rider, { grade: 0, crrMultiplier: 1, wetFactor: 1, rho: st.rho, wHead: 0, wCross: 0 }, this.hub.r.trainerSpeedKmh / 3.6) : undefined);
+    const cal = this.calibration.result ? undefined : this.calibration.add({ t: sec, trainerW: tw, referenceW: ref, gradePct: st.gradePct, wHead: st.wind.wHead });
+    if (cal) {
+      console.info("[calibration]", cal);
+      if (cal.verdict === "check") this.warn(`Trainer reads ${cal.offsetPct > 0 ? "+" : ""}${cal.offsetPct.toFixed(1)} % vs reference — consider a spin-down`);
+    }
     if (st.finished) void this.finish();
   }
 
