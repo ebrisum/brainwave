@@ -52,7 +52,7 @@ export function Upload() {
 
   return (
     <main className="page narrow">
-      <header className="pagehead"><button onClick={() => go("library")}>← Library</button><h1>Upload course</h1></header>
+      <header className="pagehead"><button onClick={() => go("home")}>← Home</button><h1>Upload course</h1></header>
       <section className="card form">
         <label>Course file (.gpx, .tcx, .fit)<input type="file" accept=".gpx,.tcx,.fit" onChange={(e) => setFile(e.target.files?.[0])} /></label>
         <label>Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="From the file if empty" /></label>
@@ -84,7 +84,7 @@ export function Upload() {
           </table>
           {warnings.length > 0 && <details><summary>{warnings.length} warnings</summary><ul>{warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></details>}
           {error && <p className="warn">{error}</p>}
-          {state === "done" && courseId && <button className="primary" onClick={() => go("briefing", { courseId })}>Open course briefing</button>}
+          {state === "done" && courseId && <button className="primary" onClick={() => go("home", { courseId })}>Ride this course</button>}
           {state === "building" && courseId && rows.quick?.status === "done" && (
             <p>Quick tier ready — <button className="primary" onClick={() => go("briefing", { courseId })}>Open briefing now</button>{" "}
               <span className="muted">baked chunks stream in while you ride.</span></p>

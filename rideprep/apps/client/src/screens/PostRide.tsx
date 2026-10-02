@@ -55,7 +55,7 @@ export function PostRide() {
   return (
     <main className="page">
       <header className="pagehead">
-        <button onClick={() => go("briefing")}>← Briefing</button>
+        <button onClick={() => go("home")}>← Home</button>
         <h1>Ride analysis</h1>
         <div className="row">
           <button onClick={() => download(`${base}.fit`, toFit(ride.records, s) as BlobPart, "application/vnd.ant.fit")}>Export FIT</button>
@@ -107,7 +107,7 @@ export function PostRide() {
               })}
             </tbody>
           </table>
-          <button className="primary" onClick={() => go("pairing")}>Ride again against the ghost</button>
+          <button className="primary" onClick={() => go("home")}>Ride again</button>
         </section>
       </div>
     </main>

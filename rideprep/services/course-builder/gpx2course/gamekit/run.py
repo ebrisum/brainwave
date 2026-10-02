@@ -162,6 +162,8 @@ def build_game(pkg: Path, kit_name: str | None = None, workers: int = 4, cache_d
              "chunks": chunks, "attribution": ["© OpenStreetMap contributors, Overture Maps Foundation (ODbL)",
                                                "Copernicus DEM GLO-30 © DLR/Airbus, provided under COPERNICUS by the EU and ESA",
                                                "ESA WorldCover 2021 (CC BY 4.0)", "Procedural art kit: RidePrep (CC0)"]}
+    if shots:
+        index["shots"] = [f"game/shots/{name}.jpg" for name, *_ in shots]
     (game / "index.json").write_text(json.dumps(index, indent=1))
     man["game"] = {"index": "game/index.json", "kit": kit["name"]}
     (pkg / "manifest.json").write_text(json.dumps(man, indent=1))

@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
-    "lint": "tsc -p tsconfig.json"
+    "lint": "tsc -p tsconfig.json",
+    "e2e:ble": "node e2e/ble-ride.e2e.mjs e2e-out"
   },
   "dependencies": {
     "@msgpack/msgpack": "3.1.3",
@@ -31,6 +32,7 @@
     "@types/node": "26.6.3",
     "typescript": "7.0.2",
     "vite": "8.3.2",
-    "vitest": "5.0.3"
+    "vitest": "5.0.3",
+    "playwright-core": "1.63.0"
   }
 }

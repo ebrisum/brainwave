@@ -86,3 +86,15 @@ One line each: what was decided and why. Newest at the bottom of each section.
 - Web game mode: chunk meshes keep metre UVs (gltfpack `-kv -vtf`), kit textures bound by material name; foliage uses
   outward crown normals (kit) with Lambert shading and no back-face normal flip; calm water gets a subdued specular;
   chunks stream spatially (terrain bbox within 2.5 km, nearest first) because out-and-back legs share land.
+
+## Ride experience (start screen, devices, HUD)
+- One start screen (Home) replaces Library → Briefing → Pairing for riding: course strip with a hero render, rider
+  profile, devices with live readouts, conditions (race-day field, climatology presets, or custom wind speed/direction,
+  temperature, sky, rain, start time in course-local time), ride mode, trainer difficulty, start position (any climb).
+  Course analysis and video mode stay one click away.
+- Conditions are applied to the ride physics itself (a constant WeatherField replaces the package field), so the
+  trainer feels the chosen wind through the FTMS simulation parameters (wind, grade, Crr, Cw = ρ·CdA).
+- The Web Bluetooth path is tested end to end with a GATT-level emulator (`apps/client/e2e/webbluetooth-mock.js`):
+  FTMS trainer with control-point indications and a resistance model, HRS strap, CPS power meter with crank data.
+- Streamed game chunks are shader-compiled with `compileAsync` before they enter the scene: the main thread also feeds
+  sensor power to the physics worker, whose 3 s dropout hold must never be triggered by rendering hitches.

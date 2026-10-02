@@ -9,7 +9,7 @@ import { RenderState, World } from "../engine/World";
 import { solarPosition } from "../ride/solar";
 import { VideoSync } from "../ride/videoSync";
 import { CameraMode, useApp } from "../store";
-import { compass, fmtDist, fmtDuration, fmtElev, fmtTemp, fmtWind, speedUnit, speedValue } from "../units";
+import { compass, fmtDist, fmtDuration, fmtElev, fmtTemp, fmtWind, gradeColor, speedUnit, speedValue } from "../units";
 
 const CAMS: CameraMode[] = ["chase", "cockpit", "side", "drone", "flyover"];
 
@@ -73,7 +73,7 @@ export function Ride() {
       world = new World(ref.current!, course, courseFetcher(courseId), quick, settings.quality, settings.rider,
         useSession ? () => session!.renderState() : flySource);
       worldRef.current = world;
-      if (import.meta.env.DEV) Object.assign(window as object, { __rideprepWorld: world, __THREE: await import("three") });
+      if (import.meta.env.DEV) Object.assign(window as object, { __rideprepWorld: world, __rideprepSession: session, __THREE: await import("three") });
       world.cameraMode = camera;
       world.enableGhost(!!session?.opts.ghost);
       const pr = params.get("photoreal") ?? settings.photoreal;
@@ -88,7 +88,8 @@ export function Ride() {
       }
       if (course.manifest.game && settings.gameArt && params.get("game") !== "0") {
         try {
-          world.setGame(await GameWorld.create(course.manifest, courseFetcher(courseId), world.renderer.capabilities.getMaxAnisotropy()));
+          world.setGame(await GameWorld.create(course.manifest, courseFetcher(courseId), world.renderer.capabilities.getMaxAnisotropy(),
+            world.renderer, world.camera));
         } catch (e) {
           console.warn("game art unavailable", e);
         }
@@ -96,7 +97,7 @@ export function Ride() {
       await world.init();
       if (disposed) { world.dispose(); return; }
       world.start();
-      if (useSession && !session!.isStarted) session!.start();
+      if (useSession && !session!.isStarted) session!.start(cache.rideWeather);
       setReady(true);
       if (course.manifest.partial) {
         // Progressive streaming: pick up chunks as the server bakes them
@@ -147,7 +148,7 @@ export function Ride() {
   const end = async () => {
     const s = cache.session;
     if (s?.isStarted) await s.finish();
-    else go("briefing");
+    else go("home");
   };
 
   return (
@@ -159,7 +160,7 @@ export function Ride() {
         <div className="flybar panel">
           <b>Flyover</b> {fmtDist(flyRef.current.s, u)} · speed ×{flySpeed * 10}
           <input type="range" min="0" max="20" value={flySpeed} onChange={(e) => setFlySpeed(Number(e.target.value))} aria-label="Flyover speed" />
-          <button onClick={() => go("briefing", { camera: "chase" })}>Close</button>
+          <button onClick={() => go("home", { camera: "chase" })}>Close</button>
         </div>
       )}
       {!flyover && hud && course && <Hud />}
@@ -191,6 +192,12 @@ export function Ride() {
   );
 }
 
+const POWER_ZONES: [number, string, string][] = [
+  [0.55, "Z1 Recovery", "#7f8c8d"], [0.75, "Z2 Endurance", "#3b9bd8"], [0.9, "Z3 Tempo", "#2ecc71"], [1.05, "Z4 Threshold", "#f1c40f"],
+  [1.2, "Z5 VO₂max", "#e67e22"], [1.5, "Z6 Anaerobic", "#e74c3c"], [99, "Z7 Neuromuscular", "#9b59b6"],
+];
+const HR_ZONES: [number, string][] = [[0.6, "#7f8c8d"], [0.7, "#3b9bd8"], [0.8, "#2ecc71"], [0.9, "#f39c12"], [99, "#e74c3c"]];
+
 function Hud() {
   const hud = useApp((s) => s.hud)!;
   const { settings } = useApp();
@@ -199,43 +206,89 @@ function Hud() {
   const seg = course.manifest.segments;
   const L = course.manifest.stats.distanceM;
   const nextClimb = seg.climbs.find((c) => c.sStart > hud.s && c.sStart - hud.s < 5000);
+  const onClimb = seg.climbs.find((c) => c.sStart <= hud.s && hud.s < c.sEnd);
   const exposed = upcomingExposure(hud.s, hud.wind.u10, hud.wind.dir10);
-  const inBand = hud.targetLow !== undefined ? hud.powerW >= hud.targetLow && hud.powerW <= hud.targetHigh! : undefined;
+  const inBand = hud.targetLow !== undefined ? hud.power3sW >= hud.targetLow && hud.power3sW <= hud.targetHigh! : undefined;
+  const rel = hud.power3sW / Math.max(hud.ftpW, 1);
+  const zi = POWER_ZONES.findIndex(([hi]) => rel < hi);
+  const [, zoneName, zoneColor] = POWER_ZONES[zi];
+  const hrRel = hud.hr ? hud.hr / hud.maxHr : 0;
+  const hrColor = HR_ZONES.find(([hi]) => hrRel < hi)?.[1] ?? "#e74c3c";
+  // Wind relative to the rider: wHead > 0 from ahead, wCross > 0 from the right
+  const windAng = (Math.atan2(hud.wind.wCross, hud.wind.wHead) * 180) / Math.PI;
+  const windKind = Math.abs(windAng) < 45 ? "headwind" : Math.abs(windAng) > 135 ? "tailwind" : "crosswind";
+  const tr = hud.trainer;
   return (
     <div className="hud">
       <div className="panel tl">
-        <div className="big num">{hud.wkg.toFixed(1)}<small> W/kg</small></div>
-        <div>NP <b className="num">{Math.round(hud.npW)}</b> · IF <b className="num">{hud.ifactor.toFixed(2)}</b></div>
-        <div>Lap {hud.lap}/{hud.laps} · <span className="num">{fmtDuration(hud.t)}</span> · +{fmtElev(hud.ascentM, u)}</div>
+        <div className="big num">{fmtDuration(hud.t)}</div>
+        <div className="num">{fmtDist(hud.s, u)} · <span className="muted">{fmtDist(Math.max(0, L - hud.s), u)} to go</span></div>
+        <div className="num">+{fmtElev(hud.ascentM, u)} · NP {Math.round(hud.npW)} · IF {hud.ifactor.toFixed(2)}</div>
+        {hud.laps > 1 && <div>Lap {hud.lap}/{hud.laps}</div>}
       </div>
-      <div className={`panel power ${inBand === undefined ? "" : inBand ? "ok" : hud.powerW < hud.targetLow! ? "low" : "high"}`}>
-        <div className="huge num">{Math.round(hud.powerW)}<small> W</small></div>
-        {hud.targetLow !== undefined && <div className="num">target {Math.round(hud.targetLow)}–{Math.round(hud.targetHigh!)} W</div>}
-        {hud.braking && <div className="braking">BRAKING</div>}
+      <div className="cluster">
+        <div className="panel tile">
+          <div className="big num">{speedValue(hud.speedMs, u).toFixed(1)}</div><div className="unitlabel">{speedUnit(u)}</div>
+        </div>
+        <div className={`panel tile power ${inBand === undefined ? "" : inBand ? "ok" : hud.power3sW < hud.targetLow! ? "low" : "high"}`}>
+          <div className="huge num">{Math.round(hud.power3sW)}<small> W</small></div>
+          <div className="zonebar" aria-label={zoneName}>
+            {POWER_ZONES.map(([hi, n, c], i) => <i key={n} style={{ background: c, opacity: i === zi ? 1 : 0.28 }} title={`${n} < ${Math.round(hi * 100)} % FTP`} />)}
+          </div>
+          <div className="zonelabel" style={{ color: zoneColor }}>{zoneName} · {hud.wkg.toFixed(1)} W/kg</div>
+          {hud.targetLow !== undefined && <div className="num small">target {Math.round(hud.targetLow)}–{Math.round(hud.targetHigh!)} W</div>}
+          {hud.braking && <div className="braking">BRAKING</div>}
+        </div>
+        <div className="panel tile">
+          <div className="big num" style={{ color: hud.hr ? hrColor : undefined }}>♥ {hud.hr ?? "–"}</div>
+          <div className="unitlabel">bpm · <b className="num">{hud.cadence !== undefined ? Math.round(hud.cadence) : "–"}</b> rpm</div>
+        </div>
       </div>
-      <div className="panel tr">
-        <div>HR <b className="num">{hud.hr ?? "–"}</b> · CAD <b className="num">{hud.cadence !== undefined ? Math.round(hud.cadence) : "–"}</b></div>
-        <div className="big num">{speedValue(hud.speedMs, u).toFixed(1)}<small> {speedUnit(u)}</small></div>
-        <div className="num">{fmtDist(hud.s, u)} / {fmtDist(L, u)} · {hud.gradePct.toFixed(1)} %</div>
-      </div>
-      <div className="mapbox"><MiniMap route={course.route} s={hud.s} windFromDeg={hud.wind.dir10} /></div>
-      <div className="panel wind">
-        <div className="label">WIND &amp; WEATHER</div>
-        <div>true {fmtWind(hud.wind.u10, u)} {compass(hud.wind.dir10)}</div>
-        <div>at rider {fmtWind(hud.wind.uRider, u)}</div>
-        <div>{hud.wind.wHead >= 0 ? "headwind" : "tailwind"} {fmtWind(Math.abs(hud.wind.wHead), u)} · cross {fmtWind(Math.abs(hud.wind.wCross), u)}</div>
-        <div>shelter {Math.round((1 - hud.wind.shelter) * 100)} %</div>
-        <div>{fmtTemp(hud.tempC, u)} (feels {fmtTemp(hud.feelsC, u)}) · ρ {hud.rho.toFixed(3)}</div>
+      <div className="rightcol">
+        <div className="mapbox"><MiniMap route={course.route} s={hud.s} windFromDeg={hud.wind.dir10} /></div>
+        <div className="panel windw">
+          <svg viewBox="-30 -30 60 60" className="windarrow" aria-label={windKind}>
+            <circle r="27" className="ring" />
+            <path d="M0,-18 L5,-8 L-5,-8 Z" className="me" />
+            <g transform={`rotate(${windAng})`}><line x1="0" y1="-26" x2="0" y2="-2" className="w" /><path d="M0,0 L5,-9 L-5,-9 Z" className="wt" /></g>
+          </svg>
+          <div>
+            <b>{windKind}</b> {fmtWind(hud.wind.uRider, u)}
+            <div className="muted small">{fmtWind(hud.wind.u10, u)} {compass(hud.wind.dir10)} · shelter {Math.round((1 - hud.wind.shelter) * 100)} %</div>
+            <div className="muted small">{fmtTemp(hud.tempC, u)} (feels {fmtTemp(hud.feelsC, u)})</div>
+          </div>
+        </div>
+        {tr && (
+          <div className="panel trainer">
+            <div className="label">TRAINER · {tr.mode === "erg" ? "ERG" : tr.mode === "simulation" ? "SIMULATION" : "RESISTANCE"}</div>
+            {tr.mode === "erg" ? <div>holding <b className="num">{tr.ergW ?? "–"} W</b></div> : (
+              <div className="num">
+                <b>{tr.gradePct !== undefined ? `${tr.gradePct.toFixed(1)} %` : "–"}</b> grade
+                {tr.windMs !== undefined && <> · {tr.windMs >= 0 ? "head" : "tail"} {Math.abs(tr.windMs).toFixed(1)} m/s</>}
+                <div className="muted small">Crr {tr.crr?.toFixed(4) ?? "–"} · Cw {tr.cwKgM?.toFixed(2) ?? "–"} kg/m · difficulty {Math.round(tr.difficulty * 100)} %</div>
+              </div>
+            )}
+            <div className="muted small">power: {hud.powerSource === "powerMeter" ? "power meter" : hud.powerSource ?? "–"} · cadence: {hud.cadenceSource ?? "–"}</div>
+          </div>
+        )}
       </div>
       <div className="bottom">
         <div className="ticker">
-          {nextClimb && <span>▸ In {fmtDist(nextClimb.sStart - hud.s, u)}: climb {fmtDist(nextClimb.lengthM, u)} @ {nextClimb.avgGradePct.toFixed(1)} %</span>}
+          {onClimb && <span>▲ Climbing: {fmtDist(onClimb.sEnd - hud.s, u)} to the top @ {onClimb.avgGradePct.toFixed(1)} % avg</span>}
+          {!onClimb && nextClimb && <span>▸ In {fmtDist(nextClimb.sStart - hud.s, u)}: climb {fmtDist(nextClimb.lengthM, u)} @ {nextClimb.avgGradePct.toFixed(1)} %</span>}
           {exposed && <span>▸ Exposed in {fmtDist(exposed.inM, u)}: {fmtWind(exposed.u, u)} {exposed.kind}</span>}
           {Object.entries(hud.devices).filter(([, v]) => v !== "connected").map(([k, v]) => <span key={k} className="warn">▸ {k} {v}</span>)}
           {hud.warnings.map((w) => <span key={w} className="warn">▸ {w}</span>)}
         </div>
-        <ElevationProfile route={course.route} climbs={seg.climbs} riderS={hud.s} from={Math.max(0, hud.s - 300)} to={Math.min(L, hud.s + 2000)} height={70} />
-        <ElevationProfile route={course.route} riderS={hud.s} height={36} />
+        <div className="profilerow">
+          <div className="gradebadge" style={{ background: gradeColor(hud.gradePct), color: Math.abs(hud.gradePct) < 4 ? "#111" : "#fff" }}>
+            <span className="num">{hud.gradePct >= 0 ? "" : "−"}{Math.abs(hud.gradePct).toFixed(1)}</span><small>%</small>
+          </div>
+          <div className="profiles">
+            <ElevationProfile route={course.route} climbs={seg.climbs} riderS={hud.s} from={Math.max(0, hud.s - 300)} to={Math.min(L, hud.s + 2000)} height={70} />
+            <ElevationProfile route={course.route} riderS={hud.s} height={36} />
+          </div>
+        </div>
       </div>
     </div>
   );

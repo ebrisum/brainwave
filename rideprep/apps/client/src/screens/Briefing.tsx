@@ -37,7 +37,7 @@ export function Briefing() {
   };
   useEffect(() => { if (course && !analysis) analyse(); }, [course]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (error) return <main className="page"><p className="warn">{error}</p><button onClick={() => go("library")}>Back</button></main>;
+  if (error) return <main className="page"><p className="warn">{error}</p><button onClick={() => go("home")}>Back</button></main>;
   if (!course) return <main className="page"><p>Loading course…</p></main>;
   const m = course.manifest;
   const seg = m.segments;
@@ -64,11 +64,11 @@ export function Briefing() {
   return (
     <main className="page">
       <header className="pagehead">
-        <button onClick={() => go("library")}>← Library</button>
+        <button onClick={() => go("home")}>← Home</button>
         <h1>{m.name}</h1>
         <div className="row">
           <button onClick={() => go("ride", { camera: "flyover" })}>Fly over</button>
-          <button className="primary" onClick={() => go("pairing", { plan: plan ? { segmentM: plan.segmentM, watts: plan.watts } : undefined })}>Ride this course</button>
+          <button className="primary" onClick={() => go("home", { plan: plan ? { segmentM: plan.segmentM, watts: plan.watts } : undefined })}>Ride this course</button>
         </div>
       </header>
       <div className="kpis big">

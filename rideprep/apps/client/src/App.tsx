@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { detectQuality } from "./engine/quality";
 import { Briefing } from "./screens/Briefing";
+import { Home } from "./screens/Home";
 import { Library } from "./screens/Library";
 import { Pairing } from "./screens/Pairing";
 import { PostRide } from "./screens/PostRide";
@@ -30,6 +31,7 @@ export function App() {
     case "ride": return <Ride />;
     case "postride": return <PostRide />;
     case "settings": return <Settings />;
-    default: return <Library />;
+    case "library": return <Library />;
+    default: return <Home />;
   }
 }

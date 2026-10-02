@@ -126,7 +126,15 @@ export class TrainerController {
   /** ERG mode: the trainer holds a target power; virtual speed still comes from the physics. */
   async setErg(watts: number): Promise<void> {
     this.mode = "erg";
+    this.ergTargetW = watts;
     await this.send(encodeSetTargetPower(watts));
+  }
+
+  private ergTargetW?: number;
+
+  /** What the trainer was last told (for the HUD): simulation parameters, or the ERG target. */
+  get status(): { mode: TrainerMode; sim?: SimulationParams; ergW?: number; difficulty: number } {
+    return { mode: this.mode, sim: this.lastSent, ergW: this.mode === "erg" ? this.ergTargetW : undefined, difficulty: this.opts.difficulty };
   }
 
   leaveErg(): void {

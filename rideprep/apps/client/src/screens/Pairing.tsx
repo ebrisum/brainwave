@@ -80,7 +80,7 @@ export function Pairing() {
 
   return (
     <main className="page narrow">
-      <header className="pagehead"><button onClick={() => go("briefing")}>← Briefing</button><h1>Pair devices</h1></header>
+      <header className="pagehead"><button onClick={() => go("home")}>← Home</button><h1>Video mode &amp; devices</h1></header>
       {bt === false && (
         <p className="warn">Web Bluetooth is not available in this browser. Use Chrome or Edge on Windows, macOS, Linux or Android
           (Safari and iOS do not support it). You can still ride with the demo rider.</p>

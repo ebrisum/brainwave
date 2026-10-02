@@ -11,6 +11,8 @@ export const cache: {
   quick?: { buildings: QuickBuilding[]; roads: QuickRoad[]; water: QuickWater[] };
   session?: RideSession;
   analysis?: AnalysisResult;
+  /** Conditions chosen on the start screen (undefined = the package's race-day weather field). */
+  rideWeather?: import("@rideprep/physics").WeatherJson;
   /** Video mode: synced footage chosen on the pairing screen (object URL of a local file). */
   video?: { sync: VideoSyncJson; url: string };
 } = {};

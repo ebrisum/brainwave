@@ -7,7 +7,7 @@ export function Settings() {
   const num = (v: string) => (v === "" ? 0 : Number(v));
   return (
     <main className="page narrow">
-      <header className="pagehead"><button onClick={() => go("library")}>← Library</button><h1>Rider profile &amp; settings</h1></header>
+      <header className="pagehead"><button onClick={() => go("home")}>← Home</button><h1>Rider profile &amp; settings</h1></header>
       <section className="card form grid2">
         <h2>Rider</h2>
         <label>Rider mass (kg)<input type="number" value={r.riderMassKg} onChange={(e) => updateRider({ riderMassKg: num(e.target.value) })} /></label>

@@ -23,12 +23,15 @@ export class GameWorld {
   private farFill = new Map<number, THREE.Object3D>();
   private textures: THREE.Texture[] = [];
 
-  private constructor(private index: GameIndex, private fetch: Fetcher) {}
+  private constructor(private index: GameIndex, private fetch: Fetcher, private renderer?: THREE.WebGLRenderer, private camera?: THREE.Camera) {}
 
-  static async create(manifest: Manifest, fetch: Fetcher, anisotropy = 8): Promise<GameWorld | undefined> {
+  /** `renderer`/`camera`: streamed chunks are shader-compiled asynchronously before they enter the scene, so loading
+   * never stalls the main thread (which also feeds sensor power to the physics). */
+  static async create(manifest: Manifest, fetch: Fetcher, anisotropy = 8, renderer?: THREE.WebGLRenderer,
+                      camera?: THREE.Camera): Promise<GameWorld | undefined> {
     if (!manifest.game) return undefined;
     const index = JSON.parse(new TextDecoder().decode(await fetch(manifest.game.index))) as GameIndex;
-    const gw = new GameWorld(index, fetch);
+    const gw = new GameWorld(index, fetch, renderer, camera);
     await gw.loadKit(anisotropy);
     await gw.loadFar();
     return gw;
@@ -225,6 +228,10 @@ export class GameWorld {
       }
     }
     root.add(lod0, lod1);
+    if (this.renderer && this.camera) {
+      // Compile both LOD variants off the critical path (KHR_parallel_shader_compile where available)
+      try { await this.renderer.compileAsync(root, this.camera, (this.group.parent as THREE.Scene | null) ?? undefined); } catch { /* compile on first draw */ }
+    }
     lod1.visible = false;
     const centre = root.position.clone();
     this.group.add(root);

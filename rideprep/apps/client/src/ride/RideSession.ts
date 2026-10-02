@@ -23,6 +23,8 @@ export interface SessionOptions {
   plan?: { segmentM: number; watts: number[] };
   erg?: boolean;
   ghost?: RideRecord[];
+  /** Start position along the course (m) — practise a section such as a climb. */
+  startS?: number;
 }
 
 /**
@@ -40,6 +42,7 @@ export class RideSession {
   private curr?: PhysicsState;
   private timers: ReturnType<typeof setInterval>[] = [];
   private lastRecordT = -1;
+  private p3: number[] = [];
   private ascent = 0;
   private refZ?: number;
   private crank = 0;
@@ -91,7 +94,7 @@ export class RideSession {
       route: { spacingM: r.spacingM, count: r.count, s: r.s, x: r.x, y: r.y, z: r.z, gradePct: r.gradePct, headingRad: r.headingRad, radiusM: r.radiusM, crrMultiplier: r.crrMultiplier },
       wind: { data: this.course.wind.data, count: this.course.wind.count, spacingM: this.course.wind.spacingM, bins: this.course.wind.bins, layers: [...this.course.wind.layers] },
       weather: weather ?? this.course.weatherJson, rider: this.opts.rider, startEpoch: this.opts.startEpoch, cornering: this.opts.cornering,
-      gusts: this.opts.gusts, seed: (this.startedAt % 100000) | 0,
+      gusts: this.opts.gusts, seed: (this.startedAt % 100000) | 0, startS: this.opts.startS,
     };
     this.worker.postMessage(msg);
     this.started = true;
@@ -178,6 +181,9 @@ export class RideSession {
     const np = normalizedPower(this.records.map((r) => r.powerW));
     const ftp = this.opts.rider.ftpW;
     const target = this.targetPower(st.s);
+    this.p3.push(st.powerW);
+    if (this.p3.length > 30) this.p3.shift();
+    const ts = this.trainer?.status;
     this.onHud({
       t: st.t, s: st.s, speedMs: st.v, powerW: st.powerW, npW: np, ifactor: ftp ? np / ftp : 0, hr: this.hub.r.heartRateBpm, cadence: this.hub.r.cadenceRpm,
       ascentM: this.ascent, lap, laps: laps.length, wkg: st.powerW / this.opts.rider.riderMassKg,
@@ -185,6 +191,10 @@ export class RideSession {
       wind: { u10: st.wind.u10, dir10: st.wind.dir10, uRider: st.wind.uRider, wHead: st.wind.wHead, wCross: st.wind.wCross, shelter: st.wind.shelter, gust: st.wind.gust },
       tempC: st.tempC, feelsC: feelsLike(st.tempC, st.weather.rh, st.wind.uRider + st.v), rho: st.rho, gradePct: st.gradePct,
       devices: { ...this.deviceStates }, paused: this.paused, finished: st.finished, warnings: this.warnings, trainerMode: this.trainer?.mode,
+      power3sW: this.p3.reduce((a, b) => a + b, 0) / this.p3.length, ftpW: ftp, maxHr: this.opts.rider.maxHr,
+      trainer: ts && { mode: ts.mode, gradePct: ts.sim?.gradePct, windMs: ts.sim?.windSpeedMs, crr: ts.sim?.crr, cwKgM: ts.sim?.cwKgM, ergW: ts.ergW,
+        difficulty: ts.difficulty },
+      powerSource: this.hub.r.powerSource, cadenceSource: this.hub.r.cadenceSource,
     });
   }
 

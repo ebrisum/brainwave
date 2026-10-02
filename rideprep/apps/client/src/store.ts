@@ -2,7 +2,7 @@ import { CDA_PRESETS, DEFAULT_RIDER, Position, RiderProfile } from "@rideprep/ph
 import { create } from "zustand";
 import { Units } from "./units";
 
-export type Screen = "library" | "upload" | "briefing" | "pairing" | "ride" | "postride" | "settings";
+export type Screen = "home" | "library" | "upload" | "briefing" | "pairing" | "ride" | "postride" | "settings";
 export type Quality = "low" | "medium" | "high" | "ultra";
 export type CameraMode = "chase" | "cockpit" | "side" | "drone" | "flyover";
 export type PhotorealSource = "off" | "google" | "dev" | "url";
@@ -30,6 +30,13 @@ export interface HudState {
   wind: { u10: number; dir10: number; uRider: number; wHead: number; wCross: number; shelter: number; gust: number };
   tempC: number; feelsC: number; rho: number; gradePct: number; devices: Record<string, string>; paused: boolean; finished: boolean;
   warnings: string[]; trainerMode?: string;
+  /** 3 s average power (what the big number shows). */
+  power3sW: number;
+  ftpW: number; maxHr: number;
+  /** Last command sent to the smart trainer. */
+  trainer?: { mode: string; gradePct?: number; windMs?: number; crr?: number; cwKgM?: number; ergW?: number; difficulty: number };
+  /** Which sources feed power and cadence. */
+  powerSource?: string; cadenceSource?: string;
 }
 
 const STORAGE_KEY = "rideprep.settings.v1";
@@ -78,7 +85,7 @@ export interface AppState {
 }
 
 export const useApp = create<AppState>((set, get) => ({
-  screen: "library",
+  screen: "home",
   settings: loadSettings(),
   camera: "chase",
   scenario: "weather",
