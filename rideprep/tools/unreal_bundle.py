@@ -15,7 +15,8 @@ The package must have been built with `gpx2course game` (Unreal copies in game/u
   <name>/README.md                    the step-by-step guide (docs/UNREAL_GUIDE.md)
   <name>/ATTRIBUTION.txt              data credits
 
---zip writes <name>.zip and, when the course has hero road chunks, <name>_hero.zip (unzip both into one folder).
+--zip writes <name>.zip and, when the course has hero road chunks, <name>_hero.zip (unzip both into one folder);
+--part-mb 22 splits the main zip into <name>_partKofN.zip parts for size-limited transfers.
 """
 from __future__ import annotations
 
@@ -83,21 +84,40 @@ def bundle(pkg: Path, out: Path, name: str, rider_blend: Path | None = None) -> 
     return root
 
 
-def zip_bundle(root: Path) -> list[Path]:
-    """<name>.zip (everything but the hero road) and <name>_hero.zip (Course/game/unreal/hero), same relative paths."""
+def zip_bundle(root: Path, part_mb: float = 0.0) -> list[Path]:
+    """<name>.zip (everything but the hero road) and <name>_hero.zip (Course/game/unreal/hero), same relative paths.
+    part_mb > 0: split the main zip into self-contained parts of at most that size (compressed), <name>_partKofN.zip —
+    the project, guide and course metadata go in part 1; every part unzips into the same folder."""
+    import zlib
+
     outs = []
     hero = root / "Course" / "game" / "unreal" / "hero"
-    files = [f for f in root.rglob("*") if f.is_file()]
-    main = [f for f in files if hero not in f.parents]
+    files = sorted(f for f in root.rglob("*") if f.is_file())
+    first = lambda f: 0 if ("unreal" not in f.relative_to(root).parts) else 1  # noqa: E731  project/meta before meshes
+    main = sorted((f for f in files if hero not in f.parents), key=lambda f: (first(f), str(f)))
     rest = [f for f in files if hero in f.parents]
-    for suffix, part in (("", main), ("_hero", rest)):
+    groups = [("", main)]
+    if part_mb > 0:
+        budget = part_mb * 2**20
+        parts, cur, size = [], [], 0
+        for f in main:
+            est = len(zlib.compress(f.read_bytes(), 6)) + 200
+            if cur and size + est > budget:
+                parts.append(cur)
+                cur, size = [], 0
+            cur.append(f)
+            size += est
+        if cur:
+            parts.append(cur)
+        groups = [(f"_part{k + 1}of{len(parts)}" if len(parts) > 1 else "", p) for k, p in enumerate(parts)]
+    for suffix, part in groups + [("_hero", rest)]:
         if not part:
             continue
         z = root.parent / f"{root.name}{suffix}.zip"
         with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
-            for f in sorted(part):
+            for f in part:
                 zf.write(f, Path(root.name) / f.relative_to(root))
-        print(f"  {z.name}: {z.stat().st_size / 1e6:.0f} MB")
+        print(f"  {z.name}: {z.stat().st_size / 2**20:.1f} MiB, {len(part)} files")
         outs.append(z)
     return outs
 
@@ -109,12 +129,13 @@ def main():
     p.add_argument("--name", default=None)
     p.add_argument("--rider-blend", default=None, help="folder with rider_road.blend / rider_tt.blend (tools/rider output)")
     p.add_argument("--zip", action="store_true")
+    p.add_argument("--part-mb", type=float, default=0.0, help="split the main zip into parts of at most this many MiB")
     a = p.parse_args()
     man = json.loads((Path(a.package) / "manifest.json").read_text())
     name = a.name or "RidePrep_" + "".join(ch for ch in man["name"].title() if ch.isalnum())
     root = bundle(Path(a.package), Path(a.out), name, Path(a.rider_blend) if a.rider_blend else None)
     if a.zip:
-        zip_bundle(root)
+        zip_bundle(root, a.part_mb)
 
 
 if __name__ == "__main__":

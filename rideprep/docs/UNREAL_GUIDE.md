@@ -19,7 +19,7 @@ can't do from a GPX: real terrain and roads, buildings, land use, trees, guardra
 | `Config/` | renderer settings (Lumen, Nanite, Virtual Shadow Maps, virtual textures for RVT), surface types, `RidePrepAssetOverrides.example.json` |
 | `Scripts/build_level.py` | **the one-click import** (calls `import_game_level.py`) |
 | `Course/` | the course: 182 chunks of 500 m (terrain, road, shoulders, verges, buildings, side roads, road defects), far terrain, ~62 000 trees and props, 3.7 km of guardrail, land-use masks, art-kit textures and meshes |
-| `Course/game/unreal/hero/` | the **high-detail road** for km 43–44 (Nanite: real potholes, cracks, patches, gravel stones — ~1 M triangles per 500 m) — from the second zip |
+| `Course/game/unreal/hero/` | the **high-detail road** for km 43–44 (Nanite: real potholes, cracks, patches, gravel stones — ~1 M triangles per 500 m) — from the `_hero` zip |
 | `Rider/` | `rider_road.glb`, `rider_tt.glb`: rider + bike, one skeleton, with pedalling clips |
 | `ATTRIBUTION.txt` | data credits (keep the OpenStreetMap/Overture credit with published renders) |
 
@@ -30,8 +30,10 @@ can't do from a GPX: real terrain and roads, buildings, land use, trees, guardra
 
 ## Step 1 — Unzip
 
-1. Unzip the main zip to a **short path**, e.g. `D:\RidePrep_EmiliaRomagna` (Windows dislikes long paths).
-2. Unzip the `_hero` zip **into the same folder**; it fills `Course/game/unreal/hero/`.
+1. Put all zips in one place, e.g. `D:\RidePrep` (a **short path** — Windows dislikes long ones).
+2. Unzip **every** zip there — `…_part1of3`, `…_part2of3`, `…_part3of3` and `…_hero` — choosing "extract here" so they
+   all fill the same `RidePrep_EmiliaRomagna703` folder (the parts only split the files for transfer; the `_hero` zip
+   fills `Course/game/unreal/hero/`). Overwrite if asked.
 
 ## Step 2 — Open the project
 
@@ -51,7 +53,7 @@ Setts, Gravel, Grass, Soil, Water, Metal.
 2. Wait. The whole course takes roughly 20–60 minutes; a progress dialog stays up meanwhile.
    **Try a few chunks first** (2–3 minutes): *Window → Output Log*, and in the command box (`Cmd`) type the full path
    with the chunks you want, e.g.
-   `py "D:/RidePrep_EmiliaRomagna/Scripts/build_level.py" --chunks 84,85,86,87,88`
+   `py "D:/RidePrep/RidePrep_EmiliaRomagna703/Scripts/build_level.py" --chunks 84,85,86,87,88`
    (a chunk is 500 m: chunk 86 = km 43.0–43.5; 88–92 = the Bertinoro climb). Running it again without `--chunks`
    builds everything; delete the test level first (or pass `--level MyTest` for the test).
 3. When it is done, open the level in the Content Browser: `Content/RidePrep/Courses/c_28f22c31632ed08b1ba7_game/`.
