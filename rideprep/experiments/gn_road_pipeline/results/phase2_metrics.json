@@ -1,0 +1,25 @@
+{
+ "profilePlusXIsInnerOnLeftTurn": false,
+ "tiltSign": -1.0,
+ "visualEvalS": 0.09,
+ "visualTriangles": 892620,
+ "bank": {
+  "maxPct": 7.0,
+  "shareOver2Pct": 0.232,
+  "shareAtMax": 0.086
+ },
+ "collisionEvalS": 0.04,
+ "ucxIslands": 8927,
+ "ucxTriangles": 107124,
+ "singleHull": {
+  "vertices": 211,
+  "rayHitAboveRoadM": {
+   "median": 24.8,
+   "p90": 96.7,
+   "max": 111.0
+  },
+  "volumeKm3": 7.028
+ },
+ "fbxExportS": 0.96,
+ "fbxMB": 21.3
+}

@@ -1,0 +1,35 @@
+{
+ "proposedPhase1": {
+  "lengthKm": 89.29,
+  "offRoad": {
+   "medianM": 2.0,
+   "p95M": 6.3,
+   "maxM": 103.4,
+   "shareOver3m": 0.298,
+   "shareOver10m": 0.017,
+   "kmOver10m": 1.54,
+   "kmOver25m": 0.31,
+   "samplesInsideBuildings": 67
+  },
+  "ascentM": 342.4,
+  "maxGradePct50m": 17.8,
+  "kmOver12Pct": 0.26
+ },
+ "gpx2course": {
+  "lengthKm": 90.47,
+  "offRoad": {
+   "medianM": 0.0,
+   "p95M": 0.1,
+   "maxM": 103.9,
+   "shareOver3m": 0.007,
+   "shareOver10m": 0.004,
+   "kmOver10m": 0.38,
+   "kmOver25m": 0.32,
+   "samplesInsideBuildings": 8
+  },
+  "ascentM": 276.5,
+  "maxGradePct50m": 13.9,
+  "kmOver12Pct": 0.2
+ },
+ "officialKm": 90.0
+}
