@@ -105,6 +105,7 @@ bool ARidePrepWorld::LoadCourse(const FString& Dir)
         Rider = GetWorld()->SpawnActor<ARidePrepRider>(RiderClass, Course->PositionAtS(0), FRotator(0, Course->YawAtS(0), 0));
         if (APlayerController* PC = GetWorld()->GetFirstPlayerController()) PC->Possess(Rider);
     }
+    Lane = MakeUnique<RidePrep::LaneKeeper>(Course->Route, bRacingLine ? RidePrep::LaneKeeper::ELine::Racing : RidePrep::LaneKeeper::ELine::KeepRight);
     ApplyStyle();
     BuildRoad();
     if (bPhotoreal) SetupPhotoreal();
@@ -330,7 +331,15 @@ void ARidePrepWorld::Tick(float Dt)
     if (!Course) return;
     const FRidePrepStreamState& St = Stream->Latest;
     const double S = Stream->IsConnected() ? Stream->InterpolatedS(FPlatformTime::Seconds()) : 0.0;
-    if (Rider) Rider->ApplyState(St, Course->PositionAtS(S), Course->YawAtS(S), Dt);
+    if (Rider && Lane)
+    {
+        // The trainer gives speed, not steering: hold a realistic line inside the road and move across it smoothly
+        if (FMath::Abs(S - LastLaneS) > 50.0) Lane->Reset();
+        LastLaneS = S;
+        Lane->Update(Dt, S, St.Speed, St.CrankAngle);
+        Rider->ApplyState(St, RiderOnRoad(S, Lane->Offset), Course->YawAtS(S) + FMath::RadiansToDegrees((float)Lane->Yaw), Dt, (float)Lane->Lean);
+    }
+    else if (Rider) Rider->ApplyState(St, Course->PositionAtS(S), Course->YawAtS(S), Dt);
     if (bPhotoreal) UpdatePhotoreal(S);
     if (!bPhotoreal && FMath::Abs(S - LastStreamS) > 50.0)
     {
@@ -343,6 +352,18 @@ void ARidePrepWorld::Tick(float Dt)
     UpdateEnvironment(St);
 }
 
+
+FVector ARidePrepWorld::RiderOnRoad(double S, double OffsetM) const
+{
+    const RidePrep::RouteArrays& R = Course->Route;
+    const RidePrep::RoutePose P = RidePrep::PoseAt(R, S);
+    const int32 I = FMath::Clamp(FMath::RoundToInt(S / R.SpacingM), 0, (int32)R.Count() - 1);
+    const double Bank = R.BankDeg.empty() ? 0.0 : R.BankDeg[I];
+    const double Nx = FMath::Cos(P.HeadingRad), Ny = -FMath::Sin(P.HeadingRad);  // right of travel (ENU)
+    // On the road surface: 4 cm above the centreline like the road ribbon, plus the crown/superelevation at the offset
+    const RidePrep::Vec3d U = RidePrep::EnuToUe(P.X + Nx * OffsetM, P.Y + Ny * OffsetM, P.Z + 0.04 + RidePrep::CrossSlopeDz(OffsetM, Bank));
+    return FVector(U.X, U.Y, U.Z);
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Regional style (materials.json from the package: colours chosen for the country/terrain by gpx2course)

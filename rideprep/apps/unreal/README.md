@@ -75,18 +75,39 @@ UnrealEditor-Cmd RidePrep.uproject -run=pythonscript \
 | Kit | `M_RidePrepKit` / `M_RidePrepKit_Masked` (created once), textures, `MI_<material id>` (UVScale = 1/tileM, Tint, Roughness, Metallic) with PhysMats `PM_Asphalt/Setts/Gravel/Grass/Soil/Water/Metal` (surface types in `Config/DefaultEngine.ini`), kit meshes with `<asset>__lod1` as LOD1 |
 | Chunks | static mesh actors per chunk mesh at `EnuToUe(origin)`; complex-as-simple collision on terrain, roads and buildings; Nanite on opaque meshes; far field |
 | Instances | `ARidePrepInstanceActor` per chunk (HISM per asset, cull distances, collision only for solid props); `--overrides` swaps kit meshes for high-quality assets by asset id |
-| PCG | `PCGVolume` per chunk over the land-use mask (graph parameters `LanduseMask`, `LanduseBoundsMinCm/MaxCm`) |
+| PCG | `PCGVolume` per chunk over the land-use mask (graph parameters `LanduseMask`, `LanduseBoundsMinCm/MaxCm`); `ARidePrepRoadSpline` per chunk along the course road (tag `RidePrepRoad`) for exclusion and edge sampling |
 | Sun | directional light from the event start (NOAA solar position) |
+| Hero road | chunks built with `gpx2course game --hero …`: `h<id>.glb` replaces the chunk's `road_/markings_/defects_/shoulder_` meshes (Nanite, complex collision); pebbles as HISM (`pebble_a/b/c`, culled at 60 m) |
+| RVT | `RVT_RoadBlend` + volume over the corridor; roadside meshes draw into it, `M_RidePrepKit_Terrain` blends the terrain toward it with the `RoadMask` vertex colour |
+| Rider | `rider_road/tt.glb` (tools/rider) → `/Game/RidePrep/Rider/<bike>`: skeletal mesh + `pedal`, `stand`, `coast` (+ `_drops`) clips |
+
+### Photoreal road (Nanite micro-detail, PCG rules, RVT, PhysMats)
+
+What the brief asked for, and where it lives:
+
+| Brief | Implementation |
+|---|---|
+| Nanite micro-detail — potholes and gravel as real geometry | `gpx2course game --hero km:44-46.5` (or chunk ranges, or `all`) bakes `game/unreal/hero/h<id>.glb` (`services/course-builder/blender/game/bake_hero_road.py`): the carriageway on a 24 × ~12 cm lattice refined to ~3 × 1.5 cm wherever a defect is — pothole bowls with steep ragged walls and a rough bottom, raised repair patches, bitumen-sealed and open cracks, crumbled edges; the gravel shoulders on a 5 cm lattice with stone relief; loose stones as instances. ~1 M triangles / 25–30 MB per 500 m. Defects are deterministic per course (`gamekit/roadside.py`, densities per surface in the kit's `rules`) |
+| PCG rules — trees ≥ 5 m from the edge, gravel on the shoulders | evaluated once in the pipeline (`gamekit/roadside.py`, kit `rules`): tree setback from the road **edge** (`treeSetbackM` 5, hedges 1.5), gravel shoulders by road class, guardrail runs on drops ≥ 1.5 m, bridges and water within 4 m. Every client gets the same world; the UE PCG graph only adds ground detail (below) |
+| RVT edge blending | `RVT_RoadBlend` (BaseColor/Normal/Roughness, 4096 × 256 px tiles ≈ 3 cm/texel over 30 km, adaptive) over the corridor; `M_RidePrepKit` writes into it, the roadside meshes draw into it, and the terrain MIs (`MI_<id>_Terrain`, parent `M_RidePrepKit_Terrain`) lerp toward it with `RoadMask` (vertex colour R baked by the chunk bake: 1 at the verge → 0 four metres out) broken up by world-space noise. Without RVT (`--no-rvt`) the same mask blends toward the kit gravel |
+| Complex collision | complex-as-simple on terrain, roads, hero road, shoulders, verges and buildings, so the tyre traces hit the real pothole floor |
+| Physical materials (asphalt 0.8, gravel 0.4, dust) | `PM_Asphalt` 0.8, `PM_Gravel` 0.4 (+ setts 0.7, grass 0.35, soil 0.45, water 0.1, metal 0.5); patches/sealed cracks are asphalt, potholes/stones/shoulders gravel. `URidePrepSurfaceFeedback` on the rider traces both wheels and turns the surface type into vibration (with jolts from 3 cm height steps), a looping rolling sound per surface (`RollingSounds`), and dust: any FX component tagged `Dust` gets the float parameter `SpawnRate` (gravel 40/s, dirt 25/s at 10 m/s) — e.g. a Niagara sprite emitter with spawn rate bound to the user parameter |
+| Chaos vehicle + PID controller | not used for riding (speed belongs to the power-based physics that also drives the trainer). The presentation layer is `RidePrep::LaneKeeper` (`RidePrepLaneKeeper.h`): a critically damped (PD) controller holding a realistic line inside the road (keep right ~1 m from the edge, or the racing line with `bRacingLine`) with lateral speed/acceleration limits, the matching yaw and lean, and a pedal-synchronous weave on slow climbs. It is the same code path as the web client (cross-tested to 1e-6) |
+
+**Rider.** `ARidePrepRider` loads `/Game/RidePrep/Rider/<Bike>` when its Blueprint has no mesh, turns the model to face
+the road from its wheel bones, and plays the baked clips by crank angle (`HandPosition` = hoods or drops). The mesh hangs
+under a scene root at the tyre contact, so leaning pivots on the road.
 
 Rider speed stays with the physics model (ride-core); the bike is posed kinematically along the route with lean
-`atan(v²/(g·R))`. PhysMats drive feedback (tyre sound, vibration, spray) via the surface type under the wheels.
+`atan(v²/(g·R))` plus the lane keeper's line, yaw and lean.
 
 ### PCG_GroundDetail (author once in `/Game/RidePrep/PCG/`)
 Graph parameters: `LanduseMask` (Texture2D), `LanduseBoundsMinCm`, `LanduseBoundsMaxCm` (Vector).
 1. **Get Actor Data** (tag `g*_terrain`, merge) → **Surface Sampler** (points per m² by detail density).
 2. **Get Texture Data** (texture = `LanduseMask`, transform from the bounds parameters) → **Sample Texture** on the
    points → attribute `$Density`/`Class` (value × 255 = index into `landuseClasses` in `game/index.json`).
-3. **Difference** with **Get Spline/Actor Data** of `g*_road` and `g*_sideroads` (exclusion), then **Distance** to the road
-   to split: < 1.5 m → shoulder gravel decals/stones; > 1.5 m → per-class **Attribute Filter**.
+3. **Difference** with **Get Spline Data** (actors tagged `RidePrepRoad`, the course road) widened by the road
+   half-width + shoulder, and **Get Actor Data** of `g*_sideroads` (exclusion), then **Distance** to the spline to
+   split: < 1.5 m → shoulder weeds/stones (the hero road already has the gravel); > 1.5 m → per-class **Attribute Filter**.
 4. Per class: **Static Mesh Spawner** — grass_dry/grass_green: grass clumps + wild flowers; stubble: straw; soil_ploughed:
    clods; vineyard_soil: inter-row grass; saltpan_water: none (salt crust at the edges); urban_ground: weeds at walls.

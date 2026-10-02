@@ -83,6 +83,8 @@ def build_parser() -> argparse.ArgumentParser:
     gm.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2)))
     gm.add_argument("--render", help="preview shots: 'name:km:mode[:back]' comma list (modes: cockpit, chase, side, drone)")
     gm.add_argument("--chunks", help="only these chunk ids (comma list), for quick iterations")
+    gm.add_argument("--hero", help="Unreal hero road (Nanite micro-geometry, ~1 M triangles per 500 m): 'all', chunk ids/ranges "
+                                   "('84-92') or route km ('km:44-46.5')")
     gm.add_argument("--out", default="./courses")
 
     c = sub.add_parser("cache", help="manage regional dataset caches")
@@ -241,12 +243,12 @@ def cmd_dev_tileset(a) -> int:
 
 
 def cmd_game(a) -> int:
-    from .gamekit.run import build_game, parse_shots
+    from .gamekit.run import build_game, parse_hero, parse_shots
 
     pkg = _resolve_pkg(a.out, a.course_id)
     length = json.loads((pkg / "manifest.json").read_text())["stats"]["distanceM"]
     ids = [int(x) for x in a.chunks.split(",")] if a.chunks else None
-    idx = build_game(pkg, a.kit, a.workers, shots=parse_shots(a.render, length), chunk_ids=ids)
+    idx = build_game(pkg, a.kit, a.workers, shots=parse_shots(a.render, length), chunk_ids=ids, hero=parse_hero(a.hero, length))
     print(f"game/index.json: {len(idx['chunks'])} chunks, kit {idx['kit']['name']}, compression {idx['compression']}")
     return 0
 

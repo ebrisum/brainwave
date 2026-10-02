@@ -580,6 +580,89 @@
       "rows": 20,
       "rowDark": 0.8,
       "roughness": 0.95
+    },
+    "asphalt_patch": {
+      "gen": "asphalt",
+      "tileM": 4,
+      "base": "#3d3d3b",
+      "worn": 0.0,
+      "roughness": 0.86
+    },
+    "pothole": {
+      "gen": "ground",
+      "tileM": 2,
+      "stops": [
+        [
+          0,
+          "#1d1c19"
+        ],
+        [
+          0.5,
+          "#302e29"
+        ],
+        [
+          1,
+          "#4a463e"
+        ]
+      ],
+      "detail": 3.0,
+      "roughness": 0.96
+    },
+    "tar_seal": {
+      "gen": "ground",
+      "tileM": 2,
+      "stops": [
+        [
+          0,
+          "#151514"
+        ],
+        [
+          1,
+          "#272725"
+        ]
+      ],
+      "detail": 2.0,
+      "roughness": 0.55
+    },
+    "stone": {
+      "gen": "ground",
+      "tileM": 0.25,
+      "stops": [
+        [
+          0,
+          "#4d4943"
+        ],
+        [
+          0.5,
+          "#67625a"
+        ],
+        [
+          1,
+          "#857f76"
+        ]
+      ],
+      "detail": 1.5,
+      "roughness": 0.8
+    },
+    "shoulder_gravel": {
+      "gen": "ground",
+      "tileM": 2,
+      "stops": [
+        [
+          0,
+          "#5d564b"
+        ],
+        [
+          0.5,
+          "#7a7163"
+        ],
+        [
+          1,
+          "#9a8f7e"
+        ]
+      ],
+      "detail": 3.0,
+      "roughness": 0.95
     }
   },
   "facades": {
@@ -716,9 +799,16 @@
   },
   "props": {
     "delineatorStepM": 50,
-    "guardrailEmbankmentM": 1.5,
     "streetlightStepM": 32,
     "raceKmBoards": true,
     "raceBarrierFirstLastM": 1500
+  },
+  "rules": {
+    "treeSetbackM": 5.0,
+    "hedgeSetbackM": 1.5,
+    "guardrail": {
+      "embankmentM": 1.5,
+      "waterM": 4.0
+    }
   }
 }

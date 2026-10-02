@@ -209,3 +209,104 @@ def test_superelevation_follows_turn_direction_and_road_class():
     assert cross_slope_dz(3.5, 0.0) == pytest.approx(-0.07) and cross_slope_dz(-3.5, 0.0) == pytest.approx(-0.07)
     t = math.tan(math.radians(4.0))
     assert cross_slope_dz(3.5, 4.0) == pytest.approx(-3.5 * t) and cross_slope_dz(-3.5, 4.0) == pytest.approx(3.5 * t)
+
+
+def _straight_route(n=400, sp=5.0, width=6.0, highway="tertiary", surface=0):
+    s = np.arange(n) * sp
+    return {"s": s, "x": np.zeros(n), "y": s.copy(), "z": np.zeros(n), "headingRad": np.zeros(n), "roadWidthM": np.full(n, width),
+            "bridgeMask": np.zeros(n, bool), "surfaceCode": np.full(n, surface), "highway": np.array([highway] * n, object), "spacing": sp}
+
+
+def test_road_defects_are_deterministic_on_the_road_and_scale_with_wear():
+    from gpx2course.gamekit import roadside
+
+    r = _straight_route(2000)  # 10 km
+    urban = np.zeros(2000, bool)
+    worn = roadside.defects_for(r, range(2000), urban)
+    assert worn == roadside.defects_for(r, range(2000), urban)  # deterministic
+    # chunking-independent: two halves give the same defects as the whole
+    assert roadside.defects_for(r, range(1000), urban) + roadside.defects_for(r, range(1000, 2000), urban) == worn
+    for d in worn:
+        if d["kind"] != "edgeBreak":
+            half = abs(d["wid"] / 2 * math.cos(d["rot"])) + abs(d["len"] / 2 * math.sin(d["rot"]))
+            assert abs(d["off"]) + half <= 3.0 - 0.1 + 1e-6, d
+    count = roadside.summary(worn)
+    assert 15 <= count["pothole"] <= 50 and count["patch"] > count["pothole"] and count["edgeBreak"] > 0
+    good = roadside.summary(roadside.defects_for(_straight_route(2000, highway="primary"), range(2000), urban))
+    assert good["pothole"] < count["pothole"] / 3 and good["edgeBreak"] == 0
+    # porphyry setts and bridges: none
+    assert roadside.defects_for(_straight_route(400, surface=4), range(400), np.ones(400, bool)) == []
+    rb = _straight_route(400)
+    rb["bridgeMask"][:] = True
+    assert roadside.defects_for(rb, range(400), np.zeros(400, bool)) == []
+
+
+def test_guardrail_runs_follow_drops_and_water_and_ignore_blips():
+    from gpx2course.gamekit import roadside
+
+    r = _straight_route(400)
+
+    def H(x, y):  # an embankment on the right between y = 500 and 800 m, a 5 m blip at y = 1500
+        x, y = np.asarray(x, float), np.asarray(y, float)
+        return np.where((x > 0) & (((y > 500) & (y < 800)) | ((y > 1500) & (y < 1505))), -3.0, 0.0)
+
+    runs = roadside.guardrail_runs(r, H, np.zeros(400, bool))
+    assert [(sd, round(a), round(b)) for sd, a, b in runs] == [(1, 505, 800)]
+    # water within 4 m of the left edge from y = 1000 to 1200
+    runs = roadside.guardrail_runs(r, H, np.zeros(400, bool), lambda xs, ys, d: (np.asarray(xs) < 0) & (np.asarray(ys) >= 1000) & (np.asarray(ys) <= 1200))
+    assert (-1, 1000.0, 1205.0) in [(sd, a, b) for sd, a, b in runs]
+    # placed as 4 m segments on a global grid: chunks [0, 650) and [650, 1300) together cover the run exactly once
+    put_log = []
+    put = lambda *a: put_log.append(a)  # noqa: E731
+    run = [(1, 505.0, 800.0)]
+    n = roadside.place_guardrails(run, r, 0, 650, H, put) + roadside.place_guardrails(run, r, 650, 1300, H, put)
+    assert n == int((800 - 505) // 4) and len({round(p[2], 2) for p in put_log}) == n
+    assert all(p[1] > 3.0 for p in put_log)  # right side, outside the edge
+
+
+def test_tree_setback_rule_from_kit():
+    from gpx2course.gamekit import roadside
+
+    rr = roadside.rules({"rules": {"treeSetbackM": 7.0, "guardrail": {"waterM": 3.0}}})
+    assert rr["treeSetbackM"] == 7.0 and rr["guardrail"]["waterM"] == 3.0 and rr["guardrail"]["embankmentM"] == 1.5
+    assert roadside.rules({})["treeSetbackM"] == 5.0
+    sh = roadside.shoulder_widths(_straight_route(10, highway="secondary"), range(10), np.r_[np.zeros(5, bool), np.ones(5, bool)], rr)
+    assert sh[:5] == [0.8] * 5 and sh[5:] == [0.0] * 5
+
+
+def test_roadfx_shapes_and_surface_heights():
+    import os
+    import sys
+
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "blender", "game"))
+    import roadfx
+
+    road = {"s": [0.0, 5.0, 10.0, 15.0], "x": [0.0] * 4, "y": [0.0, 5.0, 10.0, 15.0], "z": [1.0] * 4, "heading": [0.0] * 4,
+            "width": [6.0] * 4, "bankDeg": [0.0] * 4}
+    cl = roadfx.Centreline(road)
+    x, y, z = cl.point(7.5, 2.0)
+    assert (x, y) == pytest.approx((2.0, 7.5)) and z == pytest.approx(1.0 + 0.04 - 0.04)  # right of travel = east; 2 % crown
+    pot = {"kind": "pothole", "s": 7.0, "off": 1.5, "len": 0.5, "wid": 0.4, "rot": 0.3, "depth": -0.05, "seed": 7}
+    patch = {"kind": "patch", "s": 3.0, "off": -1.0, "len": 2.0, "wid": 1.0, "rot": 0.0, "depth": 0.003, "seed": 3}
+    crack = {"kind": "crackOpen", "s": 11.0, "off": 0.0, "len": 4.0, "wid": 0.015, "rot": 0.0, "depth": -0.008, "seed": 5}
+    edge = {"kind": "edgeBreak", "s": 1.0, "off": 3.0, "len": 10.0, "wid": 0.3, "rot": 0.0, "depth": -0.04, "seed": 9}
+    assert roadfx.pothole_outline(pot) == roadfx.pothole_outline(pot)  # seeded
+    surf = roadfx.Surface([pot, patch, crack, edge], lambda s: 3.0)
+    assert surf.height(7.0, 1.5) < -0.035 and surf.material(7.0, 1.5) == "pothole"  # pothole bottom
+    assert surf.height(7.0, 0.5) == 0.0 and not surf.fine(7.0, 0.5)  # clean asphalt, coarse mesh is enough
+    assert surf.height(3.0, -1.0) == pytest.approx(0.003) and surf.material(3.0, -1.0) == "asphalt_patch"
+    ys = [p[1] for p in roadfx.crack_path(crack)]
+    assert max(abs(v) for v in ys) < 0.1  # meanders but stays near its line
+    assert min(surf.height(11.0, o / 1000) for o in range(-60, 61)) < -0.004  # a groove somewhere across the crack line
+    assert surf.height(6.0, 2.98) == pytest.approx(-0.04) and surf.height(6.0, -2.98) == 0.0  # right edge crumbled only
+    assert 0 < roadfx.stone_height(0.31, 0.12) <= 0.016 or roadfx.stone_height(0.33, 0.14) > 0  # stones exist
+
+
+def test_hero_chunk_selection():
+    from gpx2course.gamekit.run import parse_hero
+
+    assert parse_hero(None, 90470) == []
+    assert parse_hero("km:44-46.5", 90470) == [88, 89, 90, 91, 92]
+    assert parse_hero("84-86,170", 90470) == [84, 85, 86, 170]
+    assert parse_hero("km:0-0.2", 90470) == [0]
+    assert len(parse_hero("all", 90470)) == 182  # one past the manifest distance: the route may end a few metres later

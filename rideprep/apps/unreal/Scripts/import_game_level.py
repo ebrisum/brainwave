@@ -16,6 +16,18 @@ What it builds (all from <package>/game/index.json, written by `gpx2course game`
   5. PCG: a PCG volume per chunk with the land-use mask (game/landuse/g<id>.png) as graph parameter for dense ground
      detail (grass, flowers, stones, shoulder gravel) — graph authored once in the project (see README).
   6. Sun: directional light set for the event start (manifest eventStart, NOAA solar position).
+  7. Hero road (chunks built with `gpx2course game --hero`): h<id>.glb replaces the chunk's road/markings/defects/
+     shoulder meshes with the dense Nanite carriageway (real potholes, cracks, patches, crumbled edges) and stone-relief
+     gravel shoulders; loose pebbles become HISM instances (culled at 60 m).
+  8. Road-edge blending: one Runtime Virtual Texture over the corridor; roads, shoulders and verges draw into it and
+     the terrain master material blends toward it with the RoadMask vertex colour (1 at the verge → 0 four metres
+     out), so the road never looks like a sticker. Without RVT support the same mask blends toward the gravel layer.
+  9. Road splines: an ARidePrepRoadSpline per chunk along the course road (tag "RidePrepRoad") for PCG graphs
+     (exclusion zones, sampling along the edge).
+ 10. Rider: rider_road/rider_tt GLBs (tools/rider) → skeletal meshes + pedal/stand/coast clips in /Game/RidePrep/Rider;
+     ARidePrepRider picks them up by path and plays the clips by crank angle.
+
+Physical materials follow the brief: asphalt friction 0.8, gravel 0.4 (dust and rumble come from the surface type).
 
 NOTE: written against the UE 5.5–5.8 Python API and NOT executed here (no Unreal in the build container). Each step
 logs and continues on API differences; verify once on the target workstation.
@@ -39,11 +51,13 @@ FLAT_NORMAL = "/Engine/EngineMaterials/DefaultNormal"
 # Kit material id → surface class (PhysMat). Friction is for contact feel/FX; speed comes from the physics model.
 SURFACE = {
     "asphalt": "Asphalt", "asphalt_worn": "Asphalt", "marking_white": "Asphalt", "kerb": "Asphalt", "paving_porphyry": "Setts",
+    "asphalt_patch": "Asphalt", "tar_seal": "Asphalt", "pothole": "Gravel", "stone": "Gravel", "shoulder_gravel": "Gravel",
     "gravel": "Gravel", "roof_flat": "Gravel", "grass_dry": "Grass", "grass_green": "Grass", "orchard_grass": "Grass", "wetland": "Grass",
     "stubble": "Soil", "soil_ploughed": "Soil", "vineyard_soil": "Soil", "forest_floor": "Soil", "urban_ground": "Soil", "sand": "Soil",
     "salt": "Soil", "crop_green": "Grass", "water": "Water", "saltpan_water": "Water", "metal_galvanised": "Metal", "plastic_barrier": "Metal",
 }
-PHYSMATS = {"Asphalt": (0.9, 1), "Setts": (0.75, 2), "Gravel": (0.6, 3), "Grass": (0.5, 4), "Soil": (0.55, 5), "Water": (0.1, 6), "Metal": (0.45, 7)}
+PHYSMATS = {"Asphalt": (0.8, 1), "Setts": (0.7, 2), "Gravel": (0.4, 3), "Grass": (0.35, 4), "Soil": (0.45, 5), "Water": (0.1, 6), "Metal": (0.5, 7)}
+RVT_DRAW_KINDS = ("road", "shoulder", "verge", "sideroads", "hero")  # meshes that write the roadside into the RVT
 SOLID_ASSETS = ("guardrail", "race_barrier", "streetlight", "sign", "town_sign", "km_marker", "delineator", "campanile")
 CULL_CM = {"vine_row_5m": 45000, "reeds": 25000, "flamingo": 30000, "delineator": 30000, "race_barrier_2m": 40000, "hedge_4m": 60000}
 
@@ -67,6 +81,9 @@ def parse():
     p.add_argument("--overrides", default=None, help="JSON: {asset: {mesh: '/Game/..', yawDeg: 0, scale: 1}}")
     p.add_argument("--chunks", default=None, help="comma list of chunk ids (quick iteration)")
     p.add_argument("--no-pcg", action="store_true")
+    p.add_argument("--no-hero", action="store_true", help="ignore hero road meshes even if the package has them")
+    p.add_argument("--no-rvt", action="store_true")
+    p.add_argument("--rider-dir", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "client", "public", "models"))
     a, _ = p.parse_known_args(sys.argv[1:])
     return a
 
@@ -111,8 +128,10 @@ def create(name, path, cls, factory):
 # ---- kit --------------------------------------------------------------------------------------------------------------
 
 
-def master_material(name, masked):
-    """BaseColor(tex)·Tint, Normal(tex), Roughness, Metallic; UV = TexCoord0 · UVScale (UVs are metres → 1/tileM)."""
+def master_material(name, masked, rvt_out=False):
+    """BaseColor(tex)·Tint, Normal(tex), Roughness, Metallic; UV = TexCoord0 · UVScale (UVs are metres → 1/tileM).
+    rvt_out: also write BaseColor/Roughness/world Normal to a Runtime Virtual Texture (only for primitives that draw
+    into one — the roadside meshes)."""
     path = f"{ROOT}/Materials"
     ensure_dir(path)
     full = f"{path}/{name}"
@@ -151,16 +170,170 @@ def master_material(name, masked):
     nrm.set_editor_property("texture", unreal.load_asset(FLAT_NORMAL))
     mel.connect_material_expressions(mul, "", nrm, "UVs")
     mel.connect_material_property(nrm, "RGB", unreal.MaterialProperty.MP_NORMAL)
+    params = {}
     for i, (pname, default, prop) in enumerate((("Roughness", 0.9, unreal.MaterialProperty.MP_ROUGHNESS),
                                                 ("Metallic", 0.0, unreal.MaterialProperty.MP_METALLIC))):
         s = mel.create_material_expression(m, unreal.MaterialExpressionScalarParameter, -100, 250 + 120 * i)
         s.set_editor_property("parameter_name", pname)
         s.set_editor_property("default_value", default)
         mel.connect_material_property(s, "", prop)
+        params[pname] = s
     if masked:
         mel.connect_material_property(base, "A", unreal.MaterialProperty.MP_OPACITY_MASK)
+    if rvt_out:
+        try:
+            out = mel.create_material_expression(m, unreal.MaterialExpressionRuntimeVirtualTextureOutput, 300, 300)
+            wn = _tangent_to_world(m, nrm, 100, 450)
+            mel.connect_material_expressions(bm, "", out, "BaseColor")
+            mel.connect_material_expressions(params["Roughness"], "", out, "Roughness")
+            mel.connect_material_expressions(wn, "", out, "Normal")
+        except Exception as ex:  # noqa: BLE001
+            warn(f"RVT output on {name}: {ex}")
     mel.recompile_material(m)
     return m
+
+
+def _tangent_to_world(m, src, x, y):
+    t = mel.create_material_expression(m, unreal.MaterialExpressionTransform, x, y)
+    t.set_editor_property("transform_source_type", unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_TANGENT)
+    t.set_editor_property("transform_type", unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+    mel.connect_material_expressions(src, "RGB", t, "")
+    return t
+
+
+def terrain_material(rvt, blend_albedo, blend_normal):
+    """M_RidePrepKit_Terrain: the kit master plus road-edge blending. RoadMask (vertex colour R, baked by the chunk bake:
+    1 at the verge → 0 four metres out) broken up with world-space noise lerps the terrain toward what the roadside
+    drew into the RVT (or toward the gravel layer without RVT). Normals are blended in world space."""
+    path = f"{ROOT}/Materials"
+    full = f"{path}/M_RidePrepKit_Terrain"
+    if eal.does_asset_exist(full):
+        return unreal.load_asset(full)
+    m = asset_tools.create_asset("M_RidePrepKit_Terrain", path, unreal.Material, unreal.MaterialFactoryNew())
+    m.set_editor_property("tangent_space_normal", False)
+    tc = mel.create_material_expression(m, unreal.MaterialExpressionTextureCoordinate, -1300, 0)
+    uvs = mel.create_material_expression(m, unreal.MaterialExpressionVectorParameter, -1300, 150)
+    uvs.set_editor_property("parameter_name", "UVScale")
+    uvs.set_editor_property("default_value", unreal.LinearColor(1, 1, 0, 0))
+    mask2 = mel.create_material_expression(m, unreal.MaterialExpressionComponentMask, -1100, 150)
+    mask2.set_editor_property("r", True)
+    mask2.set_editor_property("g", True)
+    mel.connect_material_expressions(uvs, "", mask2, "")
+    uv = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -950, 50)
+    mel.connect_material_expressions(tc, "", uv, "A")
+    mel.connect_material_expressions(mask2, "", uv, "B")
+    base = mel.create_material_expression(m, unreal.MaterialExpressionTextureSampleParameter2D, -750, -200)
+    base.set_editor_property("parameter_name", "BaseColor")
+    base.set_editor_property("texture", unreal.load_asset(WHITE))
+    mel.connect_material_expressions(uv, "", base, "UVs")
+    tint = mel.create_material_expression(m, unreal.MaterialExpressionVectorParameter, -750, -350)
+    tint.set_editor_property("parameter_name", "Tint")
+    tint.set_editor_property("default_value", unreal.LinearColor(1, 1, 1, 1))
+    col = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -500, -250)
+    mel.connect_material_expressions(base, "RGB", col, "A")
+    mel.connect_material_expressions(tint, "", col, "B")
+    nrm = mel.create_material_expression(m, unreal.MaterialExpressionTextureSampleParameter2D, -750, 100)
+    nrm.set_editor_property("parameter_name", "Normal")
+    nrm.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+    nrm.set_editor_property("texture", unreal.load_asset(FLAT_NORMAL))
+    mel.connect_material_expressions(uv, "", nrm, "UVs")
+    wn = _tangent_to_world(m, nrm, -500, 100)
+    rough = mel.create_material_expression(m, unreal.MaterialExpressionScalarParameter, -500, 300)
+    rough.set_editor_property("parameter_name", "Roughness")
+    rough.set_editor_property("default_value", 0.9)
+    # Blend weight: RoadMask with a ragged, world-space-noise edge
+    vc = mel.create_material_expression(m, unreal.MaterialExpressionVertexColor, -900, 500)
+    noise = mel.create_material_expression(m, unreal.MaterialExpressionNoise, -900, 650)
+    noise.set_editor_property("scale", 0.6)
+    noise.set_editor_property("output_min", 0.0)
+    noise.set_editor_property("output_max", 1.0)
+    strength = mel.create_material_expression(m, unreal.MaterialExpressionScalarParameter, -900, 800)
+    strength.set_editor_property("parameter_name", "RoadBlend")
+    strength.set_editor_property("default_value", 1.0)
+    k1 = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -700, 550)
+    mel.connect_material_expressions(vc, "R", k1, "A")
+    mel.connect_material_expressions(noise, "", k1, "B")
+    k2 = mel.create_material_expression(m, unreal.MaterialExpressionAdd, -550, 550)
+    mel.connect_material_expressions(k1, "", k2, "A")
+    mel.connect_material_expressions(vc, "R", k2, "B")
+    k3 = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -420, 550)
+    mel.connect_material_expressions(k2, "", k3, "A")
+    mel.connect_material_expressions(strength, "", k3, "B")
+    w = mel.create_material_expression(m, unreal.MaterialExpressionSaturate, -300, 550)
+    mel.connect_material_expressions(k3, "", w, "")
+    # Blend source: the RVT (what the roadside drew) or the gravel layer
+    if rvt is not None:
+        src = mel.create_material_expression(m, unreal.MaterialExpressionRuntimeVirtualTextureSampleParameter, -500, 800)
+        src.set_editor_property("parameter_name", "RoadRVT")
+        src.set_editor_property("virtual_texture", rvt)
+        _set_enum(src, "material_type", unreal.RuntimeVirtualTextureMaterialType, ("BASE_COLOR_NORMAL_ROUGHNESS", "BASE_COLOR_NORMAL_SPECULAR"))
+        b_col, b_col_pin, b_nrm, b_nrm_pin, b_rough, b_rough_pin = src, "BaseColor", src, "Normal", src, "Roughness"
+    else:
+        bt = mel.create_material_expression(m, unreal.MaterialExpressionTextureSampleParameter2D, -750, 800)
+        bt.set_editor_property("parameter_name", "BlendBaseColor")
+        bt.set_editor_property("texture", blend_albedo or unreal.load_asset(WHITE))
+        mel.connect_material_expressions(uv, "", bt, "UVs")
+        bn = mel.create_material_expression(m, unreal.MaterialExpressionTextureSampleParameter2D, -750, 1000)
+        bn.set_editor_property("parameter_name", "BlendNormal")
+        bn.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+        bn.set_editor_property("texture", blend_normal or unreal.load_asset(FLAT_NORMAL))
+        mel.connect_material_expressions(uv, "", bn, "UVs")
+        br = mel.create_material_expression(m, unreal.MaterialExpressionConstant, -500, 1100)
+        br.set_editor_property("r", 0.95)
+        b_col, b_col_pin, b_nrm, b_nrm_pin, b_rough, b_rough_pin = bt, "RGB", _tangent_to_world(m, bn, -500, 1000), "", br, ""
+    for i, (a_, a_pin, b_, b_pin, prop) in enumerate(((col, "", b_col, b_col_pin, unreal.MaterialProperty.MP_BASE_COLOR),
+                                                      (rough, "", b_rough, b_rough_pin, unreal.MaterialProperty.MP_ROUGHNESS),
+                                                      (wn, "", b_nrm, b_nrm_pin, unreal.MaterialProperty.MP_NORMAL))):
+        lerp = mel.create_material_expression(m, unreal.MaterialExpressionLinearInterpolate, -100, -200 + 250 * i)
+        mel.connect_material_expressions(a_, a_pin, lerp, "A")
+        mel.connect_material_expressions(b_, b_pin, lerp, "B")
+        mel.connect_material_expressions(w, "", lerp, "Alpha")
+        mel.connect_material_property(lerp, "", prop)
+    met = mel.create_material_expression(m, unreal.MaterialExpressionScalarParameter, -100, 600)
+    met.set_editor_property("parameter_name", "Metallic")
+    met.set_editor_property("default_value", 0.0)
+    mel.connect_material_property(met, "", unreal.MaterialProperty.MP_METALLIC)
+    mel.recompile_material(m)
+    return m
+
+
+def _set_enum(obj, prop, enum_cls, names):
+    for n in names:
+        v = getattr(enum_cls, n, None)
+        if v is not None:
+            obj.set_editor_property(prop, v)
+            return True
+    warn(f"{type(obj).__name__}.{prop}: none of {names} in this engine version")
+    return False
+
+
+def setup_rvt(bounds_cm):
+    """One RVT over the course corridor (BaseColor/Normal/Roughness, 4096 × 256 px tiles ≈ 3 cm per texel over 30 km,
+    adaptive page table) and its volume. The volume's transform maps the unit box onto the bounds."""
+    path = f"{ROOT}/RVT"
+    ensure_dir(path)
+    rvt = create("RVT_RoadBlend", path, unreal.RuntimeVirtualTexture, unreal.RuntimeVirtualTextureFactory())
+    _set_enum(rvt, "material_type", unreal.RuntimeVirtualTextureMaterialType, ("BASE_COLOR_NORMAL_ROUGHNESS", "BASE_COLOR_NORMAL_SPECULAR"))
+    for prop, val in (("tile_count", 4096), ("tile_size", 256), ("adaptive", True), ("compress_textures", True)):
+        try:
+            rvt.set_editor_property(prop, val)
+        except Exception as ex:  # noqa: BLE001
+            warn(f"RVT {prop}: {ex}")
+    (x0, y0, z0), (x1, y1, z1) = bounds_cm
+    eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    vol = eas.spawn_actor_from_class(unreal.RuntimeVirtualTextureVolume, unreal.Vector(x0, y0, z0 - 20000))
+    vol.set_actor_scale3d(unreal.Vector(x1 - x0, y1 - y0, (z1 - z0) + 40000))
+    vol.set_actor_label("RidePrep_RoadBlend_RVT")
+    vol.set_folder_path("RidePrep")
+    vol.get_editor_property("virtual_texture_component").set_editor_property("virtual_texture", rvt)
+    log(f"RVT over {(x1 - x0) / 1e5:.1f} × {(y1 - y0) / 1e5:.1f} km")
+    return rvt
+
+
+def draw_into_rvt(actor, rvt):
+    comp = actor.static_mesh_component
+    comp.set_editor_property("runtime_virtual_textures", [rvt])
+    _set_enum(comp, "virtual_texture_render_pass_type", unreal.RuntimeVirtualTextureMainPassType, ("ALWAYS",))
 
 
 def physmats():
@@ -184,7 +357,9 @@ def hex_to_linear(h):
     return [x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
 
 
-def import_kit(pkg, index):
+def import_kit(pkg, index, rvt=None):
+    """Kit textures, master materials, one MI per kit material (+ a road-edge-blending terrain MI for the terrain
+    classes), PhysMats, kit meshes. Returns (mis, terrain_mis, meshes)."""
     kit = index["kit"]
     kroot = f"{KIT_ROOT}/{kit['name']}"
     kdir = os.path.join(pkg, kit["dir"])
@@ -200,38 +375,56 @@ def import_kit(pkg, index):
             tex.set_editor_property("srgb", False)
             tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_NORMALMAP)
     log(f"kit textures: {len(textures)}")
-    opaque, masked = master_material("M_RidePrepKit", False), master_material("M_RidePrepKit_Masked", True)
+    opaque, masked = master_material("M_RidePrepKit", False, rvt_out=True), master_material("M_RidePrepKit_Masked", True)
     pms = physmats()
     mdir = f"{kroot}/Materials"
     ensure_dir(mdir)
-    mis = {}
+    gravel = mats_doc.get("gravel", {})
+    try:
+        terrain_master = terrain_material(rvt, textures.get(os.path.splitext(gravel.get("albedo", ""))[0]),
+                                          textures.get(os.path.splitext(gravel.get("normal", ""))[0]))
+    except Exception as ex:  # noqa: BLE001
+        terrain_master = None
+        warn(f"terrain blend material: {ex} — terrain uses the plain kit materials")
+    terrain_ids = {m for m in index.get("landuseClasses", []) if m != "none" and "water" not in m}  # water never blends
+    mis, terrain_mis = {}, {}
     for mid, spec in mats_doc.items():
         cut = spec.get("alphaCutoff") is not None
-        mi = create(f"MI_{mid}", mdir, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
-        mi.set_editor_property("parent", masked if cut else opaque)
-        alb = textures.get(os.path.splitext(spec.get("albedo", ""))[0]) if spec.get("albedo") else None
-        nrm = textures.get(os.path.splitext(spec.get("normal", ""))[0]) if spec.get("normal") else None
-        if alb:
-            mel.set_material_instance_texture_parameter_value(mi, "BaseColor", alb)
-        if nrm:
-            mel.set_material_instance_texture_parameter_value(mi, "Normal", nrm)
-        tile = spec.get("tileM")
-        sx, sy = (tile, tile) if tile and not isinstance(tile, list) else (tile or [1, 1])
-        # UVs are metres for tiled materials (repeat = 1/tileM); 0–1 for leaf cards and the sign atlas.
-        mel.set_material_instance_vector_parameter_value(mi, "UVScale", unreal.LinearColor(1 / sx if tile else 1, 1 / sy if tile else 1, 0, 0))
-        tint = hex_to_linear(spec["color"]) if ("color" in spec and not alb) else [1, 1, 1]
-        mel.set_material_instance_vector_parameter_value(mi, "Tint", unreal.LinearColor(*tint, 1))
-        mel.set_material_instance_scalar_parameter_value(mi, "Roughness", float(spec.get("roughness", 0.9)))
-        mel.set_material_instance_scalar_parameter_value(mi, "Metallic", float(spec.get("metallic", 0.0)))
-        surf = SURFACE.get(mid) or ("Asphalt" if mid.startswith("asphalt") else None)
-        if surf:
-            try:
-                mi.set_editor_property("phys_material", pms[surf])
-            except Exception as ex:  # noqa: BLE001
-                warn(f"phys_material on {mid}: {ex}")
-        mel.update_material_instance(mi)
-        mis[mid] = mi
-    log(f"kit material instances: {len(mis)}")
+        mis[mid] = _kit_mi(f"MI_{mid}", mdir, masked if cut else opaque, mid, spec, textures, pms)
+        if terrain_master is not None and mid in terrain_ids and not cut:
+            terrain_mis[mid] = _kit_mi(f"MI_{mid}_Terrain", mdir, terrain_master, mid, spec, textures, pms)
+    log(f"kit material instances: {len(mis)} (+{len(terrain_mis)} terrain blend)")
+    return mis, terrain_mis, _kit_meshes(kdir, kroot, mis)
+
+
+def _kit_mi(name, mdir, parent, mid, spec, textures, pms):
+    mi = create(name, mdir, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
+    mi.set_editor_property("parent", parent)
+    alb = textures.get(os.path.splitext(spec.get("albedo", ""))[0]) if spec.get("albedo") else None
+    nrm = textures.get(os.path.splitext(spec.get("normal", ""))[0]) if spec.get("normal") else None
+    if alb:
+        mel.set_material_instance_texture_parameter_value(mi, "BaseColor", alb)
+    if nrm:
+        mel.set_material_instance_texture_parameter_value(mi, "Normal", nrm)
+    tile = spec.get("tileM")
+    sx, sy = (tile, tile) if tile and not isinstance(tile, list) else (tile or [1, 1])
+    # UVs are metres for tiled materials (repeat = 1/tileM); 0–1 for leaf cards and the sign atlas.
+    mel.set_material_instance_vector_parameter_value(mi, "UVScale", unreal.LinearColor(1 / sx if tile else 1, 1 / sy if tile else 1, 0, 0))
+    tint = hex_to_linear(spec["color"]) if ("color" in spec and not alb) else [1, 1, 1]
+    mel.set_material_instance_vector_parameter_value(mi, "Tint", unreal.LinearColor(*tint, 1))
+    mel.set_material_instance_scalar_parameter_value(mi, "Roughness", float(spec.get("roughness", 0.9)))
+    mel.set_material_instance_scalar_parameter_value(mi, "Metallic", float(spec.get("metallic", 0.0)))
+    surf = SURFACE.get(mid) or ("Asphalt" if mid.startswith("asphalt") else None)
+    if surf:
+        try:
+            mi.set_editor_property("phys_material", pms[surf])
+        except Exception as ex:  # noqa: BLE001
+            warn(f"phys_material on {mid}: {ex}")
+    mel.update_material_instance(mi)
+    return mi
+
+
+def _kit_meshes(kdir, kroot, mis):
     # Meshes (kit.glb via Interchange); one static mesh per asset node, LOD1 from "<asset>__lod1"
     sdir = f"{kroot}/Meshes"
     ensure_dir(sdir)
@@ -256,7 +449,7 @@ def import_kit(pkg, index):
                 warn(f"LOD1 for {asset}: {ex}")
         meshes[asset] = lod0
     log(f"kit meshes: {len(meshes)}")
-    return mis, meshes
+    return meshes
 
 
 def _find(by_name, asset):
@@ -280,8 +473,8 @@ def configure_chunk_mesh(sm, kind):
     body = sm.get_editor_property("body_setup")
     if body:
         body.set_editor_property("collision_trace_flag",
-                                 unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE if kind != "markings" else unreal.CollisionTraceFlag.CTF_USE_DEFAULT)
-    if kind in ("terrain", "buildings", "road", "sideroads", "far"):
+                                 unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE if kind not in ("markings", "defects") else unreal.CollisionTraceFlag.CTF_USE_DEFAULT)
+    if kind in ("terrain", "buildings", "road", "sideroads", "far", "shoulder", "verge"):
         try:
             ns = sm.get_editor_property("nanite_settings")
             ns.set_editor_property("enabled", True)
@@ -341,13 +534,23 @@ def main():
     croot = f"{ROOT}/Courses/{level_name}"
     les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
     eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
-    mis, kit_meshes = import_kit(pkg, index)
     # Level
     les.new_level_from_template(f"{croot}/{level_name}", OPEN_WORLD_TEMPLATE)
     for actor in eas.get_all_level_actors():
         if isinstance(actor, (unreal.Landscape, unreal.LandscapeProxy)):
             eas.destroy_actor(actor)
     set_sun(manifest, eas.get_all_level_actors())
+    rvt = None
+    if not a.no_rvt:
+        try:
+            rvt = setup_rvt(corridor_bounds_cm(index))
+        except Exception as ex:  # noqa: BLE001
+            warn(f"RVT not set up ({ex}); the terrain blends toward the gravel layer instead")
+    mis, terrain_mis, kit_meshes = import_kit(pkg, index, rvt)
+    hero = index.get("hero") if not a.no_hero else None
+    replaced = set(hero.get("replaces", [])) if hero else set()
+    pebble_meshes = import_pebbles(pkg, hero, mis) if hero else {}
+    route = read_route(pkg, manifest)
     # Far field
     far = index.get("farUnreal")
     if far and os.path.exists(os.path.join(pkg, far)):
@@ -374,16 +577,27 @@ def main():
         loc = enu_to_ue(ox, oy, oz)
         glb = os.path.join(pkg, c.get("glbUnreal") or c["glb"])
         meshes = [o for o in import_files([glb], f"{croot}/Chunks/g{cid}") if isinstance(o, unreal.StaticMesh)]
+        has_hero = bool(hero and c.get("hero") and os.path.exists(os.path.join(pkg, c["hero"])))
+        if has_hero:  # the dense Nanite carriageway + shoulders replace the chunk's light road
+            meshes += [o for o in import_files([os.path.join(pkg, c["hero"])], f"{croot}/Hero/h{cid}") if isinstance(o, unreal.StaticMesh)]
         for sm in meshes:
             kind = sm.get_name().split("_")[0].lower()
-            assign_materials(sm, mis)
-            configure_chunk_mesh(sm, kind)
+            if has_hero and kind in replaced:
+                continue
+            assign_materials(sm, {**mis, **terrain_mis} if kind == "terrain" else mis)
+            configure_chunk_mesh(sm, "road" if kind == "hero" else kind)
             act = eas.spawn_actor_from_class(unreal.StaticMeshActor, loc)
             act.static_mesh_component.set_static_mesh(sm)
-            if kind == "markings":
+            if kind in ("markings", "defects"):
                 act.static_mesh_component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
-            act.set_actor_label(f"g{cid}_{kind}")
+            if rvt is not None and kind in RVT_DRAW_KINDS:
+                try:
+                    draw_into_rvt(act, rvt)
+                except Exception as ex:  # noqa: BLE001
+                    warn(f"RVT draw on g{cid}_{kind}: {ex}")
+            act.set_actor_label(f"g{cid}_{kind}" if kind != "hero" else sm.get_name())
             act.set_folder_path(f"RidePrep/Chunks/g{cid // 20 * 20:03d}")
+        road_spline(route, c, loc)
         # Kit instances
         inst = load_json(os.path.join(pkg, c["instances"]))["instances"]
         ia = eas.spawn_actor_from_class(unreal.RidePrepInstanceActor, loc)
@@ -401,12 +615,111 @@ def main():
                                    scale=unreal.Vector(s * sc, s * sc, s * sc)) for x, y, z, rot, s in rows]
             solid = asset.startswith(SOLID_ASSETS)
             n_inst += ia.add_instances(asset, mesh, xs, 0.0, float(CULL_CM.get(asset, 0)), solid, True)
+        if has_hero and c.get("heroPebbles") and os.path.exists(os.path.join(pkg, c["heroPebbles"])):
+            for asset, rows in load_json(os.path.join(pkg, c["heroPebbles"]))["instances"].items():
+                mesh = pebble_meshes.get(asset)
+                if mesh is None:
+                    continue
+                xs = [unreal.Transform(location=unreal.Vector(x * 100, -y * 100, z * 100), rotation=unreal.Rotator(pitch=0, yaw=-math.degrees(rot), roll=0),
+                                       scale=unreal.Vector(sc_, sc_, sc_)) for x, y, z, rot, sc_ in rows]
+                n_inst += ia.add_instances(asset, mesh, xs, 0.0, 6000.0, False, True)
         # PCG ground detail from the land-use mask
         if graph is not None and c.get("landuse"):
             pcg_volume(pkg, c, croot, graph, loc)
+    import_rider(a.rider_dir)
     les.save_current_level()
     eal.save_directory(ROOT, only_if_is_dirty=True, recursive=True)
-    log(f"imported {manifest['name']} → {croot}/{level_name}: {len(index['chunks'])} chunks, {n_inst} instances")
+    n_hero = sum(1 for c in index["chunks"] if c.get("hero")) if hero else 0
+    log(f"imported {manifest['name']} → {croot}/{level_name}: {len(index['chunks'])} chunks ({n_hero} hero), {n_inst} instances")
+
+
+def corridor_bounds_cm(index):
+    """UE-space box (cm) around every chunk's terrain (chunk bounds are ENU metres relative to the chunk origin)."""
+    xs, ys, zs = [], [], []
+    for c in index["chunks"]:
+        ox, oy, oz = c["origin"]
+        b = c.get("bounds")
+        if b:
+            xs += [b[0] + 0.0, b[2] + 0.0]
+            ys += [b[1] + 0.0, b[3] + 0.0]
+        else:
+            xs.append(ox)
+            ys.append(oy)
+        zs.append(oz)
+    # bounds are absolute lattice metres (cells × grid), so no origin offset; UE flips north
+    return ((min(xs) * 100, -max(ys) * 100, min(zs) * 100 - 20000), (max(xs) * 100, -min(ys) * 100, max(zs) * 100 + 20000))
+
+
+def import_pebbles(pkg, hero, mis):
+    path = os.path.join(pkg, hero["pebbles"])
+    if not os.path.exists(path):
+        return {}
+    out = {}
+    for sm in [o for o in import_files([path], f"{ROOT}/Hero") if isinstance(o, unreal.StaticMesh)]:
+        assign_materials(sm, mis)
+        configure_chunk_mesh(sm, "road")
+        body = sm.get_editor_property("body_setup")
+        if body:
+            body.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_DEFAULT)
+        for k in ("pebble_a", "pebble_b", "pebble_c"):
+            if sm.get_name() == k or sm.get_name().endswith("_" + k):
+                out[k] = sm
+    log(f"hero pebbles: {sorted(out)}")
+    return out
+
+
+def read_route(pkg, manifest):
+    """x, y, z, s arrays (ENU m) from route.bin, for the road splines. Plain `array` — no numpy in the editor."""
+    from array import array
+
+    r = manifest["route"]
+    n = r["count"]
+    data = open(os.path.join(pkg, "route.bin"), "rb").read()
+    out = {}
+    for spec in r["arrays"]:
+        if spec["name"] in ("s", "x", "y", "z") and spec["type"] == "float32":
+            a = array("f")
+            a.frombytes(data[spec["offset"]:spec["offset"] + 4 * n])
+            if sys.byteorder != "little":
+                a.byteswap()
+            out[spec["name"]] = a
+    return out
+
+
+def road_spline(route, c, loc, step_m=10.0):
+    """ARidePrepRoadSpline along this chunk's stretch of the course road (UE units, relative to the chunk actor)."""
+    if not route or not hasattr(unreal, "RidePrepRoadSpline"):
+        return
+    s, x, y, z = route["s"], route["x"], route["y"], route["z"]
+    pts = []
+    i = 0
+    last = -1e9
+    while i < len(s) and s[i] <= c["sEnd"] + 1e-6:
+        if s[i] >= c["sStart"] - 1e-6 and s[i] - last >= step_m - 1e-6:
+            pts.append(unreal.Vector(x[i] * 100 - loc.x, -y[i] * 100 - loc.y, z[i] * 100 - loc.z))
+            last = s[i]
+        i += 1
+    if len(pts) < 2:
+        return
+    eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    sp = eas.spawn_actor_from_class(unreal.RidePrepRoadSpline, loc)
+    sp.set_points(pts)
+    sp.set_actor_label(f"g{c['id']}_road_spline")
+    sp.set_folder_path(f"RidePrep/Chunks/g{c['id'] // 20 * 20:03d}")
+
+
+def import_rider(rider_dir):
+    """tools/rider GLBs → /Game/RidePrep/Rider/<bike>: skeletal mesh, skeleton, and the clips as anim sequences."""
+    for bike in ("road", "tt"):
+        path = os.path.join(rider_dir, f"rider_{bike}.glb")
+        if not os.path.exists(path):
+            warn(f"rider model {path} missing (build it with tools/rider)")
+            continue
+        dest = f"{ROOT}/Rider/{bike}"
+        ensure_dir(dest)
+        objs = import_files([path], dest)
+        kinds = sorted({type(o).__name__ for o in objs})
+        log(f"rider {bike}: {len(objs)} assets ({', '.join(kinds)})")
 
 
 def pcg_volume(pkg, c, croot, graph, loc):

@@ -9,9 +9,13 @@ course package ──► gamekit/prep.py (numpy/shapely: all GIS)      ──►
        │                                                              buildings, kit instances) per 500 m
        │          gamekit/build_kit.py (procedural textures)      ──► kit/textures, materials.json
        │          blender/game/build_kit_meshes.py (Blender)      ──► kit.glb, kit.blend, assets.json
-       └────────► blender/game/bake_game_chunk.py (Blender, ×N)   ──► game/chunks/g<id>.glb (+ far.glb), meshopt
+       ├────────► blender/game/bake_game_chunk.py (Blender, ×N)   ──► game/chunks/g<id>.glb (+ far.glb), meshopt
+       ├────────► blender/game/bake_hero_road.py (Blender, --hero) ──► game/unreal/hero/h<id>.glb (Nanite road)
                   blender/game/render_course.py (Cycles)          ──► game/shots/*.jpg
 ```
+
+`gamekit/roadside.py` holds the roadside rules (the procedural "PCG" layer, evaluated once so every engine gets the
+same world) and `blender/game/roadfx.py` turns its road defects into geometry for both bakes.
 
 ## Data
 - **Roads, buildings, water, land use**: Overture Maps (S3 GeoParquet, read with HTTP range requests and row-group
@@ -29,6 +33,28 @@ campanili and case coloniche, stone pines in the Cervia pinewood and gardens, Lo
 cypresses at cemeteries and villas, olives above 60 m, Sangiovese vine rows along the real vineyard polygons, peach
 orchards, hedgerows, reeds and flamingos at the Saline di Cervia, Italian delineators/guardrails/town signs, race
 barriers at the start/finish. Textures are generated (tileable, deterministic) — no downloads, CC0.
+
+## Roadside rules and road surface
+Kit `rules` (defaults in `gamekit/roadside.py`): trees ≥ `treeSetbackM` (5 m) from the course road **edge**, hedges ≥
+1.5 m; gravel shoulders on rural roads without kerbs (0.5–1.0 m by road class), none on bridges or in towns; guardrail
+runs where the ground drops ≥ 1.5 m within 4 m of the edge, on bridges, and along water within 4 m — evaluated on the
+whole route (runs never break at chunk seams), gaps < 12 m closed, runs < 12 m dropped. Road defects per route sample
+(hash-seeded, independent of chunking), densities per km by surface: potholes, repair patches (incl. trench patches),
+bitumen-sealed and open cracks, transverse cracks, crumbled edges; none on porphyry setts or bridges. Emilia-Romagna:
+3.7 km of guardrail in 61 runs; 137 potholes, 507 patches, ~1 500 cracks, 48 crumbled-edge stretches over 90 km.
+
+- **Chunks** show defects as decals 2–3 mm above the road (`defects_<id>`, kit materials `asphalt_patch`, `pothole`,
+  `tar_seal`, `gravel`), with polygon offset in the web client; road, markings, shoulders (`shoulder_gravel`) and verges
+  are separate meshes, and neighbouring chunks meet at a shared sample with normals from the route heading (no
+  overlap, no gap). The terrain carries a `RoadMask` vertex colour (1 at the verge → 0 four metres out).
+- **Hero road** (`--hero all|84-92|km:44-46.5`, Unreal only): the carriageway as a lattice refined to ~3 × 1.5 cm around
+  every defect, displaced into real potholes (steep ragged walls, rough floor), raised patches, crack grooves/seals and
+  crumbled edges; markings are faces of the surface; gravel shoulders on a 5 cm lattice with stone relief tucked under
+  the road edge and verge; loose stones (`h<id>_pebbles.json`, `pebbles.glb`). Chunk range exactly [sStart, sEnd] with
+  the neighbours' defects included, so hero chunks join seamlessly. ~1 M triangles / 25–30 MB per 500 m.
+
+![Hero road: a pothole as real geometry (Cycles)](img/hero_road_pothole.jpg)
+![Hero road at riding height: patches, sealed centre joint, pothole, guardrail along the canal](img/hero_road_rider.jpg)
 
 ## Engine contract
 - Chunk glTFs carry **no images**; material names are kit material ids. Bind `game/kit/materials.json` textures with

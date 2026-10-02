@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -88,7 +89,7 @@ def compress(glb: Path) -> bool:
 
 
 def build_game(pkg: Path, kit_name: str | None = None, workers: int = 4, cache_dir: Path | None = None, shots: list | None = None,
-               chunk_ids: list[int] | None = None, log=print, unreal: bool | None = None) -> dict:
+               chunk_ids: list[int] | None = None, log=print, unreal: bool | None = None, hero: list[int] | None = None) -> dict:
     from .prep import prepare
 
     t0 = time.time()
@@ -135,6 +136,23 @@ def build_game(pkg: Path, kit_name: str | None = None, workers: int = 4, cache_d
             shutil.copyfile(chunks_dir / f"g{i}.glb", ue / f"g{i}.glb")
         if (game / "far.glb").exists():
             shutil.copyfile(game / "far.glb", ue / "far.glb")
+    # Hero road for Unreal (Nanite): dense displaced carriageway + gravel shoulders, opt-in (~1 M triangles / 25–30 MB
+    # per 500 m chunk). Two Blender processes at most: each holds a million-triangle bmesh.
+    hero_ids = sorted(set(hero or []) & set(ids))
+    if hero_ids:
+        hdir = ue / "hero"
+        hdir.mkdir(parents=True, exist_ok=True)
+        hw_ = min(2, workers)
+        hgroups = [hero_ids[w::hw_] for w in range(hw_) if hero_ids[w::hw_]]
+        log(f"game: hero road for {len(hero_ids)} chunks ({len(hgroups)} Blender processes)")
+
+        def bake_hero(gi_ids):
+            gi, part = gi_ids
+            run_blender(BLENDER_DIR / "bake_hero_road.py", ["--kit", str(kdir), "--specs", str(specs), "--out", str(hdir),
+                                                            "--ids", ",".join(map(str, part))], specs / f"hero_{gi}.log")
+
+        with ThreadPoolExecutor(len(hgroups)) as ex:
+            list(ex.map(bake_hero, enumerate(hgroups)))
     lu = game / "landuse"
     lu.mkdir(exist_ok=True)
     for i in ids:
@@ -153,6 +171,9 @@ def build_game(pkg: Path, kit_name: str | None = None, workers: int = 4, cache_d
             entry["glbUnreal"] = f"game/unreal/g{c['id']}.glb"
         if c.get("landuseBounds"):
             entry["landuse"] = f"game/landuse/g{c['id']}.png"
+        if (ue / "hero" / f"h{c['id']}.glb").exists():
+            entry["hero"] = f"game/unreal/hero/h{c['id']}.glb"
+            entry["heroPebbles"] = f"game/unreal/hero/h{c['id']}_pebbles.json"
         chunks.append(entry)
     index = {"version": 1, "kit": {"name": kit["name"], "label": kit["label"], "version": kit["version"], "dir": "game/kit",
                                    "glb": "game/kit/kit.glb", "materials": "game/kit/materials.json", "assets": "game/kit/assets.json"},
@@ -162,6 +183,10 @@ def build_game(pkg: Path, kit_name: str | None = None, workers: int = 4, cache_d
              "chunks": chunks, "attribution": ["© OpenStreetMap contributors, Overture Maps Foundation (ODbL)",
                                                "Copernicus DEM GLO-30 © DLR/Airbus, provided under COPERNICUS by the EU and ESA",
                                                "ESA WorldCover 2021 (CC BY 4.0)", "Procedural art kit: RidePrep (CC0)"]}
+    if any("hero" in c for c in chunks):
+        index["hero"] = {"pebbles": "game/unreal/hero/pebbles.glb", "index": "game/unreal/hero/index.json",
+                         "replaces": ["road", "markings", "defects", "shoulder"]}
+    index["roadside"] = {k: v for k, v in doc.get("roadside", {}).items() if k != "rules"}
     if shots:
         index["shots"] = [f"game/shots/{name}.jpg" for name, *_ in shots]
     (game / "index.json").write_text(json.dumps(index, indent=1))
@@ -176,6 +201,25 @@ def build_game(pkg: Path, kit_name: str | None = None, workers: int = 4, cache_d
                                                            "--out", str(sdir / f"{name}.jpg"), *extra], specs / f"render_{name}.log")
     log(f"game: done in {time.time() - t0:.0f} s → {game}")
     return index
+
+
+def parse_hero(spec: str | None, length_m: float, chunk_m: float = 500.0) -> list[int]:
+    """Hero chunks: 'all', chunk ids/ranges ('84-92,170'), or route km ranges ('km:44-46.5,0-1')."""
+    if not spec:
+        return []
+    n = int(math.ceil(length_m / chunk_m - 1e-9))
+    if spec == "all":
+        return list(range(n + 1))  # the route's last sample can sit a few metres past the manifest distance
+    km = spec.startswith("km:")
+    out = set()
+    for part in spec[3:].split(",") if km else spec.split(","):
+        a, _, b = part.partition("-")
+        if km:
+            lo, hi = float(a) * 1000, float(b or a) * 1000
+            out.update(range(max(0, int(lo // chunk_m)), min(n, int(math.ceil(hi / chunk_m - 1e-9))) or 1))
+        else:
+            out.update(range(int(a), int(b or a) + 1))
+    return sorted(i for i in out if 0 <= i < n)
 
 
 def parse_shots(spec: str | None, length_m: float) -> list:

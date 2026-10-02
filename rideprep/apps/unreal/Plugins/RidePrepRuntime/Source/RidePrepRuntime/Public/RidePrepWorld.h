@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "RidePrepTypes.h"
+#include "RidePrepLaneKeeper.h"
 #include "RidePrepWorld.generated.h"
 
 class URidePrepCourse;
@@ -37,6 +38,8 @@ public:
     UPROPERTY(EditAnywhere, Category = "RidePrep|Streaming") float ChunkAheadM = 3000;
     UPROPERTY(EditAnywhere, Category = "RidePrep|Streaming") float ChunkBehindM = 500;
     UPROPERTY(EditAnywhere, Category = "RidePrep|Streaming") float VegetationRadiusM = 3000;
+    /** Line on the road: keep right ~1 m from the edge (open roads) or the racing line (closed roads). */
+    UPROPERTY(EditAnywhere, Category = "RidePrep|Rider") bool bRacingLine = false;
 
     /**
      * Real-world view: Google Photorealistic 3D Tiles (what Google Earth shows) streamed through Cesium for Unreal,
@@ -86,6 +89,10 @@ private:
     TMap<FIntPoint, TArray<int32>> InstanceCells;
     TSet<FIntPoint> FoliageCellsLoaded;
     UPROPERTY() TMap<int32, TObjectPtr<AActor>> LoadedChunks;
+    /** Presentation physics: where the bike rides across the road (RidePrepLaneKeeper.h, same as the web client). */
+    TUniquePtr<RidePrep::LaneKeeper> Lane;
+    double LastLaneS = -1e9;
+    FVector RiderOnRoad(double S, double OffsetM) const;
     TSet<int32> ChunksLoading;
     double LastStreamS = -1e9;
 };

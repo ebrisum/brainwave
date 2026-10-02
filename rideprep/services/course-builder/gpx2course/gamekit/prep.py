@@ -10,6 +10,8 @@ All GIS work happens here (numpy/shapely); Blender only turns specs into meshes.
   instances kit asset → [[x, y, z, rotZ, scale]] (vines along real vineyard rows, orchard grids, forest scatter,
             poplars on canals, reeds and flamingos at the salt pans, garden trees, delineators, guardrails,
             streetlights, town signs, race barriers).
+  roadside  rules from roadside.py: tree setback from the road edge, gravel shoulder widths, guardrail runs (drops,
+            bridges, water), and road-surface defects (potholes, patches, cracks, crumbling edges).
 Coordinates are ENU metres relative to the chunk origin. Deterministic (hash-seeded RNG per chunk/feature).
 """
 from __future__ import annotations
@@ -24,6 +26,8 @@ import shapely
 from scipy.spatial import cKDTree
 from shapely.geometry import shape
 from shapely.ops import substring
+
+from . import roadside
 
 GRID_M = 6.0
 HALF_WIDTH_M = 240.0
@@ -225,6 +229,23 @@ def prepare(pkg_dir: Path, kit: dict, out_dir: Path, half_width_m: float = HALF_
         dens = np.zeros(r["count"], int)
     urban = np.convolve(dens >= 4, np.ones(9) / 9, mode="same") > 0.5
 
+    # Roadside rules: guardrail runs are evaluated on the whole route so chunk boundaries never split a run
+    rules = roadside.rules(kit)
+    wline_tree = shapely.STRtree(waterways) if waterways else None
+
+    def water_near(xs, ys, dist):
+        out = np.zeros(len(xs), bool)
+        pts_ = shapely.points(xs, ys)
+        if w_tree is not None:
+            pi, _ = w_tree.query(pts_, predicate="dwithin", distance=dist)
+            out[pi] = True
+        if wline_tree is not None:  # canals/streams mapped as lines: their banks are ~2 m off the line
+            pi, _ = wline_tree.query(pts_, predicate="dwithin", distance=dist + 2.0)
+            out[pi] = True
+        return out
+
+    rail_runs = roadside.guardrail_runs(r, H, urban, water_near, rules)
+
     # Town centres → local frame (for town signs and coastal species)
     from ..geo import LocalFrame
 
@@ -239,11 +260,14 @@ def prepare(pkg_dir: Path, kit: dict, out_dir: Path, half_width_m: float = HALF_
     out_dir.mkdir(parents=True, exist_ok=True)
     classes = terrain_classes(kit)
     index = []
+    defect_counts = {kd: 0 for kd in roadside.KINDS}
     ids = chunk_ids if chunk_ids is not None else list(range(n_chunks))
     for k in ids:
         spec = _chunk(k, r, H, lc, rtree, sample_chunk, n_chunks, half_width_m, grid_m, kit, landuse, lu_tree, lu_material, water, w_tree,
-                      water_material, roads, side_tree, bpolys, b_tree, urban, town_xy, town_idx, coast_x, waterways)
+                      water_material, roads, side_tree, bpolys, b_tree, urban, town_xy, town_idx, coast_x, waterways, rules, rail_runs)
         (out_dir / f"g{k}.json").write_text(json.dumps(spec, separators=(",", ":")))
+        for kd, n_ in roadside.summary(spec["road"]["defects"]).items():
+            defect_counts[kd] += n_
         mask = landuse_mask(spec, classes)
         if mask is not None:
             png, bounds = mask
@@ -256,16 +280,21 @@ def prepare(pkg_dir: Path, kit: dict, out_dir: Path, half_width_m: float = HALF_
                    round(float((cells[:, 0].max() + 1) * grid_m), 1), round(float((cells[:, 1].max() + 1) * grid_m), 1)] if len(cells) else None)
         index.append({"landuseBounds": spec_bounds, "bounds": bounds, "id": k, "sStart": k * CHUNK_M, "sEnd": min(L, (k + 1) * CHUNK_M), "origin": spec["origin"],
                       "counts": {"cells": len(spec["terrain"]["cells"]), "buildings": len(spec["buildings"]), "sideRoads": len(spec["sideRoads"]),
-                                 "instances": sum(len(v) for v in spec["instances"].values())}})
+                                 "instances": sum(len(v) for v in spec["instances"].values()), "defects": len(spec["road"]["defects"]),
+                                 "guardrails": len(spec["instances"].get("guardrail_4m", []))}})
     far = _far_terrain(pkg, H, lc, rtree, half_width_m, kit, sample_chunk)
     (out_dir / "far.json").write_text(json.dumps(far, separators=(",", ":")))
-    doc = {"kit": kit["name"], "gridM": grid_m, "halfWidthM": half_width_m, "chunkM": CHUNK_M, "chunks": index, "landuseClasses": classes}
+    rail_m = sum(b_ - a_ for _, a_, b_ in rail_runs)
+    doc = {"kit": kit["name"], "gridM": grid_m, "halfWidthM": half_width_m, "chunkM": CHUNK_M, "chunks": index, "landuseClasses": classes,
+           "roadside": {"rules": rules, "guardrailM": round(rail_m), "guardrailRuns": len(rail_runs), "defects": defect_counts}}
     (out_dir / "index.json").write_text(json.dumps(doc, indent=1))
     return doc
 
 
 def _chunk(k, r, H, lc, rtree, sample_chunk, n_chunks, W, G, kit, landuse, lu_tree, lu_material, water, w_tree, water_material,
-           roads, side_tree, bpolys, b_tree, urban, town_xy, town_idx, coast_x, waterways):
+           roads, side_tree, bpolys, b_tree, urban, town_xy, town_idx, coast_x, waterways, rules=None, rail_runs=()):
+    rules = rules or roadside.rules(kit)
+    tree_clear, hedge_clear = rules["treeSetbackM"], rules["hedgeSetbackM"]
     sel = np.nonzero(sample_chunk == k)[0]
     a, b = max(0, sel[0] - 1), min(r["count"] - 1, sel[-1] + 1)
     ox, oy, oz = round(float(r["x"][a])), round(float(r["y"][a])), round(float(r["z"][a]))
@@ -326,10 +355,11 @@ def _chunk(k, r, H, lc, rtree, sample_chunk, n_chunks, W, G, kit, landuse, lu_tr
     road = {"s": np.round(r["s"][rs], 2).tolist(), "x": np.round(r["x"][rs] - ox, 3).tolist(), "y": np.round(r["y"][rs] - oy, 3).tolist(),
             "z": np.round(r["z"][rs] - oz, 3).tolist(), "heading": np.round(r["headingRad"][rs], 5).tolist(),
             "width": np.round(r["roadWidthM"][rs], 2).tolist(), "bridge": r["bridgeMask"][rs].tolist(), "urban": urban[rs].tolist(),
-            "material": ["gravel" if c in (6, 7, 8) else ("paving_porphyry" if c in (4, 5) else
-                         ("asphalt" if h in ("primary", "secondary", "trunk") else "asphalt_worn")) for c, h in zip(surf, r["highway"][rs])],
+            "material": [roadside.road_material(int(c), str(h)) for c, h in zip(surf, r["highway"][rs])],
             "terrainZ": np.round(H(r["x"][rs], r["y"][rs]) - oz, 2).tolist(),
-            "bankDeg": np.round(r["bankDeg"][rs], 2).tolist() if "bankDeg" in r else [0.0] * (b + 1 - a)}
+            "bankDeg": np.round(r["bankDeg"][rs], 2).tolist() if "bankDeg" in r else [0.0] * (b + 1 - a),
+            "shoulder": roadside.shoulder_widths(r, range(a, b + 1), urban, rules),
+            "defects": roadside.defects_for(r, sel, urban, rules)}
     hw_route = r["roadWidthM"] / 2
 
     # Area of this chunk (union of its cells as a rough polygon) for selecting features
@@ -462,7 +492,7 @@ def _chunk(k, r, H, lc, rtree, sample_chunk, n_chunks, W, G, kit, landuse, lu_tr
         cls = lc.sample(FX, FY).astype(int)
         t = cls == 10
         FX, FY = FX[t], FY[t]
-        keep = ~blocked(FX, FY, 3.0)
+        keep = ~blocked(FX, FY, 3.0, tree_clear)
         FX, FY = FX[keep], FY[keep]
         if len(FX):
             z = H(FX, FY)
@@ -483,7 +513,7 @@ def _chunk(k, r, H, lc, rtree, sample_chunk, n_chunks, W, G, kit, landuse, lu_tr
         P = P[shapely.contains_xy(part, P[:, 0], P[:, 1])][:n]
         if len(P) == 0:
             continue
-        P = P[~blocked(P[:, 0], P[:, 1], 2.5)]
+        P = P[~blocked(P[:, 0], P[:, 1], 2.5, tree_clear)]
         z = H(P[:, 0], P[:, 1])
         mix = veg["garden"]["mix"]
         if lu == "cemetery":
@@ -513,7 +543,7 @@ def _chunk(k, r, H, lc, rtree, sample_chunk, n_chunks, W, G, kit, landuse, lu_tr
                         continue
                     q0, q1 = seg.interpolate(t), seg.interpolate(min(seg.length, t + 1.0))
                     x, y = q0.x, q0.y
-                    if blocked(np.array([x]), np.array([y]), 1.5)[0]:
+                    if blocked(np.array([x]), np.array([y]), 1.5, hedge_clear if treat == "hedge_4m" else tree_clear)[0]:
                         continue
                     ang = math.atan2(q1.y - q0.y, q1.x - q0.x)
                     put(treat, x, y, float(H(x, y)), ang if treat == "hedge_4m" else g_rng.random() * math.tau,
@@ -529,7 +559,7 @@ def _chunk(k, r, H, lc, rtree, sample_chunk, n_chunks, W, G, kit, landuse, lu_tr
                     continue
                 if not in_area(np.array([x_line]), np.array([yy]))[0] or int(lc.sample(np.array([x_line]), np.array([yy]))[0]) != 40:
                     continue
-                if blocked(np.array([x_line]), np.array([yy]), 1.5)[0]:
+                if blocked(np.array([x_line]), np.array([yy]), 1.5, hedge_clear if treat == "hedge_4m" else tree_clear)[0]:
                     continue
                 put(treat, x_line, yy, float(H(x_line, yy)), math.pi / 2 if treat == "hedge_4m" else g_rng.random() * math.tau, 1.0)
 
@@ -555,7 +585,7 @@ def _chunk(k, r, H, lc, rtree, sample_chunk, n_chunks, W, G, kit, landuse, lu_tr
                     if shapely.contains_xy(part, x, y):
                         put("flamingo", x, y, float(H(x, y)) - 0.25, g_rng.random() * math.tau, 0.9 + 0.2 * g_rng.random())
     # Poplar lines along canals, rivers and streams
-    _poplars(kit, area, put, H, g_rng, blocked, waterways)
+    _poplars(kit, area, put, H, g_rng, blocked, waterways, tree_clear)
 
     # Campanili beside churches
     for (x, y), zb in church_spots:
@@ -563,12 +593,14 @@ def _chunk(k, r, H, lc, rtree, sample_chunk, n_chunks, W, G, kit, landuse, lu_tr
 
     # ---- road furniture along the course road
     _road_props(k, r, a, b, urban, H, put, kit, town_xy, town_idx, g_rng)
+    L = float(r["s"][-1])
+    roadside.place_guardrails(rail_runs, r, k * CHUNK_M, L + 1.0 if k == n_chunks - 1 else (k + 1) * CHUNK_M, H, put)
     for key in inst:
         inst[key].sort()
     return {"id": k, "origin": [ox, oy, oz], "terrain": terrain, "road": road, "sideRoads": side, "buildings": bl, "instances": inst}
 
 
-def _poplars(kit, area, put, H, g_rng, blocked, waterways):
+def _poplars(kit, area, put, H, g_rng, blocked, waterways, tree_clear=None):
     v = kit["vegetation"]["canal"]
     for line in waterways:
         if not line.intersects(area):
@@ -586,13 +618,14 @@ def _poplars(kit, area, put, H, g_rng, blocked, waterways):
                 dx, dy = p1.x - p0.x, p1.y - p0.y
                 L = math.hypot(dx, dy) or 1
                 x, y = p0.x - dy / L * v["offsetM"] * side, p0.y + dx / L * v["offsetM"] * side
-                if blocked(np.array([x]), np.array([y]), 2.5)[0]:
+                if blocked(np.array([x]), np.array([y]), 2.5, tree_clear)[0]:
                     continue
                 put(v["asset"], x, y, float(H(x, y)), g_rng.random() * math.tau, 0.85 + 0.3 * g_rng.random())
 
 
 class _Blocker:
-    """Rejects scatter points on the course road, side roads or inside buildings."""
+    """Rejects scatter points on the course road (closer than `road_clear` to its edge; default margin + 1.5 m), on
+    side roads or in/at buildings."""
 
     def __init__(self, r, rtree, hw, side, origin, b_tree, bpolys):
         self.rtree, self.hw = rtree, hw
@@ -602,13 +635,13 @@ class _Blocker:
         self.side_w = np.array([s["width"] / 2 for s in side if len(s["pts"]) >= 2])
         self.b_tree, self.bpolys = b_tree, bpolys
 
-    def __call__(self, x, y, margin):
+    def __call__(self, x, y, margin, road_clear=None):
         x = np.asarray(x, float)
         y = np.asarray(y, float)
         if len(x) == 0:
             return np.zeros(0, bool)
         d, i = self.rtree.query(np.c_[x, y])
-        bad = d < self.hw[i] + margin + 1.5
+        bad = d < self.hw[i] + (margin + 1.5 if road_clear is None else road_clear)
         pts = shapely.points(x, y)
         if self.side is not None:
             pi, gi = self.side.query(pts, predicate="dwithin", distance=margin + 3.0)
@@ -682,7 +715,7 @@ def _road_props(k, r, a, b, urban, H, put, kit, town_xy, town_idx, g):
         hd = r["headingRad"][i]
         ux, uy = math.sin(hd), math.cos(hd)  # travel direction (compass heading, x = east)
         nx, ny = uy, -ux  # right-hand normal
-        x, y, z = r["x"][i], r["y"][i], r["z"][i]
+        x, y = r["x"][i], r["y"][i]
         rural = not urban[i]
         bridge = bool(r["bridgeMask"][i])
         # Delineators every 50 m (rural), both sides
@@ -691,16 +724,7 @@ def _road_props(k, r, a, b, urban, H, put, kit, town_xy, town_idx, g):
                 off = hw[i] + 0.7
                 px, py = x + nx * off * side, y + ny * off * side
                 put("delineator", px, py, float(H(px, py)), -hd + (math.pi if side < 0 else 0), 1.0)
-        # Guardrail: bridges and embankments (terrain falls away beside the road)
-        if int(round(s[i] / r["spacing"])) % 4 == 0:  # every 20 m sample stride → place 4 m segments in runs
-            for side in (1, -1):
-                off = hw[i] + 0.5
-                px, py = x + nx * off * side, y + ny * off * side
-                drop = z - float(H(x + nx * (off + 4) * side, y + ny * (off + 4) * side))
-                if bridge or drop > pr["guardrailEmbankmentM"]:
-                    for kk in range(5):
-                        qx, qy = px + ux * kk * 4, py + uy * kk * 4
-                        put("guardrail_4m", qx, qy, z - 0.05, math.atan2(uy, ux) + (math.pi if side < 0 else 0), 1.0)
+        # (guardrails: roadside.place_guardrails, from whole-route runs)
         # Streetlights in towns
         if not rural and int(s[i] // pr["streetlightStepM"]) != int((s[i] - r["spacing"]) // pr["streetlightStepM"]):
             off = hw[i] + 1.8

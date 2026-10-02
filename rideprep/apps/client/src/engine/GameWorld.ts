@@ -140,10 +140,25 @@ export class GameWorld {
     root.traverse((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
-      m.material = Array.isArray(m.material) ? m.material.map((x) => this.kitMaterial(x)) : this.kitMaterial(m.material);
+      // Road defects are decals a few mm above the asphalt: pull them forward in depth so they never z-fight
+      const bind = /^defects/.test(m.name) ? (x: THREE.Material) => this.decal(this.kitMaterial(x)) : (x: THREE.Material) => this.kitMaterial(x);
+      m.material = Array.isArray(m.material) ? m.material.map(bind) : bind(m.material);
       m.receiveShadow = true;
       m.castShadow = /^buildings|^road/.test(m.name);
     });
+  }
+
+  private decals = new Map<THREE.Material, THREE.Material>();
+  private decal(base: THREE.Material): THREE.Material {
+    let d = this.decals.get(base);
+    if (!d) {
+      d = base.clone();
+      d.polygonOffset = true;
+      d.polygonOffsetFactor = -2;
+      d.polygonOffsetUnits = -4;
+      this.decals.set(base, d);
+    }
+    return d;
   }
 
   private async loadFar() {
@@ -245,6 +260,7 @@ export class GameWorld {
     this.loaded.clear();
     disposeObject(this.group);
     this.mats.forEach((m) => m.dispose());
+    this.decals.forEach((m) => m.dispose());
     this.textures.forEach((t) => t.dispose());
     this.assets.forEach((ms) => ms.forEach((m) => m.geometry.dispose()));
   }

@@ -113,3 +113,15 @@ One line each: what was decided and why. Newest at the bottom of each section.
   speed-limited lateral motion, and adds the matching yaw and lean; slow climbs weave with the pedal stroke. The
   physics distance along the route is untouched.
 
+## Photoreal road (Unreal hybrid)
+- Roadside "PCG" rules (tree setback, shoulders, guardrails) and road defects are evaluated in the pipeline, not by
+  engine PCG at load time: deterministic, testable, identical in the web client and Unreal. Unreal's PCG graph only
+  scatters ground detail and gets the course road as splines for exclusion.
+- Micro-detail is real geometry baked per chunk for Nanite (opt-in `--hero`), not runtime tessellation/displacement:
+  potholes and crumbled edges then exist for collision (tyre traces hit the pothole floor) and look the same in every
+  engine version. Dense only where needed (~1 M triangles per 500 m); the whole 90 km course is ~5 GB of GLB.
+- Road-edge blending uses one Runtime Virtual Texture over the corridor plus a baked `RoadMask` vertex colour as the
+  blend weight; the mask alone (blend toward gravel) is the fallback without RVT.
+- Riding physics stays with the power model; Chaos vehicles are not used. Presentation physics (line on the road, yaw,
+  lean, surface vibration/sound/dust) is shared C++/TS code where possible (LaneKeeper, cross-tested).
+
