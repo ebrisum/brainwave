@@ -15,7 +15,7 @@ from ..providers import ProviderUnavailable
 # route.bin layout (spec §5): order and dtypes
 ROUTE_ARRAYS = [("s", "float32"), ("x", "float32"), ("y", "float32"), ("z", "float32"), ("gradePct", "float32"),
                 ("headingRad", "float32"), ("radiusM", "float32"), ("crrMultiplier", "float32"), ("surfaceCode", "uint8"),
-                ("roadWidthM", "uint8")]
+                ("roadWidthM", "uint8"), ("bankDeg", "float32")]
 
 TILE_M = 3000.0      # corridor raster tile size (local frame)
 TILE_RES_M = 10.0    # corridor raster resolution

@@ -54,7 +54,34 @@ export interface Manifest {
   warnings?: { stage: string; code: string; message: string }[];
   /** Present while the full bake is still running (progressive streaming). */
   partial?: boolean;
+  /** Game-art layer (`gpx2course game`): regional art kit + textured chunks. */
+  game?: { index: string; kit: string };
 }
+
+/** game/index.json (docs/GAME_ART.md). */
+export interface GameIndex {
+  version: number;
+  kit: { name: string; label: string; version: number; dir: string; glb: string; materials: string; assets: string };
+  chunkM: number;
+  gridM: number;
+  halfWidthM: number;
+  far: string;
+  compression: "meshopt" | "none";
+  landuseClasses?: string[];
+  chunks: { id: number; sStart: number; sEnd: number; origin: [number, number, number]; glb: string; instances: string;
+            /** ENU bounding box of the chunk's terrain cells [xmin, ymin, xmax, ymax] (absolute, metres). */
+            bounds?: [number, number, number, number] | null;
+            counts: { cells: number; buildings: number; sideRoads: number; instances: number } }[];
+  attribution: string[];
+}
+
+export interface KitMaterial {
+  tileM?: number | [number, number] | null; roughness: number; metallic: number; color?: string; albedo?: string; normal?: string;
+  alpha?: number; alphaCutoff?: number; emissive?: number;
+}
+
+/** game/chunks/g<id>.inst.json: kit asset → [x, y, z, rotZ, scale] rows, chunk-local ENU metres. */
+export interface GameInstances { origin: [number, number, number]; instances: Record<string, [number, number, number, number, number][]> }
 
 export interface QuickBuilding { h: number; z: number; type: string; roof: string; near: boolean; ring: [number, number][] }
 export interface QuickRoad { w: number; surface: string; pts: [number, number, number][] }

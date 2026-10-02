@@ -286,15 +286,15 @@
       "stops": [
         [
           0,
-          "#55554a"
+          "#5f5e43"
         ],
         [
           0.5,
-          "#67665a"
+          "#74704f"
         ],
         [
           1,
-          "#7d7a69"
+          "#8d8662"
         ]
       ],
       "detail": 3,
@@ -323,15 +323,15 @@
     "saltpan_water": {
       "gen": "water",
       "tileM": 16,
-      "color": "#8b8f86",
-      "shallow": "#c9a9a0",
+      "color": "#5f7178",
+      "shallow": "#9a8a86",
       "roughness": 0.06
     },
     "water": {
       "gen": "water",
       "tileM": 16,
-      "color": "#4c6260",
-      "shallow": "#6d7f6c",
+      "color": "#3f5556",
+      "shallow": "#5d6e5c",
       "roughness": 0.06
     },
     "wetland": {

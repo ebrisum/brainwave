@@ -6,6 +6,7 @@ import { CameraRig } from "./CameraRig";
 import { ChunkStreamer } from "./ChunkStreamer";
 import { CourseMarkers } from "./CourseMarkers";
 import { Cockpit } from "./Cockpit";
+import { GameWorld } from "./GameWorld";
 import { Photoreal, PhotorealOptions } from "./Photoreal";
 import { preset } from "./quality";
 import { RiderAvatar } from "./RiderAvatar";
@@ -40,6 +41,7 @@ export class World {
   markers: CourseMarkers;
   cockpit = new Cockpit();
   photoreal?: Photoreal;
+  game?: GameWorld;
   cameraMode: CameraMode = "chase";
   fps = 60;
   private raf = 0;
@@ -105,6 +107,28 @@ export class World {
   }
 
   private water: THREE.Group;
+  private lastGame = -1e9;
+
+  /**
+   * Game-art world: the regional art kit's textured terrain, roads, buildings and instanced vegetation replace the
+   * generated quick/lite world (course markers and the rider stay).
+   */
+  setGame(gw: GameWorld | undefined) {
+    if (this.game) {
+      this.scene.remove(this.game.group);
+      this.game.dispose();
+    }
+    this.game = gw;
+    const on = !!gw && !this.photoreal;
+    for (const g of [this.terrain.group, this.vegetation.group, this.chunks.group, this.buildings?.group, this.water, this.road.group]) if (g) g.visible = !on;
+    if (gw) {
+      this.scene.add(gw.group);
+      gw.group.visible = !this.photoreal;
+      this.lastGame = -1e9;
+      this.scene.environment ??= GameWorld.environment(this.renderer);
+      this.scene.environmentIntensity = 0.75;
+    }
+  }
 
   /**
    * Real-world view: photogrammetric 3D tiles replace our generated terrain, buildings, trees and baked chunks.
@@ -114,7 +138,9 @@ export class World {
     this.photoreal?.dispose();
     this.photoreal = undefined;
     const on = !!opts;
-    for (const g of [this.terrain.group, this.vegetation.group, this.chunks.group, this.buildings?.group, this.water]) if (g) g.visible = !on;
+    for (const g of [this.terrain.group, this.vegetation.group, this.chunks.group, this.buildings?.group, this.water]) if (g) g.visible = !on && !this.game;
+    if (this.game) this.game.group.visible = !on;
+    this.road.group.visible = on || !this.game;
     if (on) {
       this.road.chunks.forEach((m) => (m.visible = true));
       this.road.material.polygonOffset = true;
@@ -236,7 +262,11 @@ export class World {
       this.camera.updateMatrixWorld();
       this.photoreal.update(st.s);
     }
-    if (!this.photoreal && Math.abs(st.s - this.lastStream) > 50) {
+    if (this.game && !this.photoreal && Math.abs(st.s - this.lastGame) > 8) {
+      this.lastGame = st.s;
+      this.game.update(st.s, this.camera.position);
+    }
+    if (!this.photoreal && !this.game && Math.abs(st.s - this.lastStream) > 50) {
       this.lastStream = st.s;
       this.terrain.update(p.x, p.y);
       this.vegetation.update(p.x, p.y);
@@ -253,6 +283,7 @@ export class World {
     this.chunks.dispose();
     this.buildings?.dispose();
     this.photoreal?.dispose();
+    this.game?.dispose();
     this.renderer.dispose();
   }
 }

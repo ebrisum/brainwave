@@ -114,9 +114,17 @@ def strip(mb, pts, offs_l, offs_r, dz_l, dz_r, mid, v0=0.0, u_l=None, u_r=None):
     return v
 
 
+def cs(off, bank_deg, crown=0.02):
+    """Cross-slope height at a lateral offset (+ right): crown blended into superelevation (gpx2course/roadgeom.py)."""
+    t = math.tan(math.radians(bank_deg))
+    w = min(1.0, abs(t) / 0.025)
+    return (1 - w) * (-crown * abs(off)) + w * (-t * off)
+
+
 def build_course_road(spec, textured, col=None):
     rd = spec["road"]
     n = len(rd["x"])
+    bank = rd.get("bankDeg") or [0.0] * n
     pts = [(rd["x"][k], rd["y"][k], rd["z"][k] + 0.04) for k in range(n)]
     hw = [w / 2 for w in rd["width"]]
     v0 = rd["s"][0] % 96
@@ -126,11 +134,11 @@ def build_course_road(spec, textured, col=None):
     for k in range(1, n + 1):
         if k == n or rd["material"][k] != rd["material"][start]:
             sl = slice(max(start - 1, 0), k)
-            seg, h = pts[sl], hw[sl]
+            seg, h, bk = pts[sl], hw[sl], bank[sl]
             mid = rd["material"][start]
             v = (rd["s"][max(start - 1, 0)] % 96)
-            strip(mb, seg, [-w for w in h], 0.0, [-0.02 * w for w in h], 0.0, mid, v)
-            strip(mb, seg, 0.0, h, 0.0, [-0.02 * w for w in h], mid, v)
+            strip(mb, seg, [-w for w in h], 0.0, [cs(-w, q) for w, q in zip(h, bk)], 0.0, mid, v)
+            strip(mb, seg, 0.0, h, 0.0, [cs(w, q) for w, q in zip(h, bk)], mid, v)
             start = k
     # Italian markings: continuous white edge lines (12 cm, 25 cm in from the edge), dashed centre 4.5 m / 7.5 m gaps
     mk = MeshBuilder(f"markings_{spec['id']}")
@@ -149,7 +157,8 @@ def build_course_road(spec, textured, col=None):
                 if len(gk) < 2:
                     continue
                 strip(mk, [pts[k] for k in gk], [side * (hw[k] - 0.25) - 0.06 for k in gk], [side * (hw[k] - 0.25) + 0.06 for k in gk],
-                      [-0.02 * hw[k] + 0.012 for k in gk], [-0.02 * hw[k] + 0.012 for k in gk], "marking_white")
+                      [cs(side * (hw[k] - 0.25) - 0.06, bank[k]) + 0.012 for k in gk], [cs(side * (hw[k] - 0.25) + 0.06, bank[k]) + 0.012 for k in gk],
+                      "marking_white")
     for k in range(n - 1):
         if hw[k] * 2 >= 5.5 and (rd["s"][k] % 12.0) < 4.5:
             strip(mk, [pts[k], pts[k + 1]], -0.06, 0.06, 0.012, 0.012, "marking_white")
@@ -167,7 +176,7 @@ def build_course_road(spec, textured, col=None):
             seg = [pts[q] for q in sl]
             if len(seg) >= 2:
                 e = [side * hw[q] for q in sl]
-                edge_dz = [-0.02 * hw[q] for q in sl]
+                edge_dz = [cs(side * hw[q], bank[q]) for q in sl]
                 if urb:
                     # kerb face (15 cm), sidewalk 1.6 m, then down to terrain
                     o1 = [side * (hw[q] + 0.0) for q in sl]
@@ -314,24 +323,36 @@ def build_buildings(spec, textured, col=None):
 # ---- far field ----------------------------------------------------------------------------------------------------
 
 
-def build_far(far, textured, col=None, origin=(0.0, 0.0, 0.0)):
-    mb = MeshBuilder("far_terrain")
+def build_far(far, textured, col=None, origin=(0.0, 0.0, 0.0), fills=True):
+    """far_base: cells outside the near corridor; farfill_<chunk>: corridor cells per chunk (shown while that chunk's
+    near geometry is not loaded — web streaming; Unreal loads every chunk and skips them)."""
     w, h = far["w"], far["h"]
     Z = far["z"]
-    verts = {}
+    fill = far.get("fill") or [-1] * (w * h)
+    builders = {}
 
-    def vert(i, j):  # i: column, j: row
-        k = (i, j)
-        v = verts.get(k)
-        if v is None:
-            v = verts[k] = mb.bm.verts.new((far["x0"] + i * far["dx"] - origin[0], far["y0"] + j * far["dy"] - origin[1], Z[j * (w + 1) + i] - origin[2]))
-        return v
+    def mb_for(key):
+        b = builders.get(key)
+        if b is None:
+            b = builders[key] = (MeshBuilder("far_base" if key < 0 else f"farfill_{key}"), {})
+        return b
 
     for j in range(h):
         for i in range(w):
             c = j * w + i
-            if far["skip"][c]:
+            key = int(fill[c]) if far["skip"][c] else -1
+            if key >= 0 and not fills:
                 continue
+            mb, verts = mb_for(key)
+
+            def vert(ii, jj):
+                k = (ii, jj)
+                v = verts.get(k)
+                if v is None:
+                    v = verts[k] = mb.bm.verts.new((far["x0"] + ii * far["dx"] - origin[0], far["y0"] + jj * far["dy"] - origin[1],
+                                                    Z[jj * (w + 1) + ii] - origin[2] - (0.6 if key >= 0 else 0.0)))
+                return v
+
             q = [vert(i, j), vert(i + 1, j), vert(i + 1, j + 1), vert(i, j + 1)]
             try:
                 f = mb.bm.faces.new(q[::-1] if far["dy"] < 0 else q)
@@ -341,7 +362,7 @@ def build_far(far, textured, col=None, origin=(0.0, 0.0, 0.0)):
             f.smooth = True
             for loop in f.loops:
                 loop[mb.uv].uv = (loop.vert.co.x, loop.vert.co.y)
-    return mb.build(textured, col)
+    return [mb.build(textured, col) for mb, _ in builders.values() if mb.bm.faces]
 
 
 def export(path, objs):
@@ -376,7 +397,7 @@ def main():
         kitlib.reset_scene()
         kitlib.load_kit(a.kit)
         far = json.load(open(os.path.join(a.specs, "far.json")))
-        export(os.path.join(a.out, "far.glb"), [build_far(far, textured=False)])
+        export(os.path.join(a.out, "far.glb"), build_far(far, textured=False))
         print("baked far", flush=True)
 
 

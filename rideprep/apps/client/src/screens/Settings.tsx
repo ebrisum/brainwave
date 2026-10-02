@@ -31,6 +31,7 @@ export function Settings() {
         <label>Trainer difficulty ({Math.round(s.trainerDifficulty * 100)} %)<input type="range" min="0" max="1.5" step="0.05" value={s.trainerDifficulty} onChange={(e) => updateSettings({ trainerDifficulty: num(e.target.value) })} /></label>
         <label className="check"><input type="checkbox" checked={s.corneringRealism} onChange={(e) => updateSettings({ corneringRealism: e.target.checked })} />Cornering realism (auto-brake)</label>
         <label className="check"><input type="checkbox" checked={s.gusts} onChange={(e) => updateSettings({ gusts: e.target.checked })} />Gusts</label>
+        <label className="check"><input type="checkbox" checked={s.gameArt} onChange={(e) => updateSettings({ gameArt: e.target.checked })} />Game art (regional art kit) when the course has it</label>
         <h2>Real-world view</h2>
         <label>Photoreal source<select value={s.photoreal} onChange={(e) => updateSettings({ photoreal: e.target.value as PhotorealSource })}>
           <option value="off">Off — generated world</option>

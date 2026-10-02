@@ -364,7 +364,7 @@ def main():
         entry = {"lods": []}
         for lod in (0, 1):
             mb = fn(lod)
-            ob = mb.build(textured=True, collection=col)
+            ob = mb.build(textured=True, collection=col, crown_normals=True)
             objs.append(ob)
             tris = sum(len(p.vertices) - 2 for p in ob.data.polygons)
             bb = [ob.matrix_world @ mathutils.Vector(c) for c in ob.bound_box]

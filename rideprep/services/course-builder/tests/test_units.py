@@ -190,3 +190,22 @@ def test_kit_textures_tile_and_are_deterministic():
     assert np.abs(a[:, 0] - a[:, -1]).mean() < 3 * np.abs(np.diff(a, axis=1)).mean()
     rgb, h, r = tx.coppi(64, 1)
     assert rgb.shape == (64, 64, 3) and 0 <= rgb.min() and rgb.max() <= 1.5 and 0 < r <= 1
+
+
+def test_superelevation_follows_turn_direction_and_road_class():
+    from gpx2course.roadgeom import cross_slope_dz, superelevation
+
+    sp = 5.0
+    n = 400
+    # Straight north, then a right-hand bend R = 150 m, then straight east
+    heading = np.r_[np.zeros(150), np.linspace(0, math.pi / 2, 100), np.full(150, math.pi / 2)]
+    radius = np.r_[np.full(150, np.inf), np.full(100, 150.0), np.full(150, np.inf)]
+    bank = superelevation(heading, radius, ["secondary"] * n, sp)
+    assert abs(bank[50]) < 0.05 and abs(bank[350]) < 0.05  # crowned on the straights
+    assert 1.4 < bank[200] <= math.degrees(math.atan(0.07)) + 1e-6  # right bend → right edge lower, ≤ 7 %
+    left = superelevation(-heading, radius, ["secondary"] * n, sp)
+    assert left[200] == pytest.approx(-bank[200])
+    assert np.allclose(superelevation(heading, radius, ["residential"] * n, sp), 0)  # town streets stay crowned
+    assert cross_slope_dz(3.5, 0.0) == pytest.approx(-0.07) and cross_slope_dz(-3.5, 0.0) == pytest.approx(-0.07)
+    t = math.tan(math.radians(4.0))
+    assert cross_slope_dz(3.5, 4.0) == pytest.approx(-3.5 * t) and cross_slope_dz(-3.5, 4.0) == pytest.approx(3.5 * t)

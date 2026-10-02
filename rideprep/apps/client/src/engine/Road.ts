@@ -11,7 +11,7 @@ export class Road {
   chunks: THREE.Mesh[] = [];
   material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
 
-  constructor(private c: CourseProfile & { surfaceCode: Uint8Array; roadWidthM: Uint8Array }, private cat: MaterialCatalogue, chunkM: number) {
+  constructor(private c: CourseProfile & { surfaceCode: Uint8Array; roadWidthM: Uint8Array; bankDeg?: Float32Array }, private cat: MaterialCatalogue, chunkM: number) {
     const n = Math.ceil(c.s[c.count - 1] / chunkM);
     for (let k = 0; k < n; k++) this.chunks.push(this.buildChunk(k * chunkM, (k + 1) * chunkM));
     this.chunks.forEach((m) => this.group.add(m));
@@ -39,12 +39,13 @@ export class Road {
       const hd = c.headingRad[i];
       const nx = Math.cos(hd), ny = -Math.sin(hd);
       const hw = c.roadWidthM[i] / 2;
+      const bank = c.bankDeg ? c.bankDeg[i] : 0;
       const base = color(this.cat, s2m[String(c.surfaceCode[i])] ?? "road_asphalt");
       for (const f of lanes) {
         const off = f * hw;
         const x = c.x[i] + nx * off - ox;
         const y = c.y[i] + ny * off - oy;
-        const z = c.z[i] - oz + 0.04 - 0.02 * Math.abs(off);
+        const z = c.z[i] - oz + 0.04 + crossSlopeDz(off, bank);
         pos.push(x, z, -y);
         const edge = Math.abs(f) >= 0.97 && hw >= 2.5;
         const cc = edge ? mark : base;
@@ -114,4 +115,11 @@ export class Road {
   dispose() {
     disposeObject(this.group);
   }
+}
+
+/** Crowned (2 %) on straights, blended into single-slope superelevation in bends (bankDeg + = right edge lower). */
+export function crossSlopeDz(offsetM: number, bankDeg: number, crown = 0.02): number {
+  const t = Math.tan((bankDeg * Math.PI) / 180);
+  const w = Math.min(1, Math.abs(t) / 0.025);
+  return (1 - w) * -crown * Math.abs(offsetM) + w * -t * offsetM;
 }

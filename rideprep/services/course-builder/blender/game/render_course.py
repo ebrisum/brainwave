@@ -120,7 +120,7 @@ def main():
                 n_inst += 1
     if not a.no_far and os.path.exists(os.path.join(a.specs, "far.json")):
         far = json.load(open(os.path.join(a.specs, "far.json")))
-        bg.build_far(far, textured=True, col=col, origin=W0)
+        bg.build_far(far, textured=True, col=col, origin=W0, fills=False)
     print(f"render: {len(chosen)} chunks, {n_inst} instances", flush=True)
     # Camera
     fx, fy = math.sin(hd), math.cos(hd)

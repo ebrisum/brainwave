@@ -53,6 +53,37 @@ class Pkg:
         return json.loads(self.path(rel).read_text())
 
 
+def terrain_classes(kit: dict) -> list[str]:
+    """Global, stable list of terrain material ids (index = land-use mask value; 0 = no data)."""
+    t = kit["terrain"]
+    names = set(t["water"].values()) | set(t["worldcover"].values())
+    for v in t["landuse"].values():
+        names |= set(v) if isinstance(v, list) else {v}
+    return ["none"] + sorted(names)
+
+
+def landuse_mask(spec: dict, classes: list[str]):
+    """8-bit PNG (one pixel per terrain cell, north up) of class indices + its ENU bounds relative to the chunk origin."""
+    import io
+
+    from PIL import Image
+
+    t = spec["terrain"]
+    if not t["cells"]:
+        return None
+    c = np.asarray(t["cells"])
+    G = t["gridM"]
+    i0, j0 = c[:, 0].min(), c[:, 1].min()
+    w, h = c[:, 0].max() - i0 + 1, c[:, 1].max() - j0 + 1
+    img = np.zeros((h, w), np.uint8)
+    lut = np.array([classes.index(m) for m in t["materials"]], np.uint8)
+    img[h - 1 - (c[:, 1] - j0), c[:, 0] - i0] = lut[c[:, 2]]
+    buf = io.BytesIO()
+    Image.fromarray(img, "L").save(buf, format="PNG", optimize=True)
+    ox, oy, _ = spec["origin"]
+    return buf.getvalue(), [round(i0 * G - ox, 2), round(j0 * G - oy, 2), round((i0 + w) * G - ox, 2), round((j0 + h) * G - oy, 2)]
+
+
 def rng(*key) -> np.random.Generator:
     return np.random.default_rng(int.from_bytes(hashlib.sha256(json.dumps(key, default=str).encode()).digest()[:8], "little"))
 
@@ -206,18 +237,29 @@ def prepare(pkg_dir: Path, kit: dict, out_dir: Path, half_width_m: float = HALF_
     coast_x = float(frame.to_xy(np.array([frame_lat0]), np.array([coast["lonEast"]]))[0][0]) if coast else None
 
     out_dir.mkdir(parents=True, exist_ok=True)
+    classes = terrain_classes(kit)
     index = []
     ids = chunk_ids if chunk_ids is not None else list(range(n_chunks))
     for k in ids:
         spec = _chunk(k, r, H, lc, rtree, sample_chunk, n_chunks, half_width_m, grid_m, kit, landuse, lu_tree, lu_material, water, w_tree,
                       water_material, roads, side_tree, bpolys, b_tree, urban, town_xy, town_idx, coast_x, waterways)
         (out_dir / f"g{k}.json").write_text(json.dumps(spec, separators=(",", ":")))
-        index.append({"id": k, "sStart": k * CHUNK_M, "sEnd": min(L, (k + 1) * CHUNK_M), "origin": spec["origin"],
+        mask = landuse_mask(spec, classes)
+        if mask is not None:
+            png, bounds = mask
+            (out_dir / f"lu{k}.png").write_bytes(png)
+            spec_bounds = bounds
+        else:
+            spec_bounds = None
+        cells = np.asarray(spec["terrain"]["cells"]) if spec["terrain"]["cells"] else np.zeros((0, 3))
+        bounds = ([round(float(cells[:, 0].min() * grid_m), 1), round(float(cells[:, 1].min() * grid_m), 1),
+                   round(float((cells[:, 0].max() + 1) * grid_m), 1), round(float((cells[:, 1].max() + 1) * grid_m), 1)] if len(cells) else None)
+        index.append({"landuseBounds": spec_bounds, "bounds": bounds, "id": k, "sStart": k * CHUNK_M, "sEnd": min(L, (k + 1) * CHUNK_M), "origin": spec["origin"],
                       "counts": {"cells": len(spec["terrain"]["cells"]), "buildings": len(spec["buildings"]), "sideRoads": len(spec["sideRoads"]),
                                  "instances": sum(len(v) for v in spec["instances"].values())}})
-    far = _far_terrain(pkg, H, lc, rtree, half_width_m, kit)
+    far = _far_terrain(pkg, H, lc, rtree, half_width_m, kit, sample_chunk)
     (out_dir / "far.json").write_text(json.dumps(far, separators=(",", ":")))
-    doc = {"kit": kit["name"], "gridM": grid_m, "halfWidthM": half_width_m, "chunkM": CHUNK_M, "chunks": index}
+    doc = {"kit": kit["name"], "gridM": grid_m, "halfWidthM": half_width_m, "chunkM": CHUNK_M, "chunks": index, "landuseClasses": classes}
     (out_dir / "index.json").write_text(json.dumps(doc, indent=1))
     return doc
 
@@ -264,6 +306,14 @@ def _chunk(k, r, H, lc, rtree, sample_chunk, n_chunks, W, G, kit, landuse, lu_tr
         fx, fy = np.floor(cx[rest] / 170.0).astype(int), np.floor(cy[rest] / 110.0).astype(int)
         mats[rest] = [fields[int(h01("field", int(a_), int(b_)) * len(fields))] if c == 40 else wc.get(str(c), "grass_dry")
                       for c, a_, b_ in zip(cls, fx, fy)]
+    # Towns: residential/industrial land use is mostly gardens and yards — paved only near buildings
+    urb = np.array([m == "urban_ground" for m in mats])
+    if urb.any() and b_tree is not None:
+        near_b = np.zeros(len(cx), bool)
+        pi, _ = b_tree.query(pts[urb], predicate="dwithin", distance=7.0)
+        near_b[np.nonzero(urb)[0][pi]] = True
+        garden = urb & ~near_b
+        mats[garden] = ["grass_green" if h01("garden", int(i_), int(j_)) < 0.6 else "grass_dry" for i_, j_ in zip(ci[garden], cj[garden])]
     mat_names = sorted(set(mats))
     mat_idx = {m: i for i, m in enumerate(mat_names)}
     terrain = {"gridM": G, "materials": mat_names, "vertices": np.c_[vi, vj, np.round(vz - oz, 2)].tolist(),
@@ -278,7 +328,8 @@ def _chunk(k, r, H, lc, rtree, sample_chunk, n_chunks, W, G, kit, landuse, lu_tr
             "width": np.round(r["roadWidthM"][rs], 2).tolist(), "bridge": r["bridgeMask"][rs].tolist(), "urban": urban[rs].tolist(),
             "material": ["gravel" if c in (6, 7, 8) else ("paving_porphyry" if c in (4, 5) else
                          ("asphalt" if h in ("primary", "secondary", "trunk") else "asphalt_worn")) for c, h in zip(surf, r["highway"][rs])],
-            "terrainZ": np.round(H(r["x"][rs], r["y"][rs]) - oz, 2).tolist()}
+            "terrainZ": np.round(H(r["x"][rs], r["y"][rs]) - oz, 2).tolist(),
+            "bankDeg": np.round(r["bankDeg"][rs], 2).tolist() if "bankDeg" in r else [0.0] * (b + 1 - a)}
     hw_route = r["roadWidthM"] / 2
 
     # Area of this chunk (union of its cells as a rough polygon) for selecting features
@@ -676,8 +727,9 @@ def _road_props(k, r, a, b, urban, H, put, kit, town_xy, town_idx, g):
                     put("race_barrier_2m", px, py, float(H(px, py)), math.atan2(uy, ux) + (math.pi if side < 0 else 0), 1.0)
 
 
-def _far_terrain(pkg, H, lc, rtree, W, kit, res=90.0):
-    """Coarse textured far field (DEM far raster grid), with cells deep inside the near corridor dropped."""
+def _far_terrain(pkg, H, lc, rtree, W, kit, sample_chunk, res=90.0):
+    """Coarse textured far field (DEM far raster grid). Cells deep inside the near corridor are tagged with the chunk of
+    their nearest route sample ("fill"): engines that stream chunks show a chunk's fill only while it is not loaded."""
     import rasterio
 
     with rasterio.open(pkg.path("corridor/dem_far.tif")) as ds:
@@ -692,12 +744,13 @@ def _far_terrain(pkg, H, lc, rtree, W, kit, res=90.0):
     Z = map_coordinates(z, [np.clip(np.arange(h + 1)[:, None] - 0.5, 0, h - 1) * np.ones((1, w + 1)),
                             np.ones((h + 1, 1)) * np.clip(np.arange(w + 1)[None, :] - 0.5, 0, w - 1)], order=1, mode="nearest")
     ccx, ccy = (X[:-1, :-1] + X[1:, 1:]) / 2, (Y[:-1, :-1] + Y[1:, 1:]) / 2
-    d, _ = rtree.query(np.c_[ccx.ravel(), ccy.ravel()])
+    d, nearest = rtree.query(np.c_[ccx.ravel(), ccy.ravel()])
     inner = (d < W - res).reshape(ccx.shape)
+    fill = np.where(d < W - res, sample_chunk[nearest], -1)
     cls = lc.sample(ccx.ravel(), ccy.ravel()).astype(int).reshape(ccx.shape)
     wc = kit["terrain"]["worldcover"]
     mats = sorted(set(wc.values()))
     mi = {m: i for i, m in enumerate(mats)}
     cell_m = np.vectorize(lambda c: mi[wc.get(str(c), "grass_dry")])(cls)
     return {"res": res, "x0": float(xs[0]), "y0": float(ys[0]), "dx": float(tr.a), "dy": float(tr.e), "w": w, "h": h,
-            "z": np.round(Z - 1.0, 1).ravel().tolist(), "skip": inner.ravel().astype(int).tolist(), "mat": cell_m.ravel().tolist(), "materials": mats}
+            "z": np.round(Z - 1.0, 1).ravel().tolist(), "skip": inner.ravel().astype(int).tolist(), "fill": fill.astype(int).tolist(), "mat": cell_m.ravel().tolist(), "materials": mats}

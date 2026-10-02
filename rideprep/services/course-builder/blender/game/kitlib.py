@@ -180,17 +180,42 @@ class MeshBuilder:
             self.face(vs, [(v[0], v[2]) for v in vs], mid, smooth=True)
         tmp.free()
 
-    def build(self, textured=True, collection=None):
+    def build(self, textured=True, collection=None, crown_normals=False):
         me = bpy.data.meshes.new(self.name)
         bmesh.ops.remove_doubles(self.bm, verts=self.bm.verts, dist=1e-5)
         self.bm.to_mesh(me)
         self.bm.free()
         for mid in self.slots:
             me.materials.append(material(mid, textured))
+        if crown_normals:
+            set_crown_normals(me, [i for i, m in enumerate(self.slots) if m.startswith(("leaf_", "foliage_core", "reed"))])
         ob = bpy.data.objects.new(self.name, me)
         (collection or bpy.context.scene.collection).objects.link(ob)
         ob["materialIds"] = ",".join(self.slots)
         return ob
+
+
+def set_crown_normals(me, foliage_slots):
+    """Game-foliage lighting: foliage cards and crown cores get normals pointing out of the crown (gradient of the
+    foliage's bounding ellipsoid) instead of their face normals, so crowns shade like volumes from any side."""
+    if not foliage_slots:
+        return
+    fol = [p for p in me.polygons if p.material_index in foliage_slots]
+    if not fol:
+        return
+    vs = {i for p in fol for i in p.vertices}
+    co = [me.vertices[i].co for i in vs]
+    lo = mathutils.Vector([min(c[k] for c in co) for k in range(3)])
+    hi = mathutils.Vector([max(c[k] for c in co) for k in range(3)])
+    c = (lo + hi) / 2
+    r = [max((hi[k] - lo[k]) / 2, 0.3) for k in range(3)]
+    corner = [mathutils.Vector(n.vector) for n in me.corner_normals]
+    for p in fol:
+        for li in p.loop_indices:
+            v = me.vertices[me.loops[li].vertex_index].co
+            g = mathutils.Vector(((v.x - c.x) / r[0] ** 2, (v.y - c.y) / r[1] ** 2, (v.z - c.z) / r[2] ** 2 + 0.15 / r[2]))
+            corner[li] = g.normalized() if g.length > 1e-9 else mathutils.Vector((0, 0, 1))
+    me.normals_split_custom_set([tuple(n) for n in corner])
 
 
 def reset_scene():

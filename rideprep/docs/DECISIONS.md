@@ -77,3 +77,12 @@ One line each: what was decided and why. Newest at the bottom of each section.
   the next hairpin leg's terrain covering the road on the Bertinoro climb.
 - Bikes are not physics-simulated vehicles: speed comes from the validated power model (spec §5); the visual bike is
   posed kinematically (lean from speed and curvature).
+- Superelevation (`bankDeg` in route.bin, + = right edge lower) follows the Italian norm's shape: crowned 2.5 % on
+  straights, single slope 2.5–7 % in bends from the class design speed's lateral demand, none in towns, roundabouts or
+  turns under 30 m; 15 m run-off smoothing. Applied by the web ribbon, the game bake and the Unreal road spline.
+- Hybrid Unreal path (after testing the GPX → Geometry Nodes → Chaos proposal): `import_game_level.py` builds a World
+  Partition level from the game chunks (complex collision, Nanite, PhysMats per kit material, HISM per chunk via
+  `ARidePrepInstanceActor`, PCG volumes over land-use masks); kit asset ids can be overridden with high-quality assets.
+- Web game mode: chunk meshes keep metre UVs (gltfpack `-kv -vtf`), kit textures bound by material name; foliage uses
+  outward crown normals (kit) with Lambert shading and no back-face normal flip; calm water gets a subdued specular;
+  chunks stream spatially (terrain bbox within 2.5 km, nearest first) because out-and-back legs share land.

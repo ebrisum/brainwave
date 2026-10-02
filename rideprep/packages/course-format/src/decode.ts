@@ -2,7 +2,7 @@ import { CourseProfile, WindLayers, WIND_LAYERS, WindLayerName } from "@rideprep
 import { Manifest } from "./types";
 
 /** Decode route.bin into the physics course profile (+ surface/width extras). */
-export function decodeRoute(buf: ArrayBuffer, m: Manifest): CourseProfile & { surfaceCode: Uint8Array; roadWidthM: Uint8Array } {
+export function decodeRoute(buf: ArrayBuffer, m: Manifest): CourseProfile & { surfaceCode: Uint8Array; roadWidthM: Uint8Array; bankDeg?: Float32Array } {
   const n = m.route.count;
   const get = (name: string) => {
     const a = m.route.arrays.find((x) => x.name === name);
@@ -23,6 +23,8 @@ export function decodeRoute(buf: ArrayBuffer, m: Manifest): CourseProfile & { su
     spacingM: m.route.sampleSpacingM, count: n, s: f32("s"), x: f32("x"), y: f32("y"), z: f32("z"), gradePct: f32("gradePct"),
     headingRad: f32("headingRad"), radiusM: f32("radiusM"), crrMultiplier: f32("crrMultiplier"), surfaceCode: u8("surfaceCode"),
     roadWidthM: u8("roadWidthM"),
+    // Superelevation (deg, + = right edge lower); absent in packages built before it was added
+    bankDeg: m.route.arrays.some((x) => x.name === "bankDeg") ? f32("bankDeg") : undefined,
   };
 }
 

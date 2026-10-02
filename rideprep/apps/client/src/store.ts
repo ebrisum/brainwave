@@ -19,6 +19,8 @@ export interface Settings {
   googleApiKey: string;
   tilesUrl: string;
   mapillaryToken: string;
+  /** Use the course's game-art layer (Blender art kit) when the package has one. */
+  gameArt: boolean;
 }
 
 /** Live values the HUD shows; written by the ride session ~10×/s, never by React render. */
@@ -42,6 +44,7 @@ const defaults: Settings = {
   googleApiKey: "",
   tilesUrl: "",
   mapillaryToken: "",
+  gameArt: true,
 };
 
 function loadSettings(): Settings {

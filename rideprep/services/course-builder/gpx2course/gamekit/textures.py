@@ -197,16 +197,18 @@ def bricks(n, seed, color="#a2533a", mortar="#cfc3ad"):
 
 
 def setts(n, seed, color="#7c5f55"):
-    """Porphyry setts (cubetti di porfido) laid in arcs — Italian town-centre paving; 2 m tile, ~10 cm stones."""
-    y, x = np.mgrid[0:n, 0:n] / n * 2.0
-    r = np.hypot(x - 1.0, (y % 1.0) - 1.0)  # concentric arcs, one fan per metre
-    ring = np.floor(r / 0.1)
-    ang = np.arctan2((y % 1.0) - 1.0, x - 1.0) * np.maximum(r, 0.1) / 0.1
-    fr, fa = (r / 0.1) % 1.0, ang % 1.0
-    joint = (fr < 0.12) | (fa < 0.12)
-    sid = (ring * 131 + np.floor(ang) * 17).astype(int) % 4096
+    """Porphyry setts (cubetti di porfido) in staggered rows — Italian town-centre paving; ~10 cm stones, 1.2 m tile.
+    (Rows rather than the arc pattern: arcs alias into swirls at riding distance.)"""
+    g = np.random.default_rng(seed)
+    y, x = np.mgrid[0:n, 0:n] / n * 1.2
+    row = np.floor(y / 0.1)
+    jitter = np.random.default_rng(seed + 1).random(4096)[(row.astype(int) * 7) % 4096] * 0.1
+    xs = x + jitter
+    fx, fy = (xs / 0.1) % 1.0, (y / 0.1) % 1.0
+    joint = (fx < 0.1) | (fy < 0.1)
+    sid = (np.floor(xs / 0.1) * 131 + row * 17).astype(int) % 4096
     var = np.random.default_rng(seed).random(4096)[sid]
-    rgb = hexrgb(color) * (0.7 + 0.5 * var[..., None])
+    rgb = hexrgb(color) * (0.72 + 0.45 * var[..., None]) * (0.92 + 0.12 * g.random((n, n)))[..., None]
     rgb[joint] = hexrgb("#4a443d")
     return rgb, (~joint).astype(float) * 0.7 + 0.3 * var, 0.85
 

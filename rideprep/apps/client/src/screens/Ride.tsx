@@ -4,6 +4,7 @@ import { API, courseFetcher } from "../api";
 import { ElevationProfile } from "../components/ElevationProfile";
 import { MiniMap } from "../components/MiniMap";
 import { cache, getCourse, getQuick, startEpochOf } from "../courseCache";
+import { GameWorld } from "../engine/GameWorld";
 import { RenderState, World } from "../engine/World";
 import { solarPosition } from "../ride/solar";
 import { VideoSync } from "../ride/videoSync";
@@ -72,6 +73,7 @@ export function Ride() {
       world = new World(ref.current!, course, courseFetcher(courseId), quick, settings.quality, settings.rider,
         useSession ? () => session!.renderState() : flySource);
       worldRef.current = world;
+      if (import.meta.env.DEV) Object.assign(window as object, { __rideprepWorld: world, __THREE: await import("three") });
       world.cameraMode = camera;
       world.enableGhost(!!session?.opts.ghost);
       const pr = params.get("photoreal") ?? settings.photoreal;
@@ -82,6 +84,13 @@ export function Ride() {
           if (camera === "chase" && !params.get("camera")) { world.cameraMode = "cockpit"; setCamera("cockpit"); }
         } catch (e) {
           setPhotorealError(String(e));
+        }
+      }
+      if (course.manifest.game && settings.gameArt && params.get("game") !== "0") {
+        try {
+          world.setGame(await GameWorld.create(course.manifest, courseFetcher(courseId), world.renderer.capabilities.getMaxAnisotropy()));
+        } catch (e) {
+          console.warn("game art unavailable", e);
         }
       }
       await world.init();

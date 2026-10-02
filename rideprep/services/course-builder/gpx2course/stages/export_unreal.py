@@ -109,7 +109,7 @@ def run(ctx: BuildContext) -> list[str]:
     tz = np.gradient(Z)
     pts = [{"s": round(float(r["s"][k]), 2), "p": [round(float(a), 1), round(float(b), 1), round(float(cc), 1)],
             "t": [round(float(a), 1), round(float(b), 1), round(float(cc), 1)], "widthCm": int(r["roadWidthM"][k] * 100),
-            "bankDeg": 0.0, "surface": int(r["surfaceCode"][k])}
+            "bankDeg": round(float(r["bankDeg"][k]), 2) if "bankDeg" in r else 0.0, "surface": int(r["surfaceCode"][k])}
            for k, a, b, cc, *_ in zip(sel, X, Y, Z)]
     for p_, a, b, cc in zip(pts, tx, ty, tz):
         p_["t"] = [round(float(a), 1), round(float(b), 1), round(float(cc), 1)]

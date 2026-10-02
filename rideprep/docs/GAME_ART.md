@@ -38,6 +38,13 @@ barriers at the start/finish. Textures are generated (tileable, deterministic) �
   ENU → Unreal `(E·100, −N·100, U·100)`, yaw sign flips with the handedness change.
 - Positions are quantised to ~1 cm by gltfpack (`-vp 16`), UVs stay float (`-vtf`).
 
+## Clients
+- **Web** (`apps/client/src/engine/GameWorld.ts`): used automatically when the package has `game/` (Settings → "Game
+  art"; `?game=0` disables). Streams chunks spatially, InstancedMesh per kit asset with a 320 m LOD switch, far field with
+  per-chunk corridor fills, sky/ground image-based light.
+- **Unreal** (`apps/unreal/Scripts/import_game_level.py`): editor import into a World Partition level, see
+  `apps/unreal/README.md`. Uses the uncompressed copies in `game/unreal/` and the land-use masks in `game/landuse/`.
+
 ## Measured (Emilia-Romagna 70.3, 90.5 km, 4 vCPU)
 Kit 7 MB (textures) + 33 assets; 182 chunks; full game build 7.7 min including five 1600×900 Cycles shots.
 

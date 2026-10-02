@@ -58,3 +58,35 @@ Regional style: colours from the package's `materials.json` tint the road materi
 `Scripts/import_course.py` builds a World Partition level from `unreal/` (16-bit heightmaps 505×505 at 8 m, weight maps,
 `road_spline.json`, instance lists via PCG) and saves it; cook it to a pak with BuildCookRun. Budget ≤ 30 min for 180 km.
 The script targets the UE 5.8 Python API and must be verified on the workstation (not runnable in CI).
+
+## Game-art hero level (hybrid pipeline)
+
+`gpx2course game <package>` (see `docs/GAME_ART.md`) bakes textured terrain/roads/buildings per 500 m chunk with a
+regional Blender art kit, plus kit instance lists and land-use masks. `Scripts/import_game_level.py` turns that into a
+World Partition level:
+
+```
+UnrealEditor-Cmd RidePrep.uproject -run=pythonscript \
+    -script="Scripts/import_game_level.py --package /data/courses/c_xxx --overrides Config/RidePrepAssetOverrides.json"
+```
+
+| Step | Result |
+|---|---|
+| Kit | `M_RidePrepKit` / `M_RidePrepKit_Masked` (created once), textures, `MI_<material id>` (UVScale = 1/tileM, Tint, Roughness, Metallic) with PhysMats `PM_Asphalt/Setts/Gravel/Grass/Soil/Water/Metal` (surface types in `Config/DefaultEngine.ini`), kit meshes with `<asset>__lod1` as LOD1 |
+| Chunks | static mesh actors per chunk mesh at `EnuToUe(origin)`; complex-as-simple collision on terrain, roads and buildings; Nanite on opaque meshes; far field |
+| Instances | `ARidePrepInstanceActor` per chunk (HISM per asset, cull distances, collision only for solid props); `--overrides` swaps kit meshes for high-quality assets by asset id |
+| PCG | `PCGVolume` per chunk over the land-use mask (graph parameters `LanduseMask`, `LanduseBoundsMinCm/MaxCm`) |
+| Sun | directional light from the event start (NOAA solar position) |
+
+Rider speed stays with the physics model (ride-core); the bike is posed kinematically along the route with lean
+`atan(v²/(g·R))`. PhysMats drive feedback (tyre sound, vibration, spray) via the surface type under the wheels.
+
+### PCG_GroundDetail (author once in `/Game/RidePrep/PCG/`)
+Graph parameters: `LanduseMask` (Texture2D), `LanduseBoundsMinCm`, `LanduseBoundsMaxCm` (Vector).
+1. **Get Actor Data** (tag `g*_terrain`, merge) → **Surface Sampler** (points per m² by detail density).
+2. **Get Texture Data** (texture = `LanduseMask`, transform from the bounds parameters) → **Sample Texture** on the
+   points → attribute `$Density`/`Class` (value × 255 = index into `landuseClasses` in `game/index.json`).
+3. **Difference** with **Get Spline/Actor Data** of `g*_road` and `g*_sideroads` (exclusion), then **Distance** to the road
+   to split: < 1.5 m → shoulder gravel decals/stones; > 1.5 m → per-class **Attribute Filter**.
+4. Per class: **Static Mesh Spawner** — grass_dry/grass_green: grass clumps + wild flowers; stubble: straw; soil_ploughed:
+   clods; vineyard_soil: inter-row grass; saltpan_water: none (salt crust at the edges); urban_ground: weeds at walls.

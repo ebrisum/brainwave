@@ -78,8 +78,9 @@ def compress(glb: Path) -> bool:
     if not gp:
         return False
     tmp = glb.with_suffix(".pack.glb")
-    # -vtf: keep float UVs (metre-scale UVs would swim if quantised); -vp 16: ~1 cm positions; keep names/materials
-    res = subprocess.run([gp, "-i", str(glb), "-o", str(tmp), "-cc", "-kn", "-km", "-vtf", "-vp", "16"], capture_output=True, text=True)
+    # -kv: keep UVs although chunk materials carry no images (engines bind kit textures); -vtf: float UVs (metre-scale
+    # UVs would swim if quantised); -vp 16: ~1 cm positions; keep names, materials and extras
+    res = subprocess.run([gp, "-i", str(glb), "-o", str(tmp), "-cc", "-kn", "-km", "-kv", "-ke", "-vtf", "-vp", "16"], capture_output=True, text=True)
     if res.returncode != 0 or not tmp.exists():
         return False
     tmp.replace(glb)
@@ -87,7 +88,7 @@ def compress(glb: Path) -> bool:
 
 
 def build_game(pkg: Path, kit_name: str | None = None, workers: int = 4, cache_dir: Path | None = None, shots: list | None = None,
-               chunk_ids: list[int] | None = None, log=print) -> dict:
+               chunk_ids: list[int] | None = None, log=print, unreal: bool | None = None) -> dict:
     from .prep import prepare
 
     t0 = time.time()
@@ -97,6 +98,8 @@ def build_game(pkg: Path, kit_name: str | None = None, workers: int = 4, cache_d
     if not kit_name:
         raise SystemExit("no kit matches this course's region; pass --kit (available: " + ", ".join(p.stem for p in KITS_DIR.glob("*.json")) + ")")
     kit = load_kit(kit_name)
+    if unreal is None:
+        unreal = (pkg / "unreal").exists()
     cache_dir = Path(cache_dir or os.environ.get("GPX2COURSE_CACHE", Path.home() / ".cache" / "gpx2course"))
     kdir = ensure_kit(kit_name, cache_dir, log)
     game = pkg / "game"
@@ -124,6 +127,19 @@ def build_game(pkg: Path, kit_name: str | None = None, workers: int = 4, cache_d
         list(ex.map(bake, enumerate(groups)))
     if (chunks_dir / "far.glb").exists():
         (chunks_dir / "far.glb").replace(game / "far.glb")
+    # Unreal's glTF importer reads neither meshopt nor quantised attributes: keep uncompressed copies for the editor import
+    ue = game / "unreal"
+    if unreal:
+        ue.mkdir(exist_ok=True)
+        for i in ids:
+            shutil.copyfile(chunks_dir / f"g{i}.glb", ue / f"g{i}.glb")
+        if (game / "far.glb").exists():
+            shutil.copyfile(game / "far.glb", ue / "far.glb")
+    lu = game / "landuse"
+    lu.mkdir(exist_ok=True)
+    for i in ids:
+        if (specs / f"lu{i}.png").exists():
+            shutil.copyfile(specs / f"lu{i}.png", lu / f"g{i}.png")
     packed = 0
     with ThreadPoolExecutor(workers) as ex:
         packed = sum(ex.map(compress, [chunks_dir / f"g{i}.glb" for i in ids] + [game / "far.glb"]))
@@ -132,11 +148,17 @@ def build_game(pkg: Path, kit_name: str | None = None, workers: int = 4, cache_d
         spec = json.loads((specs / f"g{c['id']}.json").read_text())
         (chunks_dir / f"g{c['id']}.inst.json").write_text(json.dumps({"origin": spec["origin"], "instances": spec["instances"]},
                                                                      separators=(",", ":")))
-        chunks.append({**c, "glb": f"game/chunks/g{c['id']}.glb", "instances": f"game/chunks/g{c['id']}.inst.json"})
+        entry = {**c, "glb": f"game/chunks/g{c['id']}.glb", "instances": f"game/chunks/g{c['id']}.inst.json"}
+        if unreal:
+            entry["glbUnreal"] = f"game/unreal/g{c['id']}.glb"
+        if c.get("landuseBounds"):
+            entry["landuse"] = f"game/landuse/g{c['id']}.png"
+        chunks.append(entry)
     index = {"version": 1, "kit": {"name": kit["name"], "label": kit["label"], "version": kit["version"], "dir": "game/kit",
                                    "glb": "game/kit/kit.glb", "materials": "game/kit/materials.json", "assets": "game/kit/assets.json"},
              "chunkM": doc["chunkM"], "gridM": doc["gridM"], "halfWidthM": doc["halfWidthM"], "far": "game/far.glb",
              "compression": "meshopt" if packed else "none", "uv": "metres; texture repeat = 1/tileM (materials.json)",
+             "landuseClasses": doc["landuseClasses"], "farUnreal": "game/unreal/far.glb" if unreal else None,
              "chunks": chunks, "attribution": ["© OpenStreetMap contributors, Overture Maps Foundation (ODbL)",
                                                "Copernicus DEM GLO-30 © DLR/Airbus, provided under COPERNICUS by the EU and ESA",
                                                "ESA WorldCover 2021 (CC BY 4.0)", "Procedural art kit: RidePrep (CC0)"]}

@@ -1,0 +1,9 @@
+{
+  "_comment": "Kit asset id → project asset used instead of the procedural kit mesh (import_game_level.py --overrides). Pivot at the base, Z up, metres→cm handled by the asset. yawDeg/scale fix authoring differences.",
+  "tree_stone_pine": {"mesh": "/Game/Vegetation/PinusPinea/SM_PinusPinea_A", "yawDeg": 0, "scale": 1.0},
+  "tree_cypress": {"mesh": "/Game/Vegetation/Cypress/SM_Cypress_A", "yawDeg": 0, "scale": 1.0},
+  "tree_poplar": {"mesh": "/Game/Vegetation/Poplar/SM_LombardyPoplar_A"},
+  "tree_olive": {"mesh": "/Game/Vegetation/Olive/SM_Olive_A"},
+  "vine_row_5m": {"mesh": "/Game/Vegetation/Vineyard/SM_VineRow_5m", "yawDeg": 0},
+  "guardrail_4m": {"mesh": "/Game/Props/Roadside/SM_Guardrail_WBeam_4m", "yawDeg": 0}
+}

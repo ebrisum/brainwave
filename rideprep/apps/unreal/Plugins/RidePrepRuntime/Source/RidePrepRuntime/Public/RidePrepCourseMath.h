@@ -14,7 +14,7 @@ namespace RidePrep {
 
 struct RouteArrays {
     double SpacingM = 5.0;
-    std::vector<float> S, X, Y, Z, GradePct, HeadingRad, RadiusM, CrrMultiplier;
+    std::vector<float> S, X, Y, Z, GradePct, HeadingRad, RadiusM, CrrMultiplier, BankDeg;  // BankDeg: + = right edge lower (may be empty)
     std::vector<uint8_t> SurfaceCode, RoadWidthM;
     size_t Count() const { return X.size(); }
 };
@@ -36,6 +36,7 @@ inline RouteArrays DecodeRoute(const uint8_t* Data, size_t Size, size_t Count, d
             if (A.Name == "s") R.S = V; else if (A.Name == "x") R.X = V; else if (A.Name == "y") R.Y = V;
             else if (A.Name == "z") R.Z = V; else if (A.Name == "gradePct") R.GradePct = V; else if (A.Name == "headingRad") R.HeadingRad = V;
             else if (A.Name == "radiusM") R.RadiusM = V; else if (A.Name == "crrMultiplier") R.CrrMultiplier = V;
+            else if (A.Name == "bankDeg") R.BankDeg = V;
         } else {
             std::vector<uint8_t> V(Data + A.Offset, Data + A.Offset + Count);
             if (A.Name == "surfaceCode") R.SurfaceCode = V; else if (A.Name == "roadWidthM") R.RoadWidthM = V;

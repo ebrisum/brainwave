@@ -8,6 +8,7 @@ import numpy as np
 from .. import PIPELINE_VERSION
 from ..geo import cumulative_distance, gaussian_smooth, heading_compass, resample_uniform, turning_radius
 from ..pipeline import BuildContext, stable_json
+from ..roadgeom import superelevation
 from ..surfaces import SURFACE_CODES, classify, width_m
 from .common import encode_route_bin, read_parquet, sample_dem, write_parquet
 
@@ -120,6 +121,7 @@ def run(ctx: BuildContext) -> list[str]:
     heading = heading_compass(x, y)
     radius = turning_radius(x, y, sp, 10.0)
     radius = np.where(np.isfinite(radius) & (radius < 5000), radius, np.inf)
+    bank = superelevation(heading, radius, attr["highway"], sp)
 
     # ---- Surfaces ---------------------------------------------------------------------------------------
     crr = np.ones(n)
@@ -141,7 +143,7 @@ def run(ctx: BuildContext) -> list[str]:
     code[bt & (np.array([v not in ("", "no") for v in attr["bridge"]]))] = SURFACE_CODES["bridge_deck"]
 
     arrays = {"s": grid, "x": x, "y": y, "z": zs, "gradePct": grade, "headingRad": heading,
-              "radiusM": radius, "crrMultiplier": crr, "surfaceCode": code, "roadWidthM": np.clip(np.round(width), 1, 255)}
+              "radiusM": radius, "crrMultiplier": crr, "surfaceCode": code, "roadWidthM": np.clip(np.round(width), 1, 255), "bankDeg": bank}
     data, layout = encode_route_bin(arrays)
     course_id = "c_" + hashlib.sha256(data + stable_json(ctx.options.fingerprint()).encode() + PIPELINE_VERSION.encode()).hexdigest()[:20]
 
