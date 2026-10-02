@@ -1,0 +1,13 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "",
+  "Category": "",
+  "Description": "RidePrep course render project: Scripts/build_level.py imports the bundled gpx2course course (Course/) into a World Partition level for Lumen/Nanite renders with Sequencer and Movie Render Queue. Blueprint-only: no C++ toolchain needed.",
+  "Plugins": [
+    { "Name": "PythonScriptPlugin", "Enabled": true },
+    { "Name": "EditorScriptingUtilities", "Enabled": true },
+    { "Name": "PCG", "Enabled": true },
+    { "Name": "MovieRenderPipeline", "Enabled": true },
+    { "Name": "SequencerScripting", "Enabled": true }
+  ]
+}

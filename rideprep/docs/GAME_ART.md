@@ -70,6 +70,8 @@ bitumen-sealed and open cracks, transverse cracks, crumbled edges; none on porph
   per-chunk corridor fills, sky/ground image-based light.
 - **Unreal** (`apps/unreal/Scripts/import_game_level.py`): editor import into a World Partition level, see
   `apps/unreal/README.md`. Uses the uncompressed copies in `game/unreal/` and the land-use masks in `game/landuse/`.
+  `tools/unreal_bundle.py` packs a ready-to-open render project with the course for artists (guide:
+  `docs/UNREAL_GUIDE.md`).
 
 ## Measured (Emilia-Romagna 70.3, 90.5 km, 4 vCPU)
 Kit 7 MB (textures) + 33 assets; 182 chunks; full game build 7.7 min including five 1600×900 Cycles shots.

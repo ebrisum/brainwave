@@ -68,7 +68,9 @@ void ARidePrepRider::LoadRiderAssets()
         else if (UAnimSequenceBase* Seq = Cast<UAnimSequenceBase>(Obj))
         {
             const FString N = A.AssetName.ToString();
-            for (const TCHAR* K : { TEXT("pedal_drops"), TEXT("coast_drops"), TEXT("pedal"), TEXT("stand"), TEXT("coast") })
+            // most specific first: "pedal_drops_rolling" must not be taken for "pedal"
+            for (const TCHAR* K : { TEXT("pedal_drops_rolling"), TEXT("coast_drops_rolling"), TEXT("pedal_rolling"), TEXT("stand_rolling"),
+                                    TEXT("coast_rolling"), TEXT("pedal_drops"), TEXT("coast_drops"), TEXT("pedal"), TEXT("stand"), TEXT("coast") })
                 if (N.EndsWith(K) || N.Contains(FString(TEXT("_")) + K + TEXT("_")))
                 {
                     if (!Clips.Contains(K)) Clips.Add(K, Seq);
@@ -106,6 +108,9 @@ void ARidePrepRider::FaceForward()
 
 UAnimSequenceBase* ARidePrepRider::Clip(const TCHAR* Name) const
 {
+    // The *_rolling clips also turn the wheels (whole turns per crank turn), so prefer them
+    if (const TObjectPtr<UAnimSequenceBase>* R = Clips.Find(FName(*(FString(Name) + TEXT("_rolling")))))
+        return R->Get();
     const TObjectPtr<UAnimSequenceBase>* C = Clips.Find(Name);
     return C ? C->Get() : nullptr;
 }

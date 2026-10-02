@@ -59,6 +59,14 @@ Regional style: colours from the package's `materials.json` tint the road materi
 `road_spline.json`, instance lists via PCG) and saves it; cook it to a pak with BuildCookRun. Budget ≤ 30 min for 180 km.
 The script targets the UE 5.8 Python API and must be verified on the workstation (not runnable in CI).
 
+## Render project hand-off (no C++)
+
+`python3 tools/unreal_bundle.py <course package> --out <dir> --zip` packs a Blueprint-only render project
+(`RenderProject/`: Python, Editor Scripting, PCG, Movie Render Queue; Lumen/Nanite/VSM/virtual textures on), the scripts,
+the built course, the rider and the step-by-step guide (`docs/UNREAL_GUIDE.md`). In the editor:
+*Tools → Execute Python Script → Scripts/build_level.py* builds the level; without the RidePrepRuntime plugin the
+instances go into HISM components added from Python, and camera rails along the riding line are created for Sequencer.
+
 ## Game-art hero level (hybrid pipeline)
 
 `gpx2course game <package>` (see `docs/GAME_ART.md`) bakes textured terrain/roads/buildings per 500 m chunk with a

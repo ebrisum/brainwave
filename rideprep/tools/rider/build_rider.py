@@ -11,6 +11,9 @@ Clips (glTF animations; cyclic ones are one crank revolution, 48 frames + a clos
   stand  out of the saddle: hips up and forward, bike rocks ±7° under the rider
   coast  pedals level, relaxed
   pedal_drops, coast_drops (road bike)  the same in the drops
+  <clip>_rolling  the same with the wheels turning: pedal 3 wheel turns per crank turn (≈ 34 km/h at 90 rpm), stand 1,
+                  coast 1 per loop; climb_rolling: seated, 2 turns (≈ 15 km/h at 60 rpm) — for Sequencer (play rate =
+                  cadence / 30) and engines that don't spin the wheels
 Clients set the clip time from the crank angle (time = angle / 2π × duration), spin `wheel.F`/`wheel.R` from speed, lean
 the `bike` bone in corners and steer with `steer`. Exports rider_<bike>.glb (+ .blend for Unreal/artists).
 """
@@ -261,9 +264,10 @@ class Poser:
             pb.matrix_basis = Matrix.Identity(4)
         bpy.context.view_layer.update()
 
-    def pose(self, phi, mode="pedal", grip=None):
+    def pose(self, phi, mode="pedal", grip=None, wheel=0.0):
         """phi: right crank angle, 0 = forward (3 o'clock), increasing in the pedalling direction. grip: hoods, drops or
-        aero (default: the bike's position); out of the saddle a road rider is on the hoods."""
+        aero (default: the bike's position); out of the saddle a road rider is on the hoods. wheel: wheel rotation (rad,
+        rolling forward) for the *_rolling clips."""
         arm, pts = self.arm, self.pts
         self.reset()
         standing = mode == "stand"
@@ -279,6 +283,9 @@ class Poser:
         arm.pose.bones["bike"].rotation_euler = (0, roll, 0)          # about local Y = world X
         arm.pose.bones["crank"].rotation_mode = "XYZ"
         arm.pose.bones["crank"].rotation_euler = (0, phi, 0)
+        for wb in ("wheel.R", "wheel.F"):  # local Y = the axle; + = rolling forward, same sense as the crank
+            arm.pose.bones[wb].rotation_mode = "XYZ"
+            arm.pose.bones[wb].rotation_euler = (0, wheel, 0)
         bpy.context.view_layer.update()
         Rb = Matrix.Rotation(roll, 4, "X")                              # bike frame → world
         # Feet: ball of the foot on the pedal, ankling through the stroke
@@ -384,9 +391,11 @@ class Poser:
         bpy.context.view_layer.update()
 
 
-def bake_clip(arm, poser, name, mode, frames, grip=None):
+def bake_clip(arm, poser, name, mode, frames, grip=None, wheel_revs=0.0):
     """Pose every frame (targets + bike bones keyed), then bake visual transforms into an action. Cyclic clips get a
-    closing key (frame `frames` = frame 0, one revolution later) so clip time maps linearly onto the crank angle."""
+    closing key (frame `frames` = frame 0, one revolution later) so clip time maps linearly onto the crank angle.
+    wheel_revs: whole wheel revolutions per clip (the *_rolling clips spin the wheels for Sequencer and engines that
+    don't drive the wheel bones themselves)."""
     scene = bpy.context.scene
     last = frames if frames > 2 else frames - 1
     scene.frame_start, scene.frame_end = 0, last
@@ -397,10 +406,10 @@ def bake_clip(arm, poser, name, mode, frames, grip=None):
     for f in range(last + 1):
         phi = f / frames * 2 * math.pi
         scene.frame_set(f)
-        poser.pose(phi, mode, grip)
+        poser.pose(phi, mode, grip, wheel_revs * phi)
         for o in poser.targets.values():
             o.keyframe_insert("location", frame=f)
-        for b in ("bike", "crank", "pedal.L", "pedal.R", "root") + tuple(n for n in arm.pose.bones.keys() if n.startswith(("spine", "neck", "head", "finger"))):
+        for b in ("bike", "crank", "pedal.L", "pedal.R", "root", "wheel.R", "wheel.F", "steer") + tuple(n for n in arm.pose.bones.keys() if n.startswith(("spine", "neck", "head", "finger"))):
             pb = arm.pose.bones[b]
             pb.keyframe_insert("location", frame=f)
             pb.keyframe_insert("rotation_quaternion" if pb.rotation_mode == "QUATERNION" else "rotation_euler", frame=f)
@@ -428,11 +437,15 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     body, arm, helmet, glasses, parts, pts = build(a)
     poser = Poser(arm, pts, a.bike)
-    clips = [("pedal", "pedal", FRAMES, None), ("stand", "stand", FRAMES, None), ("coast", "coast", 2, None)]
+    clips = [("pedal", "pedal", FRAMES, None, 0), ("stand", "stand", FRAMES, None, 0), ("coast", "coast", 2, None, 0)]
     if a.bike == "road":  # the start screen offers road on the hoods or in the drops
-        clips += [("pedal_drops", "pedal", FRAMES, "drops"), ("coast_drops", "coast", 2, "drops")]
-    for name, mode, n, grip in clips:
-        bake_clip(arm, poser, name, mode, n, grip)
+        clips += [("pedal_drops", "pedal", FRAMES, "drops", 0), ("coast_drops", "coast", 2, "drops", 0)]
+    # Rolling variants with the wheels turning (gear-like ratios, whole revolutions so they loop): 3 wheel turns per
+    # crank turn ≈ 34 km/h at 90 rpm; standing 1 ≈ 8 km/h at 60 rpm (steep climb); coasting 1 turn per loop
+    clips += [(f"{n}_rolling", m, FRAMES, g, {"pedal": 3, "stand": 1, "coast": 1}[m]) for n, m, _, g, _ in list(clips)]
+    clips.append(("climb_rolling", "pedal", FRAMES, None, 2))  # seated climbing gear: 2 wheel turns per crank turn
+    for name, mode, n, grip, revs in clips:
+        bake_clip(arm, poser, name, mode, n, grip, revs)
     # Remove the posing helpers
     for pb in arm.pose.bones:
         for c in list(pb.constraints):

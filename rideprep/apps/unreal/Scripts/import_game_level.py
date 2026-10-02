@@ -11,8 +11,10 @@ What it builds (all from <package>/game/index.json, written by `gpx2course game`
   3. Chunks: g<id>.glb (uncompressed copies in game/unreal/) → static meshes with the kit material instances,
      complex-as-simple collision on terrain/roads/buildings, none on markings, Nanite on opaque meshes; one actor per
      mesh at the chunk origin (ENU → UE: X = E·100, Y = −N·100, Z = U·100), so World Partition streams them by cell.
-  4. Instances: one ARidePrepInstanceActor per chunk with HISM per kit asset; `--overrides` maps kit asset ids to
-     high-quality project assets (e.g. scanned Pinus pinea, cypress, olive) with optional yaw offset/scale.
+  4. Instances: one ARidePrepInstanceActor per chunk with HISM per kit asset (without the C++ plugin — the Blueprint-only
+     render project — a static mesh actor with HISM components added through the SubobjectDataSubsystem);
+     `--overrides` maps kit asset ids to high-quality project assets (e.g. scanned Pinus pinea, cypress, olive) with
+     optional yaw offset/scale.
   5. PCG: a PCG volume per chunk with the land-use mask (game/landuse/g<id>.png) as graph parameter for dense ground
      detail (grass, flowers, stones, shoulder gravel) — graph authored once in the project (see README).
   6. Sun: directional light set for the event start (manifest eventStart, NOAA solar position).
@@ -24,8 +26,14 @@ What it builds (all from <package>/game/index.json, written by `gpx2course game`
      out), so the road never looks like a sticker. Without RVT support the same mask blends toward the gravel layer.
   9. Road splines: an ARidePrepRoadSpline per chunk along the course road (tag "RidePrepRoad") for PCG graphs
      (exclusion zones, sampling along the edge).
- 10. Rider: rider_road/rider_tt GLBs (tools/rider) → skeletal meshes + pedal/stand/coast clips in /Game/RidePrep/Rider;
-     ARidePrepRider picks them up by path and plays the clips by crank angle.
+ 10. Rider: rider_road/rider_tt GLBs (tools/rider) → skeletal meshes + pedal/stand/coast clips (and *_rolling variants
+     with turning wheels for Sequencer) in /Game/RidePrep/Rider; ARidePrepRider picks them up by path.
+ 11. Camera rails (`--rails auto|none|km:a-b,…`): Camera Rig Rails along the riding line (keep right, on the
+     crowned/banked surface) at the start, every climb and every hero stretch — attach the rider and cameras in
+     Sequencer and key "Current Position on Rail".
+
+For the hand-off render project (tools/unreal_bundle.py) run Scripts/build_level.py instead: it finds Course/ and Rider/
+in the project folder and calls this script.
 
 Physical materials follow the brief: asphalt friction 0.8, gravel 0.4 (dust and rumble come from the surface type).
 
@@ -84,6 +92,8 @@ def parse():
     p.add_argument("--no-hero", action="store_true", help="ignore hero road meshes even if the package has them")
     p.add_argument("--no-rvt", action="store_true")
     p.add_argument("--rider-dir", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "client", "public", "models"))
+    p.add_argument("--rails", default="auto", help="camera rails along the riding line: 'auto' (start, climbs, hero stretches), 'none', "
+                                                   "or route km ranges 'km:44-46.5,0-2'")
     a, _ = p.parse_known_args(sys.argv[1:])
     return a
 
@@ -600,9 +610,7 @@ def main():
         road_spline(route, c, loc)
         # Kit instances
         inst = load_json(os.path.join(pkg, c["instances"]))["instances"]
-        ia = eas.spawn_actor_from_class(unreal.RidePrepInstanceActor, loc)
-        ia.set_actor_label(f"g{cid}_instances")
-        ia.set_folder_path(f"RidePrep/Chunks/g{cid // 20 * 20:03d}")
+        ia = Instancer(loc, f"g{cid}_instances", f"RidePrep/Chunks/g{cid // 20 * 20:03d}")
         for asset, rows in inst.items():
             ov = overrides.get(asset, {})
             mesh = unreal.load_asset(ov["mesh"]) if ov.get("mesh") else kit_meshes.get(asset)
@@ -614,7 +622,7 @@ def main():
                                    rotation=unreal.Rotator(pitch=0, yaw=-math.degrees(rot) + yaw_off, roll=0),
                                    scale=unreal.Vector(s * sc, s * sc, s * sc)) for x, y, z, rot, s in rows]
             solid = asset.startswith(SOLID_ASSETS)
-            n_inst += ia.add_instances(asset, mesh, xs, 0.0, float(CULL_CM.get(asset, 0)), solid, True)
+            n_inst += ia.add(asset, mesh, xs, float(CULL_CM.get(asset, 0)), solid)
         if has_hero and c.get("heroPebbles") and os.path.exists(os.path.join(pkg, c["heroPebbles"])):
             for asset, rows in load_json(os.path.join(pkg, c["heroPebbles"]))["instances"].items():
                 mesh = pebble_meshes.get(asset)
@@ -622,11 +630,13 @@ def main():
                     continue
                 xs = [unreal.Transform(location=unreal.Vector(x * 100, -y * 100, z * 100), rotation=unreal.Rotator(pitch=0, yaw=-math.degrees(rot), roll=0),
                                        scale=unreal.Vector(sc_, sc_, sc_)) for x, y, z, rot, sc_ in rows]
-                n_inst += ia.add_instances(asset, mesh, xs, 0.0, 6000.0, False, True)
+                n_inst += ia.add(asset, mesh, xs, 6000.0, False)
         # PCG ground detail from the land-use mask
         if graph is not None and c.get("landuse"):
             pcg_volume(pkg, c, croot, graph, loc)
     import_rider(a.rider_dir)
+    if a.rails != "none":
+        rider_rails(route, rail_ranges(a.rails, manifest, index))
     les.save_current_level()
     eal.save_directory(ROOT, only_if_is_dirty=True, recursive=True)
     n_hero = sum(1 for c in index["chunks"] if c.get("hero")) if hero else 0
@@ -675,14 +685,16 @@ def read_route(pkg, manifest):
     r = manifest["route"]
     n = r["count"]
     data = open(os.path.join(pkg, "route.bin"), "rb").read()
-    out = {}
+    out = {"spacing": float(r["sampleSpacingM"])}
     for spec in r["arrays"]:
-        if spec["name"] in ("s", "x", "y", "z") and spec["type"] == "float32":
+        if spec["name"] in ("s", "x", "y", "z", "headingRad", "bankDeg") and spec["type"] == "float32":
             a = array("f")
             a.frombytes(data[spec["offset"]:spec["offset"] + 4 * n])
             if sys.byteorder != "little":
                 a.byteswap()
             out[spec["name"]] = a
+        elif spec["name"] == "roadWidthM":
+            out["roadWidthM"] = array("B", data[spec["offset"]:spec["offset"] + n])
     return out
 
 
@@ -706,6 +718,108 @@ def road_spline(route, c, loc, step_m=10.0):
     sp.set_points(pts)
     sp.set_actor_label(f"g{c['id']}_road_spline")
     sp.set_folder_path(f"RidePrep/Chunks/g{c['id'] // 20 * 20:03d}")
+
+
+class Instancer:
+    """One chunk's kit instances. With the RidePrepRuntime C++ plugin compiled in: ARidePrepInstanceActor (HISM per
+    asset). Without it (a Blueprint-only render project): a static mesh actor with one HISM component per asset added
+    through the SubobjectDataSubsystem — no C++ toolchain needed."""
+
+    def __init__(self, loc, label, folder):
+        eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+        self.native = hasattr(unreal, "RidePrepInstanceActor")
+        self.actor = eas.spawn_actor_from_class(unreal.RidePrepInstanceActor if self.native else unreal.StaticMeshActor, loc)
+        self.actor.set_actor_label(label)
+        self.actor.set_folder_path(folder)
+        if not self.native:
+            self.sds = unreal.get_engine_subsystem(unreal.SubobjectDataSubsystem)
+            self.root = self.sds.k2_gather_subobject_data_for_instance(self.actor)[0]
+
+    def add(self, asset, mesh, transforms, cull_end_cm, collision, shadows=True):
+        if not transforms:
+            return 0
+        if self.native:
+            return self.actor.add_instances(asset, mesh, transforms, 0.0, cull_end_cm, collision, shadows)
+        params = unreal.AddNewSubobjectParams(parent_handle=self.root, new_class=unreal.HierarchicalInstancedStaticMeshComponent,
+                                              blueprint_context=None)
+        handle, fail = self.sds.add_new_subobject(params)
+        if str(fail):
+            warn(f"{asset}: {fail}")
+            return 0
+        self.sds.rename_subobject(handle, unreal.Text(asset))
+        lib = unreal.SubobjectDataBlueprintFunctionLibrary
+        comp = lib.get_object(lib.get_data(handle))
+        comp.set_static_mesh(mesh)
+        comp.set_mobility(unreal.ComponentMobility.STATIC)
+        if cull_end_cm > 0:
+            comp.set_cull_distances(0, int(cull_end_cm))
+        comp.set_collision_enabled(unreal.CollisionEnabled.QUERY_AND_PHYSICS if collision else unreal.CollisionEnabled.NO_COLLISION)
+        comp.set_cast_shadow(shadows)
+        comp.add_instances(transforms, False, False)
+        return len(transforms)
+
+
+def rail_ranges(spec, manifest, index):
+    """[(s0, s1, label)] in route metres: explicit 'km:a-b,…', or 'auto' = the start, every climb, every hero stretch."""
+    L = float(manifest["route"]["count"] - 1) * float(manifest["route"]["sampleSpacingM"])
+    out = []
+    if spec.startswith("km:"):
+        for part in spec[3:].split(","):
+            a, _, b = part.partition("-")
+            out.append((float(a) * 1000, float(b or a) * 1000, f"km{a}-{b or a}"))
+    else:
+        out.append((0.0, min(2000.0, L), "start"))
+        for k, c in enumerate(manifest.get("segments", {}).get("climbs", [])):
+            out.append((max(0.0, c["sStart"] - 300), min(L, c["sEnd"] + 200), f"climb{k + 1}"))
+        hero = sorted(c["id"] for c in index["chunks"] if c.get("hero"))
+        run = []
+        for cid in hero + [None]:
+            if run and (cid is None or cid != run[-1] + 1):
+                s0 = next(c["sStart"] for c in index["chunks"] if c["id"] == run[0])
+                s1 = next(c["sEnd"] for c in index["chunks"] if c["id"] == run[-1])
+                out.append((s0, s1, f"hero_km{s0 / 1000:.1f}-{s1 / 1000:.1f}"))
+                run = []
+            if cid is not None:
+                run.append(cid)
+    return [(max(0.0, a), min(L, b), lab) for a, b, lab in out if b > a]
+
+
+def rider_rails(route, ranges):
+    """Camera Rig Rails along the riding line (keep right, ~1 m from the edge, on the crowned/banked surface): attach
+    the rider and cameras in Sequencer and key "Current Position on Rail" (0 → 1) for a ride along the course."""
+    if not route or not hasattr(unreal, "CameraRig_Rail"):
+        warn("Camera Rig Rail not available — rails skipped")
+        return
+    eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    s, x, y, z, hd = route["s"], route["x"], route["y"], route["z"], route.get("headingRad")
+    wid, bank = route.get("roadWidthM"), route.get("bankDeg")
+    for s0, s1, label in ranges:
+        idx = [i for i in range(len(s)) if s0 <= s[i] <= s1]
+        if len(idx) < 2:
+            continue
+        pts = []
+        for i in idx:
+            hw = (wid[i] if wid else 6) / 2.0
+            off = 0.0 if hw < 1.6 else min(max(max(hw / 2, hw - 1.0), 0.3), hw - 0.5)  # LaneKeeper's straight-road line
+            h = hd[i] if hd else 0.0
+            nx, ny = math.cos(h), -math.sin(h)
+            t = math.tan(math.radians(bank[i] if bank else 0.0))
+            w = min(1.0, abs(t) / 0.025)
+            dz = (1 - w) * (-0.02 * abs(off)) + w * (-t * off)
+            pts.append((x[i] + nx * off, y[i] + ny * off, z[i] + 0.04 + dz))
+        x0, y0, z0 = pts[0]
+        origin = enu_to_ue(x0, y0, z0)
+        rail = eas.spawn_actor_from_class(unreal.CameraRig_Rail, origin)
+        rail.set_actor_label(f"RideLine_{label}")
+        rail.set_folder_path("RidePrep/Rails")
+        spline = rail.get_rail_spline_component()
+        spline.set_spline_points([unreal.Vector((px - x0) * 100, -(py - y0) * 100, (pz - z0) * 100) for px, py, pz in pts],
+                                 unreal.SplineCoordinateSpace.LOCAL, True)
+        try:
+            rail.set_editor_property("lock_orientation_to_rail", True)
+        except Exception as ex:  # noqa: BLE001
+            warn(f"rail orientation lock: {ex}")
+        log(f"rail RideLine_{label}: {(s1 - s0) / 1000:.2f} km, {len(pts)} points")
 
 
 def import_rider(rider_dir):
