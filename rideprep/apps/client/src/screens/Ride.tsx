@@ -70,7 +70,7 @@ export function Ride() {
           uRider: w.u10 * 0.6, gust: 1, sunElevationDeg: sun.elevationDeg, sunAzimuthDeg: sun.azimuthDeg, cloud: w.cloudCover, visibilityM: w.visibilityM, rainMmH: w.precipMmH };
       };
       const useSession = session && camera !== "flyover";
-      world = new World(ref.current!, course, courseFetcher(courseId), quick, settings.quality, settings.rider,
+      world = new World(ref.current!, course, courseFetcher(courseId), quick, settings.quality, { ...settings.rider, line: settings.roadLine },
         useSession ? () => session!.renderState() : flySource);
       worldRef.current = world;
       if (import.meta.env.DEV) Object.assign(window as object, { __rideprepWorld: world, __rideprepSession: session, __THREE: await import("three") });
@@ -235,7 +235,7 @@ function Hud() {
           <div className="zonebar" aria-label={zoneName}>
             {POWER_ZONES.map(([hi, n, c], i) => <i key={n} style={{ background: c, opacity: i === zi ? 1 : 0.28 }} title={`${n} < ${Math.round(hi * 100)} % FTP`} />)}
           </div>
-          <div className="zonelabel" style={{ color: zoneColor }}>{zoneName} · {hud.wkg.toFixed(1)} W/kg</div>
+          <div className="zonelabel" style={{ color: zoneColor }}>{zoneName} · {(hud.power3sW / hud.massKg).toFixed(1)} W/kg</div>
           {hud.targetLow !== undefined && <div className="num small">target {Math.round(hud.targetLow)}–{Math.round(hud.targetHigh!)} W</div>}
           {hud.braking && <div className="braking">BRAKING</div>}
         </div>

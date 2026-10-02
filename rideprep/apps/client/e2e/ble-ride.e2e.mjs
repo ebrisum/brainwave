@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const [out = "e2e-out", startKm = "45.2", rideS = "90", base = "http://localhost:5173"] = process.argv.slice(2);
+const [out = "e2e-out", startKm = "45.2", rideS = "90", base = "http://localhost:5173", view = "Cockpit"] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
 const here = dirname(fileURLToPath(import.meta.url));
 const browser = await chromium.launch({
@@ -28,7 +28,7 @@ for (const i of [0, 2, 1]) {
 }
 await page.waitForTimeout(2500);
 await page.screenshot({ path: join(out, "1_setup_devices.png") });
-await page.getByRole("button", { name: "Cockpit" }).click();
+await page.getByRole("button", { name: view, exact: true }).click();
 await page.getByRole("button", { name: /Start ride/ }).click();
 await page.waitForFunction(() => window.__rideprepSession?.isStarted, null, { timeout: 120000 });
 const samples = [];
@@ -45,7 +45,7 @@ while (Date.now() - t0 < Number(rideS) * 1000) {
       sentGrade: last?.gradePct, sentWind: last?.windMs, sentCrr: last?.crr, sentCw: last?.cw, trainerKmh: b.speedKmh, mode: x.trainer?.mode };
   });
   if (s) samples.push(s);
-  if (Date.now() - t0 > (shot + 1) * (Number(rideS) * 1000) / 3) {
+  if (Date.now() - t0 > (shot + 1) * (Number(rideS) * 1000) / 4) {
     shot++;
     await page.screenshot({ path: join(out, `2_ride_${shot}.png`) });
   }

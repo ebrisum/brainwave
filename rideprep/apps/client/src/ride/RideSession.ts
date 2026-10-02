@@ -191,7 +191,7 @@ export class RideSession {
       wind: { u10: st.wind.u10, dir10: st.wind.dir10, uRider: st.wind.uRider, wHead: st.wind.wHead, wCross: st.wind.wCross, shelter: st.wind.shelter, gust: st.wind.gust },
       tempC: st.tempC, feelsC: feelsLike(st.tempC, st.weather.rh, st.wind.uRider + st.v), rho: st.rho, gradePct: st.gradePct,
       devices: { ...this.deviceStates }, paused: this.paused, finished: st.finished, warnings: this.warnings, trainerMode: this.trainer?.mode,
-      power3sW: this.p3.reduce((a, b) => a + b, 0) / this.p3.length, ftpW: ftp, maxHr: this.opts.rider.maxHr,
+      power3sW: this.p3.reduce((a, b) => a + b, 0) / this.p3.length, ftpW: ftp, maxHr: this.opts.rider.maxHr, massKg: this.opts.rider.riderMassKg,
       trainer: ts && { mode: ts.mode, gradePct: ts.sim?.gradePct, windMs: ts.sim?.windSpeedMs, crr: ts.sim?.crr, cwKgM: ts.sim?.cwKgM, ergW: ts.ergW,
         difficulty: ts.difficulty },
       powerSource: this.hub.r.powerSource, cadenceSource: this.hub.r.cadenceSource,

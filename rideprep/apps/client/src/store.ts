@@ -1,5 +1,6 @@
 import { CDA_PRESETS, DEFAULT_RIDER, Position, RiderProfile } from "@rideprep/physics";
 import { create } from "zustand";
+import type { RoadLine } from "./engine/LaneKeeper";
 import { Units } from "./units";
 
 export type Screen = "home" | "library" | "upload" | "briefing" | "pairing" | "ride" | "postride" | "settings";
@@ -13,6 +14,8 @@ export interface Settings {
   quality: Quality;
   trainerDifficulty: number;
   corneringRealism: boolean;
+  /** The line the bike holds across the road: keep right (open roads) or the racing line (closed roads). */
+  roadLine: RoadLine;
   gusts: boolean;
   /** Real-world view from 3D tiles. "dev" uses the package's local stand-in tileset (no key). */
   photoreal: PhotorealSource;
@@ -32,7 +35,7 @@ export interface HudState {
   warnings: string[]; trainerMode?: string;
   /** 3 s average power (what the big number shows). */
   power3sW: number;
-  ftpW: number; maxHr: number;
+  ftpW: number; maxHr: number; massKg: number;
   /** Last command sent to the smart trainer. */
   trainer?: { mode: string; gradePct?: number; windMs?: number; crr?: number; cwKgM?: number; ergW?: number; difficulty: number };
   /** Which sources feed power and cadence. */
@@ -46,6 +49,7 @@ const defaults: Settings = {
   quality: "high",
   trainerDifficulty: 1,
   corneringRealism: true,
+  roadLine: "keepRight",
   gusts: true,
   photoreal: "off",
   googleApiKey: "",

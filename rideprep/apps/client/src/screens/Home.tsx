@@ -292,6 +292,14 @@ export function Home() {
               ))}
             </div>
           </div>
+          <div className="choice">
+            <span>Line on the road</span>
+            <div className="segmented">
+              {([["keepRight", "Keep right"], ["racing", "Racing line · closed roads"]] as const).map(([k, l]) => (
+                <button key={k} className={settings.roadLine === k ? "on" : ""} onClick={() => updateSettings({ roadLine: k })}>{l}</button>
+              ))}
+            </div>
+          </div>
           <label className="check"><input type="checkbox" checked={settings.corneringRealism} onChange={(e) => updateSettings({ corneringRealism: e.target.checked })} />Brake for sharp corners</label>
           <button className="link" onClick={() => go("pairing")}>Video mode (ride real footage)…</button>
         </section>

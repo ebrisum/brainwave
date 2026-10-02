@@ -98,3 +98,18 @@ One line each: what was decided and why. Newest at the bottom of each section.
   FTMS trainer with control-point indications and a resistance model, HRS strap, CPS power meter with crank data.
 - Streamed game chunks are shader-compiled with `compileAsync` before they enter the scene: the main thread also feeds
   sensor power to the physics worker, whose 3 s dropout hold must never be triggered by rendering hitches.
+
+## Rider and bike
+- The rider is a MakeHuman body (CC0 assets, our own loader) on a procedural bike sized to the rider's inseam, built
+  in headless Blender (`tools/rider`): realistic proportions and skinning without a paid asset or MetaHuman licence
+  terms, reproducible from a script. One armature drives rider and bike, so pedals, cranks and feet never drift apart.
+- Motion is baked once per bike (pedal, stand, coast; drops variants) with IK and played back by crank angle, not by
+  time: legs follow the real cadence from the power meter/trainer at any rpm, and the clip blend follows grade,
+  cadence and power (out of the saddle on steep, slow climbs; coasting below 8 rpm or 5 W).
+- Limb IK uses hinge knees, twist-only mid-limb joints and per-chain calibrated pole angles; checked from behind (the
+  chase camera's view) in `rider-lab.html`, where knee tracking is most visible.
+- There is no steering on a trainer, so the bike's position across the road is presentation only (`LaneKeeper`): it
+  keeps right ~1 m from the edge (or takes a racing line on closed roads), changes line through a damped spring with
+  speed-limited lateral motion, and adds the matching yaw and lean; slow climbs weave with the pedal stroke. The
+  physics distance along the route is untouched.
+

@@ -38,7 +38,9 @@ export class CameraRig {
     }
     const minY = groundAt(p) + 0.8;
     if (p.y < minY) p.y = minY;
-    const k = this.init ? 1 - Math.exp(-dt * (mode === "cockpit" ? 30 : 4)) : 1;
+    // Never trail more than ~12 m behind the desired spot (long frames, teleports): snap instead of lagging away
+    const far = this.pos.distanceTo(p) > 12;
+    const k = this.init && !far ? 1 - Math.exp(-dt * (mode === "cockpit" ? 30 : 4)) : 1;
     this.pos.lerp(p, k);
     this.look.lerp(l, this.init ? 1 - Math.exp(-dt * 6) : 1);
     this.init = true;

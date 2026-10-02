@@ -9,8 +9,9 @@ import { Cockpit } from "./Cockpit";
 import { GameWorld } from "./GameWorld";
 import { Photoreal, PhotorealOptions } from "./Photoreal";
 import { preset } from "./quality";
-import { RiderAvatar } from "./RiderAvatar";
-import { Road } from "./Road";
+import { LaneKeeper, RoadLine } from "./LaneKeeper";
+import { RiderModel } from "./RiderModel";
+import { crossSlopeDz, Road } from "./Road";
 import { SkyWeather } from "./SkyWeather";
 import { Terrain } from "./Terrain";
 import { enu, color } from "./util";
@@ -36,8 +37,12 @@ export class World {
   vegetation: Vegetation;
   chunks: ChunkStreamer;
   skyw: SkyWeather;
-  rider: RiderAvatar;
-  ghost?: RiderAvatar;
+  rider: RiderModel;
+  ghost?: RiderModel;
+  /** Where the bike rides across the road (the trainer gives speed, not steering). */
+  lane: LaneKeeper;
+  private ghostLane: LaneKeeper;
+  private lastS = 0;
   markers: CourseMarkers;
   cockpit = new Cockpit();
   photoreal?: Photoreal;
@@ -55,7 +60,8 @@ export class World {
 
   constructor(private canvas: HTMLCanvasElement, private course: LoadedCourse, private fetch: Fetcher,
               quick: { buildings: QuickBuilding[]; roads: QuickRoad[]; water: QuickWater[] }, quality: Quality,
-              rider: { jersey: string; bike: "road" | "tt" }, private source: () => RenderState) {
+              riderLook: { jersey: string; bike: "road" | "tt"; position?: "hoods" | "drops" | "aero"; line?: RoadLine },
+              private source: () => RenderState) {
     const q = preset(quality);
     this.baseRatio = q.pixelRatio;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: q.antialias, powerPreference: "high-performance" });
@@ -79,7 +85,9 @@ export class World {
       const b = this.buildings?.byChunk.get(id);
       if (b) b.visible = !baked;
     });
-    this.rider = new RiderAvatar(rider.jersey, rider.bike);
+    this.rider = new RiderModel(riderLook.jersey, riderLook.bike, false, riderLook.position);
+    this.lane = new LaneKeeper(course.route, riderLook.line);
+    this.ghostLane = new LaneKeeper(course.route, riderLook.line);
     this.markers = new CourseMarkers(course);
     this.scene.add(this.markers.group);
     this.scene.add(this.terrain.group, this.road.group, this.vegetation.group, this.chunks.group, this.rider.root);
@@ -98,7 +106,8 @@ export class World {
 
   enableGhost(on: boolean) {
     if (on && !this.ghost) {
-      this.ghost = new RiderAvatar("#ffffff", "road", true);
+      this.ghost = new RiderModel("#ffffff", "road", true);
+      this.ghostLane.reset();
       this.scene.add(this.ghost.root);
     } else if (!on && this.ghost) {
       this.ghost.root.removeFromParent();
@@ -219,19 +228,24 @@ export class World {
     const st = this.source();
     const c = this.course.route;
     const p = poseAt(c, st.s);
-    const riderPos = enu(p.x, p.y, p.z);
+    if (Math.abs(st.s - this.lastS) > 50) this.lane.reset(); // start, restart or a jump along the course
+    this.lastS = st.s;
+    this.lane.update(dt, st.s, st.speed, st.crankRad);
+    const riderPos = this.onRoad(p, st.s, this.lane.offset);
     this.rider.root.position.copy(riderPos);
-    this.rider.root.rotation.set(0, -p.headingRad, 0, "YXZ");
-    this.rider.update(dt, st.crankRad, st.speed, st.leanRad, st.gradePct, st.cadence, st.powerW);
+    this.rider.root.rotation.set(0, -(p.headingRad + this.lane.yaw), 0, "YXZ");
+    const ri = Math.min(c.count - 1, Math.max(0, Math.round(st.s / c.spacingM)));
+    this.rider.update(dt, st.crankRad, st.speed, st.leanRad + this.lane.lean, st.gradePct, st.cadence, st.powerW, c.radiusM[ri]);
     if (this.ghost && st.ghostS !== undefined) {
       const g = poseAt(c, st.ghostS);
-      this.ghost.root.position.copy(enu(g.x, g.y, g.z));
-      this.ghost.root.rotation.set(0, -g.headingRad, 0, "YXZ");
-      this.ghost.update(dt, st.crankRad, st.speed, 0, st.gradePct, st.cadence, st.powerW);
+      this.ghostLane.update(dt, st.ghostS, st.speed, st.crankRad);
+      this.ghost.root.position.copy(this.onRoad(g, st.ghostS, this.ghostLane.offset));
+      this.ghost.root.rotation.set(0, -(g.headingRad + this.ghostLane.yaw), 0, "YXZ");
+      this.ghost.update(dt, st.crankRad, st.speed, this.ghostLane.lean, st.gradePct, st.cadence, st.powerW);
     }
     const fwd = new THREE.Vector3(Math.sin(p.headingRad), 0, -Math.cos(p.headingRad));
-    const a = poseAt(c, st.s + Math.max(25, st.speed * 2.5));
-    const ahead = enu(a.x, a.y, a.z);
+    const sAhead = st.s + Math.max(25, st.speed * 2.5);
+    const ahead = this.onRoad(poseAt(c, sAhead), sAhead, this.lane.target(sAhead, st.speed));
     const cockpit = this.cameraMode === "cockpit";
     this.rider.root.visible = !cockpit;
     this.cockpit.setVisible(cockpit);
@@ -273,6 +287,15 @@ export class World {
       this.chunks.update(st.s);
     }
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** Road surface point `off` metres right of the route centreline (crown/superelevation included), three.js coords. */
+  private onRoad(p: { x: number; y: number; z: number; headingRad: number }, s: number, off: number): THREE.Vector3 {
+    const c = this.course.route;
+    const i = Math.min(c.count - 1, Math.max(0, Math.round(s / c.spacingM)));
+    const rx = Math.cos(p.headingRad); // right of the heading, ENU
+    const ry = -Math.sin(p.headingRad);
+    return enu(p.x + rx * off, p.y + ry * off, p.z + crossSlopeDz(off, c.bankDeg?.[i] ?? 0));
   }
 
   dispose() {
