@@ -60,3 +60,20 @@ One line each: what was decided and why. Newest at the bottom of each section.
 - Video mode maps recorded rides to course distance (forward-only matching, earliest pass on loops); the video file never leaves the rider's device — avoids hosting large files and footage rights issues.
 - Cockpit bars are pulled into the lower third of the frame (real eye-to-bar geometry falls outside a 60° field of view), as other cycling sims do.
 - Regional style profiles are chosen from coarse country bounding boxes (smallest first) or "alpine" above 1200 m; borders are approximate, so `style = "<code>"` in the config overrides.
+
+## Game-art path and Emilia-Romagna 70.3
+- Overture Maps (GeoParquet on S3) is a first-class OSM-style provider: it is reachable where OSM/Overpass are not,
+  needs no rate-limited API, and a bbox read touches only the row groups whose bbox statistics overlap (≈1 min for
+  roads + buildings + water + land use of a 90 km course). Rows are converted to OSM-style tags so stages are unchanged.
+- Sparse planner GPX files are snapped to the road network (HMM: σ 15 m emissions, β 60 m transitions, Dijkstra
+  between candidates) before resampling. The official 70.3 file went from 30 % unmatched to 100 % routed (0.35 km
+  unmatched) and 90.5 km — close to the published 90 km.
+- Game art is split between Python (all GIS: land-use classification, vineyard row orientation, scatter, blocking) and
+  Blender (mesh building, UVs, roofs, export). Blender stays a pure geometry/material step, so the same specs can drive
+  an Unreal/PCG importer later.
+- Chunk glTFs reference kit materials by name instead of embedding textures (182 chunks would otherwise duplicate the
+  kit 182×); instance lists ship as JSON so engines use their own instancing (InstancedMesh / HISM / PCG).
+- Terrain under the course road is lowered 25 cm and capped under every road leg within half-width + 2.5 m — fixes
+  the next hairpin leg's terrain covering the road on the Bertinoro climb.
+- Bikes are not physics-simulated vehicles: speed comes from the validated power model (spec §5); the visual bike is
+  posed kinematically (lean from speed and curvature).

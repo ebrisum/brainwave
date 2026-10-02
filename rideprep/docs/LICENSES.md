@@ -6,6 +6,7 @@ The app shows the attribution list from each package (`manifest.attribution`) on
 | Source | Licence / obligation | Used by | Notes |
 |---|---|---|---|
 | OpenStreetMap | ODbL 1.0 — “© OpenStreetMap contributors” visible in app | match, corridor, structure, quick | Local `.pbf` extracts in production; Overpass for development only (fair use) |
+| Overture Maps (transportation, buildings, base water/land use) | ODbL 1.0 (OSM-derived themes); CDLA-Permissive-2.0 for some non-OSM sources — “© OpenStreetMap contributors, Overture Maps Foundation” | match, corridor, game art | Read directly from the public S3 release; attribution shown with OSM |
 | Copernicus DEM GLO-30 | Free with attribution (“© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA”) | profile, corridor | It is a surface model (DSM) |
 | ESA WorldCover 2021 | CC BY 4.0 | corridor, wind | |
 | Open-Meteo | Data CC BY 4.0; free API for non-commercial use only — commercial use needs a paid plan | weather | Project default is personal/non-commercial |

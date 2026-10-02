@@ -32,3 +32,7 @@ External facts this build relies on, where they were checked, and what still nee
 - glTFRuntime `TransformBaseType` mapping for Y-up glTF on UE 5.8; Cesium for Unreal `SetOriginLongitudeLatitudeHeight`.
 - KTX-Software release asset name for the pinned version (worker Dockerfile).
 - Licences of canopy-height datasets (Meta/WRI 1 m, ETH 10 m) and Overture/3D BAG themes before adding those providers.
+- Overture Maps release `2026-09-23.0` (themes transportation/buildings/base/places), schema as read from the Parquet footers: https://docs.overturemaps.org/ ; bucket `overturemaps-us-west-2`.
+- IRONMAN 70.3 Italy Emilia-Romagna bike course description (one 90 km loop: Cervia promenade, Saline di Cervia, Forlimpopoli, Bertinoro): https://www.turismo.comunecervia.it/en/events/events-and-initiatives/sports-and-games/ironman-70-3-italy-emilia-romagna/ , https://www.discovercervia.com/en/events/2026/settembre/ironman-70-3-italy-emilia-romagna
+- HMM map matching: Newson & Krumm, "Hidden Markov Map Matching Through Noise and Sparseness" (ACM SIGSPATIAL 2009).
+- Italian road furniture shapes/colours: Codice della Strada, Regolamento di esecuzione (DPR 495/1992), figures II.

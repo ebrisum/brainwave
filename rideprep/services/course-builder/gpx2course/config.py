@@ -13,7 +13,7 @@ class ProviderConfig:
     # Priority-ordered provider names per data kind. The first provider that covers the area wins.
     dem: list[str] = field(default_factory=lambda: ["copernicus", "gpx"])
     landcover: list[str] = field(default_factory=lambda: ["worldcover", "osm"])
-    osm: list[str] = field(default_factory=lambda: ["sidecar", "pbf", "overpass"])
+    osm: list[str] = field(default_factory=lambda: ["sidecar", "pbf", "overture", "overpass"])
     matcher: list[str] = field(default_factory=lambda: ["valhalla", "nearest-way"])
     weather: list[str] = field(default_factory=lambda: ["open-meteo"])
 

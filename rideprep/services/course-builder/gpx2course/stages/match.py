@@ -6,15 +6,31 @@ import numpy as np
 from ..geo import cumulative_distance, gaussian_smooth, heading_compass, resample_uniform
 from ..pipeline import BuildContext
 from ..providers.matcher import NearestWayMatcher, ValhallaMatcher, empty_attributes
+from ..roadsnap import needs_snap, snap
 from .common import get_osm, latlon_bbox, read_parquet, write_parquet
 
 
 def run(ctx: BuildContext) -> list[str]:
     raw = read_parquet(ctx, "route_raw.parquet")
     sp = ctx.config.tunables.sample_spacing_m
-    # Light smoothing of GPS jitter before matching
-    xs = gaussian_smooth(raw["x"], 1.0, 2.0)
-    ys = gaussian_smooth(raw["y"], 1.0, 2.0)
+    snapped = False
+    if needs_snap(raw["x"], raw["y"]):
+        # Sparse planner export: rebuild the geometry on the road network first (gpx2course/roadsnap.py)
+        rlat, rlon = ctx.frame.to_latlon(raw["x"], raw["y"])
+        feats = get_osm(ctx, latlon_bbox(rlat, rlon, 400), "snap to road")
+        roads = [f for f in feats if "highway" in f.tags and f.geom.geom_type in ("LineString", "MultiLineString")]
+        if roads:
+            sx, sy, src, share = snap(raw["x"], raw["y"], roads, ctx.frame)
+            ctx.warn(f"Sparse route file ({len(raw['x'])} points); geometry rebuilt along the road network "
+                     f"({share:.0%} of point pairs routed)", code="snapped_to_road")
+            e = raw["ele"]
+            ok = np.isfinite(e)
+            ele = np.interp(src, np.nonzero(ok)[0], e[ok]) if ok.sum() >= 2 else np.full(len(sx), np.nan)
+            raw = {"x": sx, "y": sy, "ele": ele}
+            snapped = True
+    # Light smoothing of GPS jitter before matching (a snapped route is already clean)
+    xs = raw["x"] if snapped else gaussian_smooth(raw["x"], 1.0, 2.0)
+    ys = raw["y"] if snapped else gaussian_smooth(raw["y"], 1.0, 2.0)
     s = cumulative_distance(xs, ys)
     grid, (x, y) = resample_uniform(s, sp, xs, ys)
     lat, lon = ctx.frame.to_latlon(x, y)

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -75,6 +76,14 @@ def build_parser() -> argparse.ArgumentParser:
     dt = sub.add_parser("dev-tileset", help="write a local ECEF 3D Tiles stand-in for photoreal mode (no API key needed)")
     dt.add_argument("course_id")
     dt.add_argument("--out", default="./courses")
+
+    gm = sub.add_parser("game", help="game-art build: regional Blender art kit + textured terrain/roads/buildings + kit instances")
+    gm.add_argument("course_id")
+    gm.add_argument("--kit", help="art kit (default: chosen from the course region)")
+    gm.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2)))
+    gm.add_argument("--render", help="preview shots: 'name:km:mode[:back]' comma list (modes: cockpit, chase, side, drone)")
+    gm.add_argument("--chunks", help="only these chunk ids (comma list), for quick iterations")
+    gm.add_argument("--out", default="./courses")
 
     c = sub.add_parser("cache", help="manage regional dataset caches")
     csub = c.add_subparsers(dest="cache_cmd", required=True)
@@ -231,9 +240,20 @@ def cmd_dev_tileset(a) -> int:
     return 0
 
 
+def cmd_game(a) -> int:
+    from .gamekit.run import build_game, parse_shots
+
+    pkg = _resolve_pkg(a.out, a.course_id)
+    length = json.loads((pkg / "manifest.json").read_text())["stats"]["distanceM"]
+    ids = [int(x) for x in a.chunks.split(",")] if a.chunks else None
+    idx = build_game(pkg, a.kit, a.workers, shots=parse_shots(a.render, length), chunk_ids=ids)
+    print(f"game/index.json: {len(idx['chunks'])} chunks, kit {idx['kit']['name']}, compression {idx['compression']}")
+    return 0
+
+
 def main(argv=None) -> int:
     a = build_parser().parse_args(argv)
-    return {"dev-tileset": cmd_dev_tileset, "video": cmd_video, "build": cmd_build, "weather": cmd_weather, "validate": cmd_validate, "inspect": cmd_inspect, "cache": cmd_cache}[a.cmd](a)
+    return {"game": cmd_game, "dev-tileset": cmd_dev_tileset, "video": cmd_video, "build": cmd_build, "weather": cmd_weather, "validate": cmd_validate, "inspect": cmd_inspect, "cache": cmd_cache}[a.cmd](a)
 
 
 if __name__ == "__main__":

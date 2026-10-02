@@ -78,6 +78,7 @@ def latlon_bbox(lat: np.ndarray, lon: np.ndarray, buffer_m: float) -> tuple[floa
 
 def osm_providers(ctx: BuildContext):
     from ..providers.osm import OverpassOsm, PbfOsm, SidecarOsm
+    from ..providers.overture import OvertureOsm
 
     cfg = ctx.config
     out = []
@@ -86,6 +87,8 @@ def osm_providers(ctx: BuildContext):
             out.append(SidecarOsm(ctx.input_path))
         elif name == "pbf":
             out.append(PbfOsm(cfg.endpoints.osm_pbf_dir))
+        elif name == "overture":
+            out.append(OvertureOsm(cfg.cache_dir, cfg.offline, max(60.0, cfg.tunables.network_timeout_s)))
         elif name == "overpass":
             out.append(OverpassOsm(cfg.endpoints.overpass_url, cfg.tunables.network_timeout_s, cfg.offline))
     return out

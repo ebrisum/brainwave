@@ -1,0 +1,724 @@
+{
+  "name": "emilia-romagna",
+  "label": "Emilia-Romagna \u2014 Riviera, saline and Sangiovese hills",
+  "version": 1,
+  "season": "late-summer",
+  "notes": "Romagna lowland/hill kit: stucco houses in ochre, cream, salmon and Pompeian red with green persiane and coppi roofs; red-brick churches and farmhouses (case coloniche); stone pines along the Cervia pinewood and promenade; Lombardy poplars along canals; cypresses at villas and cemeteries; Sangiovese vineyards and peach orchards; salt pans with reeds and flamingos. Signs follow the Italian Codice della Strada shapes (generic, no brand marks).",
+  "towns": [
+    "Cervia",
+    "Milano Marittima",
+    "Castiglione di Cervia",
+    "Pisignano",
+    "Forlimpopoli",
+    "Bertinoro",
+    "Fratta Terme",
+    "Savio"
+  ],
+  "townCentres": {
+    "Cervia": [
+      44.2615,
+      12.3496
+    ],
+    "Milano Marittima": [
+      44.2775,
+      12.3445
+    ],
+    "Castiglione di Cervia": [
+      44.2332,
+      12.2763
+    ],
+    "Pisignano": [
+      44.2398,
+      12.3005
+    ],
+    "Forlimpopoli": [
+      44.1885,
+      12.1276
+    ],
+    "Bertinoro": [
+      44.1488,
+      12.134
+    ],
+    "Fratta Terme": [
+      44.1373,
+      12.1045
+    ],
+    "Savio": [
+      44.2667,
+      12.2833
+    ]
+  },
+  "coastline": {
+    "lonEast": 12.355,
+    "pinewoodBandM": 2500
+  },
+  "palette": {
+    "wall": {
+      "ochre": "#d8a25e",
+      "cream": "#e7d6ad",
+      "salmon": "#d99673",
+      "pompeian": "#b4634a",
+      "yellow": "#e1bf68",
+      "rose": "#dcae9c"
+    },
+    "wallWeights": {
+      "ochre": 0.26,
+      "cream": 0.24,
+      "salmon": 0.18,
+      "pompeian": 0.1,
+      "yellow": 0.14,
+      "rose": 0.08
+    },
+    "shutter": "#3f6b47",
+    "frame": "#ece5d3",
+    "roof": "#a9563a",
+    "brick": "#a4553b"
+  },
+  "materials": {
+    "asphalt": {
+      "gen": "asphalt",
+      "tileM": 4,
+      "base": "#4b4b49",
+      "worn": 0.0,
+      "roughness": 0.9
+    },
+    "asphalt_worn": {
+      "gen": "asphalt",
+      "tileM": 4,
+      "base": "#56544f",
+      "worn": 1.0,
+      "roughness": 0.92
+    },
+    "marking_white": {
+      "gen": "flat",
+      "color": "#e9e9e3",
+      "roughness": 0.6
+    },
+    "kerb": {
+      "gen": "stucco",
+      "tileM": 2,
+      "color": "#bdb8ad",
+      "roughness": 0.85
+    },
+    "paving_porphyry": {
+      "gen": "setts",
+      "tileM": 1.2,
+      "color": "#6e5a52",
+      "roughness": 0.85
+    },
+    "gravel": {
+      "gen": "ground",
+      "tileM": 4,
+      "stops": [
+        [
+          0,
+          "#8d8172"
+        ],
+        [
+          0.5,
+          "#a89a86"
+        ],
+        [
+          1,
+          "#c4b8a2"
+        ]
+      ],
+      "detail": 2.5,
+      "roughness": 0.95
+    },
+    "grass_dry": {
+      "gen": "ground",
+      "tileM": 8,
+      "stops": [
+        [
+          0,
+          "#4d5a26"
+        ],
+        [
+          0.45,
+          "#6b7434"
+        ],
+        [
+          0.75,
+          "#8b8644"
+        ],
+        [
+          1,
+          "#a19654"
+        ]
+      ],
+      "detail": 4,
+      "roughness": 0.95
+    },
+    "grass_green": {
+      "gen": "ground",
+      "tileM": 8,
+      "stops": [
+        [
+          0,
+          "#344d1f"
+        ],
+        [
+          0.5,
+          "#4a6528"
+        ],
+        [
+          1,
+          "#667a34"
+        ]
+      ],
+      "detail": 4,
+      "roughness": 0.95
+    },
+    "stubble": {
+      "gen": "ground",
+      "tileM": 8,
+      "stops": [
+        [
+          0,
+          "#7a6238"
+        ],
+        [
+          0.5,
+          "#9a8048"
+        ],
+        [
+          1,
+          "#b49a5e"
+        ]
+      ],
+      "detail": 3,
+      "rows": 26,
+      "rowDark": 0.82,
+      "roughness": 0.95
+    },
+    "soil_ploughed": {
+      "gen": "ground",
+      "tileM": 8,
+      "stops": [
+        [
+          0,
+          "#4a3726"
+        ],
+        [
+          0.5,
+          "#614a35"
+        ],
+        [
+          1,
+          "#7a6046"
+        ]
+      ],
+      "detail": 3,
+      "rows": 16,
+      "rowDark": 0.62,
+      "roughness": 0.97
+    },
+    "vineyard_soil": {
+      "gen": "ground",
+      "tileM": 5.6,
+      "stops": [
+        [
+          0,
+          "#5c4b33"
+        ],
+        [
+          0.4,
+          "#6a5a3c"
+        ],
+        [
+          0.7,
+          "#5b6a30"
+        ],
+        [
+          1,
+          "#6e7535"
+        ]
+      ],
+      "detail": 3,
+      "rows": 2,
+      "rowDark": 0.7,
+      "roughness": 0.96
+    },
+    "orchard_grass": {
+      "gen": "ground",
+      "tileM": 8,
+      "stops": [
+        [
+          0,
+          "#3b5020"
+        ],
+        [
+          0.5,
+          "#52662a"
+        ],
+        [
+          1,
+          "#6d763a"
+        ]
+      ],
+      "detail": 3,
+      "roughness": 0.95
+    },
+    "forest_floor": {
+      "gen": "ground",
+      "tileM": 8,
+      "stops": [
+        [
+          0,
+          "#3f3424"
+        ],
+        [
+          0.5,
+          "#5d4c30"
+        ],
+        [
+          1,
+          "#6f6a3a"
+        ]
+      ],
+      "detail": 3,
+      "roughness": 0.97
+    },
+    "urban_ground": {
+      "gen": "ground",
+      "tileM": 8,
+      "stops": [
+        [
+          0,
+          "#55554a"
+        ],
+        [
+          0.5,
+          "#67665a"
+        ],
+        [
+          1,
+          "#7d7a69"
+        ]
+      ],
+      "detail": 3,
+      "roughness": 0.95
+    },
+    "sand": {
+      "gen": "ground",
+      "tileM": 6,
+      "stops": [
+        [
+          0,
+          "#c9b48c"
+        ],
+        [
+          0.5,
+          "#dbc8a0"
+        ],
+        [
+          1,
+          "#eadbb8"
+        ]
+      ],
+      "detail": 2,
+      "roughness": 0.98
+    },
+    "saltpan_water": {
+      "gen": "water",
+      "tileM": 16,
+      "color": "#8b8f86",
+      "shallow": "#c9a9a0",
+      "roughness": 0.06
+    },
+    "water": {
+      "gen": "water",
+      "tileM": 16,
+      "color": "#4c6260",
+      "shallow": "#6d7f6c",
+      "roughness": 0.06
+    },
+    "wetland": {
+      "gen": "ground",
+      "tileM": 8,
+      "stops": [
+        [
+          0,
+          "#4c5734"
+        ],
+        [
+          0.5,
+          "#6b6c42"
+        ],
+        [
+          1,
+          "#857c52"
+        ]
+      ],
+      "detail": 3,
+      "roughness": 0.9
+    },
+    "brick": {
+      "gen": "bricks",
+      "tileM": 1.2,
+      "color": "#a4553b",
+      "mortar": "#cfc3ad",
+      "roughness": 0.9
+    },
+    "roof_coppi": {
+      "gen": "coppi",
+      "tileM": 2,
+      "color": "#a9563a",
+      "roughness": 0.8
+    },
+    "roof_flat": {
+      "gen": "ground",
+      "tileM": 4,
+      "stops": [
+        [
+          0,
+          "#6f6b64"
+        ],
+        [
+          1,
+          "#9a958b"
+        ]
+      ],
+      "detail": 2,
+      "roughness": 0.95
+    },
+    "concrete_panel": {
+      "gen": "stucco",
+      "tileM": 4,
+      "color": "#b7b3a8",
+      "roughness": 0.9
+    },
+    "greenhouse": {
+      "gen": "flat",
+      "color": "#dfe6e2",
+      "roughness": 0.25,
+      "alpha": 0.55
+    },
+    "metal_galvanised": {
+      "gen": "flat",
+      "color": "#9ea3a6",
+      "roughness": 0.35,
+      "metallic": 0.9
+    },
+    "paint_white": {
+      "gen": "flat",
+      "color": "#efefea",
+      "roughness": 0.5
+    },
+    "paint_black": {
+      "gen": "flat",
+      "color": "#1d1d1d",
+      "roughness": 0.5
+    },
+    "reflector_red": {
+      "gen": "flat",
+      "color": "#c41f1f",
+      "roughness": 0.2,
+      "emissive": 0.15
+    },
+    "bark": {
+      "gen": "bark",
+      "tileM": 1,
+      "color": "#5f4d3c",
+      "roughness": 0.95
+    },
+    "bark_pine": {
+      "gen": "bark",
+      "tileM": 1,
+      "color": "#6e4b36",
+      "roughness": 0.95
+    },
+    "leaf_broad": {
+      "gen": "leaf",
+      "kind": "broadleaf",
+      "color": "#4f6a2c",
+      "roughness": 0.8,
+      "alphaCutoff": 0.4
+    },
+    "leaf_poplar": {
+      "gen": "leaf",
+      "kind": "broadleaf",
+      "color": "#5f7a31",
+      "roughness": 0.8,
+      "alphaCutoff": 0.4
+    },
+    "leaf_cypress": {
+      "gen": "leaf",
+      "kind": "needle",
+      "color": "#2f4425",
+      "roughness": 0.85,
+      "alphaCutoff": 0.4
+    },
+    "leaf_pine": {
+      "gen": "leaf",
+      "kind": "needle",
+      "color": "#3e5a2a",
+      "roughness": 0.85,
+      "alphaCutoff": 0.4
+    },
+    "leaf_olive": {
+      "gen": "leaf",
+      "kind": "olive",
+      "color": "#5b6d4a",
+      "roughness": 0.8,
+      "alphaCutoff": 0.4
+    },
+    "leaf_vine": {
+      "gen": "leaf",
+      "kind": "vine",
+      "color": "#4d7030",
+      "roughness": 0.8,
+      "alphaCutoff": 0.4
+    },
+    "leaf_fruit": {
+      "gen": "leaf",
+      "kind": "broadleaf",
+      "color": "#567a33",
+      "roughness": 0.8,
+      "alphaCutoff": 0.4
+    },
+    "leaf_palm": {
+      "gen": "leaf",
+      "kind": "needle",
+      "color": "#4d6b34",
+      "roughness": 0.8,
+      "alphaCutoff": 0.4
+    },
+    "reed": {
+      "gen": "leaf",
+      "kind": "needle",
+      "color": "#8a8a52",
+      "roughness": 0.8,
+      "alphaCutoff": 0.4
+    },
+    "signs": {
+      "gen": "signs",
+      "roughness": 0.4,
+      "alphaCutoff": 0.5
+    },
+    "foliage_core_dark": {
+      "gen": "foliage",
+      "tileM": 2.5,
+      "color": "#26361f",
+      "roughness": 0.9
+    },
+    "foliage_core": {
+      "gen": "foliage",
+      "tileM": 2.5,
+      "color": "#3b5126",
+      "roughness": 0.9
+    },
+    "foliage_core_light": {
+      "gen": "foliage",
+      "tileM": 2.5,
+      "color": "#58702f",
+      "roughness": 0.9
+    },
+    "foliage_core_olive": {
+      "gen": "foliage",
+      "tileM": 2.5,
+      "color": "#5d6a4b",
+      "roughness": 0.9
+    },
+    "wood_post": {
+      "gen": "bark",
+      "tileM": 1,
+      "color": "#7a6550",
+      "roughness": 0.95
+    },
+    "flamingo": {
+      "gen": "flat",
+      "color": "#e7a3a0",
+      "roughness": 0.7
+    },
+    "salt": {
+      "gen": "ground",
+      "tileM": 3,
+      "stops": [
+        [
+          0,
+          "#dcd8d0"
+        ],
+        [
+          1,
+          "#f6f4ee"
+        ]
+      ],
+      "detail": 2,
+      "roughness": 0.7
+    },
+    "fabric_banner": {
+      "gen": "flat",
+      "color": "#1f4f8f",
+      "roughness": 0.8
+    },
+    "plastic_barrier": {
+      "gen": "flat",
+      "color": "#c9ccd0",
+      "roughness": 0.4,
+      "metallic": 0.6
+    },
+    "crop_green": {
+      "gen": "ground",
+      "tileM": 8,
+      "stops": [
+        [
+          0,
+          "#3d5520"
+        ],
+        [
+          0.5,
+          "#55702c"
+        ],
+        [
+          1,
+          "#6f863a"
+        ]
+      ],
+      "detail": 3,
+      "rows": 20,
+      "rowDark": 0.8,
+      "roughness": 0.95
+    }
+  },
+  "facades": {
+    "bayM": [
+      4,
+      3
+    ],
+    "groundFloorTowns": true
+  },
+  "terrain": {
+    "landuse": {
+      "vineyard": "vineyard_soil",
+      "orchard": "orchard_grass",
+      "farmland": [
+        "stubble",
+        "soil_ploughed",
+        "crop_green",
+        "soil_ploughed",
+        "stubble",
+        "crop_green",
+        "grass_dry"
+      ],
+      "meadow": "grass_dry",
+      "grass": "grass_green",
+      "garden": "grass_green",
+      "allotments": "orchard_grass",
+      "farmyard": "gravel",
+      "residential": "urban_ground",
+      "industrial": "urban_ground",
+      "commercial": "urban_ground",
+      "cemetery": "gravel",
+      "park": "grass_green",
+      "pitch": "grass_green",
+      "playground": "gravel",
+      "beach_resort": "sand",
+      "salt_pond": "saltpan_water",
+      "forest": "forest_floor",
+      "wetland": "wetland",
+      "pedestrian": "paving_porphyry",
+      "construction": "soil_ploughed",
+      "greenhouse_horticulture": "gravel",
+      "plant_nursery": "orchard_grass",
+      "quarry": "gravel"
+    },
+    "water": {
+      "salt_pond": "saltpan_water",
+      "default": "water"
+    },
+    "worldcover": {
+      "10": "forest_floor",
+      "20": "grass_dry",
+      "30": "grass_dry",
+      "40": "stubble",
+      "50": "urban_ground",
+      "60": "soil_ploughed",
+      "80": "water",
+      "90": "wetland",
+      "95": "wetland",
+      "100": "grass_dry"
+    }
+  },
+  "vegetation": {
+    "vineyard": {
+      "rowSpacingM": 2.8,
+      "asset": "vine_row_5m",
+      "stepM": 5
+    },
+    "orchard": {
+      "spacingM": [
+        5.0,
+        4.0
+      ],
+      "asset": "tree_fruit"
+    },
+    "forest": {
+      "spacingM": 7.5,
+      "coastal": {
+        "tree_stone_pine": 0.85,
+        "tree_broadleaf": 0.15
+      },
+      "inland": {
+        "tree_broadleaf": 0.55,
+        "tree_oak": 0.3,
+        "tree_cypress": 0.05,
+        "tree_poplar": 0.1
+      }
+    },
+    "canal": {
+      "asset": "tree_poplar",
+      "stepM": 9,
+      "offsetM": 4,
+      "share": 0.55
+    },
+    "garden": {
+      "perM2": 0.0035,
+      "mix": {
+        "tree_fruit": 0.3,
+        "tree_broadleaf": 0.25,
+        "tree_cypress": 0.15,
+        "tree_stone_pine": 0.15,
+        "tree_olive": 0.15
+      }
+    },
+    "coastalGarden": {
+      "mix": {
+        "tree_stone_pine": 0.5,
+        "tree_palm": 0.25,
+        "tree_broadleaf": 0.25
+      }
+    },
+    "hills": {
+      "aboveM": 60,
+      "olive": 0.25,
+      "cypress": 0.2
+    },
+    "reeds": {
+      "stepM": 3.5
+    },
+    "flamingos": {
+      "perHa": 1.2,
+      "maxPerPond": 40
+    },
+    "fieldEdges": {
+      "mix": {
+        "none": 0.45,
+        "hedge_4m": 0.2,
+        "tree_oak": 0.15,
+        "tree_poplar": 0.12,
+        "tree_broadleaf": 0.08
+      },
+      "treeStepM": 11.0,
+      "patchShare": 0.35
+    }
+  },
+  "props": {
+    "delineatorStepM": 50,
+    "guardrailEmbankmentM": 1.5,
+    "streetlightStepM": 32,
+    "raceKmBoards": true,
+    "raceBarrierFirstLastM": 1500
+  }
+}

@@ -68,7 +68,7 @@ def dry_run(path: Path, cfg: Config, opts: BuildOptions) -> dict:
     x, y = fr.to_xy(rc.lat, rc.lon)
     km = float(cumulative_distance(x, y)[-1] / 1000)
     sources = {}
-    osm = {"sidecar": SidecarOsm(path).available(), "pbf": PbfOsm(cfg.endpoints.osm_pbf_dir).available(), "overpass": not cfg.offline}
+    osm = {"sidecar": SidecarOsm(path).available(), "pbf": PbfOsm(cfg.endpoints.osm_pbf_dir).available(), "overture": not cfg.offline, "overpass": not cfg.offline}
     sources["osm"] = next((k for k in cfg.providers.osm if osm.get(k)), None)
     sources["matcher"] = "valhalla" if ValhallaMatcher(cfg.endpoints.valhalla_url, 3, cfg.offline).available() else (
         "nearest-way" if sources["osm"] else "none (unmatched)")

@@ -129,3 +129,64 @@ def test_glb_round_trip():
     j = read_glb_json(glb)
     assert j["asset"]["version"] == "2.0" and j["materials"][0]["extras"]["materialId"] == "road_asphalt"
     assert len(glb) % 4 == 0
+
+
+def test_roadsnap_rebuilds_sparse_route_on_the_network():
+    """A planner export with one point per ~150 m around an L-bend must follow the road, not cut the corner."""
+    import shapely
+
+    from gpx2course.geo import LocalFrame
+    from gpx2course.providers.osm import Feature
+    from gpx2course.roadsnap import needs_snap, snap
+
+    frame = LocalFrame(44.25, 12.35)
+    # Road network (local metres): an L (east 600 m, then north 600 m) plus a diagonal shortcut track that a
+    # straight line between the sparse points would hug.
+    def feat(xy, hw):
+        lat, lon = frame.to_latlon(np.array([p[0] for p in xy]), np.array([p[1] for p in xy]))
+        return Feature(shapely.LineString(np.c_[lon, lat]), {"highway": hw})
+    roads = [feat([(0, 0), (300, 0), (600, 0)], "tertiary"), feat([(600, 0), (600, 300), (600, 600)], "tertiary"),
+             feat([(300, 0), (600, 300)], "footway")]
+    x = np.array([0.0, 160, 330, 470, 600, 600, 600])
+    y = np.array([0.0, 4, -3, 5, 150, 330, 600])
+    assert needs_snap(x, y)
+    sx, sy, src, share = snap(x, y, roads, frame)
+    assert share == 1.0
+    L = float(np.sum(np.hypot(np.diff(sx), np.diff(sy))))
+    assert L == pytest.approx(1200, abs=15)  # along the L, not the 1000 m-ish corner cut
+    # Every output vertex lies on the L (≤ 1 m), i.e. the footway shortcut was not taken
+    line = shapely.LineString([(0, 0), (600, 0), (600, 600)])
+    assert max(line.distance(shapely.Point(p)) for p in zip(sx, sy)) < 1.0
+    assert src[0] == 0 and src[-1] == pytest.approx(len(x) - 1)
+    assert not needs_snap(np.arange(0, 500, 5.0), np.zeros(100))
+
+
+def test_overture_rows_become_osm_style_features():
+    import shapely
+
+    from gpx2course.providers.overture import _buildings, _land_use, _segments, _water
+
+    seg = {"id": "s1", "subtype": "road", "class": "tertiary", "names": {"primary": "Via Salara"}, "geometry": shapely.LineString([(0, 0), (1, 0)]),
+           "road_surface": [{"value": "paved", "between": None}], "road_flags": [{"values": ["is_bridge"], "between": [0.25, 0.5]}],
+           "width_rules": None}
+    f = _segments([seg])
+    assert [x.tags.get("bridge") for x in f] == [None, "yes", None]
+    assert f[1].geom.length == pytest.approx(0.25) and all(x.tags["highway"] == "tertiary" and x.tags["name"] == "Via Salara" for x in f)
+    b = _buildings([{"id": "b1", "class": "church", "height": 21.5, "num_floors": None, "roof_shape": "hipped", "roof_color": None,
+                     "facade_color": None, "facade_material": None, "roof_material": None, "geometry": shapely.box(0, 0, 1, 1)}])[0]
+    assert b.tags == {"building": "church", "overture:id": "b1", "height": "21.5", "roof:shape": "hipped"}
+    w = _water([{"id": "w", "subtype": "water", "class": "salt_pond", "names": {"primary": "Saline di Cervia"}, "geometry": shapely.box(0, 0, 1, 1)}])[0]
+    assert w.tags == {"natural": "water", "water": "salt_pond", "name": "Saline di Cervia"}
+    lu = _land_use([{"id": "l", "subtype": "horticulture", "class": "vineyard", "names": None, "geometry": shapely.box(0, 0, 1, 1)}])[0]
+    assert lu.tags["landuse"] == "vineyard"
+
+
+def test_kit_textures_tile_and_are_deterministic():
+    from gpx2course.gamekit import textures as tx
+
+    a = tx.pnoise(64, 8, 3)
+    assert np.array_equal(a, tx.pnoise(64, 8, 3))
+    # Periodic: the wrap-around step is no larger than a typical interior step
+    assert np.abs(a[:, 0] - a[:, -1]).mean() < 3 * np.abs(np.diff(a, axis=1)).mean()
+    rgb, h, r = tx.coppi(64, 1)
+    assert rgb.shape == (64, 64, 3) and 0 <= rgb.min() and rgb.max() <= 1.5 and 0 < r <= 1
