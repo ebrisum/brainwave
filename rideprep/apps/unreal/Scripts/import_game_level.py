@@ -9,8 +9,9 @@ What it builds (all from <package>/game/index.json, written by `gpx2course game`
      `<asset>__lod1` merged in as LOD1.
   2. Level: new World Partition level (OpenWorld template; its landscape is removed — terrain comes with the chunks).
   3. Chunks: g<id>.glb (uncompressed copies in game/unreal/) → static meshes with the kit material instances,
-     complex-as-simple collision on terrain/roads/buildings, none on markings, Nanite on opaque meshes; one actor per
-     mesh at the chunk origin (ENU → UE: X = E·100, Y = −N·100, Z = U·100), so World Partition streams them by cell.
+     complex-as-simple collision on terrain/roads/buildings, none on markings, Nanite on opaque meshes (`--no-nanite`:
+     regular full-detail meshes, for GPUs without DirectX 12 SM6); one actor per mesh at the chunk origin
+     (ENU → UE: X = E·100, Y = −N·100, Z = U·100), so World Partition streams them by cell.
   4. Instances: one ARidePrepInstanceActor per chunk with HISM per kit asset (without the C++ plugin — the Blueprint-only
      render project — a static mesh actor with HISM components added through the SubobjectDataSubsystem);
      `--overrides` maps kit asset ids to high-quality project assets (e.g. scanned Pinus pinea, cypress, olive) with
@@ -20,7 +21,8 @@ What it builds (all from <package>/game/index.json, written by `gpx2course game`
   6. Sun: directional light set for the event start (manifest eventStart, NOAA solar position).
   7. Hero road (chunks built with `gpx2course game --hero`): h<id>.glb replaces the chunk's road/markings/defects/
      shoulder meshes with the dense Nanite carriageway (real potholes, cracks, patches, crumbled edges) and stone-relief
-     gravel shoulders; loose pebbles become HISM instances (culled at 60 m).
+     gravel shoulders, whose Nanite fallback keeps every triangle (complex collision and renderers without Nanite get
+     the real pothole floor); loose pebbles become HISM instances (culled at 60 m).
   8. Road-edge blending: one Runtime Virtual Texture over the corridor; roads, shoulders and verges draw into it and
      the terrain master material blends toward it with the RoadMask vertex colour (1 at the verge → 0 four metres
      out), so the road never looks like a sticker. Without RVT support the same mask blends toward the gravel layer.
@@ -91,6 +93,8 @@ def parse():
     p.add_argument("--no-pcg", action="store_true")
     p.add_argument("--no-hero", action="store_true", help="ignore hero road meshes even if the package has them")
     p.add_argument("--no-rvt", action="store_true")
+    p.add_argument("--no-nanite", action="store_true", help="regular meshes only — for GPUs without DirectX 12 SM6, which "
+                                                             "would draw the simplified Nanite fallback instead")
     p.add_argument("--rider-dir", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "client", "public", "models"))
     p.add_argument("--rails", default="auto", help="camera rails along the riding line: 'auto' (start, climbs, hero stretches), 'none', "
                                                    "or route km ranges 'km:44-46.5,0-2'")
@@ -479,18 +483,32 @@ def assign_materials(sm, mis):
             sm.set_material(i, mis[mid])
 
 
-def configure_chunk_mesh(sm, kind):
+def configure_chunk_mesh(sm, kind, nanite=True, full_fallback=False):
+    """Collision and Nanite. full_fallback (hero road): the Nanite fallback mesh keeps every triangle instead of the
+    coarse default — it is what complex collision is cooked from and what renderers without Nanite draw."""
     body = sm.get_editor_property("body_setup")
     if body:
         body.set_editor_property("collision_trace_flag",
                                  unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE if kind not in ("markings", "defects") else unreal.CollisionTraceFlag.CTF_USE_DEFAULT)
-    if kind in ("terrain", "buildings", "road", "sideroads", "far", "shoulder", "verge"):
-        try:
-            ns = sm.get_editor_property("nanite_settings")
-            ns.set_editor_property("enabled", True)
-            sm.set_editor_property("nanite_settings", ns)
-        except Exception as ex:  # noqa: BLE001
-            warn(f"Nanite on {sm.get_name()}: {ex}")
+    if kind not in ("terrain", "buildings", "road", "sideroads", "far", "shoulder", "verge"):
+        return
+    try:
+        ns = sm.get_editor_property("nanite_settings")
+        if ns.get_editor_property("enabled") == nanite and not (nanite and full_fallback):
+            return  # already right; setting it again would rebuild the mesh
+        ns.set_editor_property("enabled", nanite)
+        if nanite and full_fallback:
+            keep = [("fallback_percent_triangles", 1.0), ("fallback_relative_error", 0.0)]
+            if hasattr(unreal, "NaniteFallbackTarget"):  # UE 5.2+: pick which of the two applies
+                keep.insert(0, ("fallback_target", unreal.NaniteFallbackTarget.PERCENT_TRIANGLES))
+            for prop, value in keep:
+                try:
+                    ns.set_editor_property(prop, value)
+                except Exception as ex:  # noqa: BLE001
+                    warn(f"Nanite {prop} on {sm.get_name()}: {ex}")
+        sm.set_editor_property("nanite_settings", ns)
+    except Exception as ex:  # noqa: BLE001
+        warn(f"Nanite on {sm.get_name()}: {ex}")
 
 
 # ---- level ------------------------------------------------------------------------------------------------------------
@@ -559,7 +577,9 @@ def main():
     mis, terrain_mis, kit_meshes = import_kit(pkg, index, rvt)
     hero = index.get("hero") if not a.no_hero else None
     replaced = set(hero.get("replaces", [])) if hero else set()
-    pebble_meshes = import_pebbles(pkg, hero, mis) if hero else {}
+    nanite = not a.no_nanite
+    log("Nanite " + ("on" if nanite else "off: regular full-detail meshes (--no-nanite)"))
+    pebble_meshes = import_pebbles(pkg, hero, mis, nanite) if hero else {}
     route = read_route(pkg, manifest)
     # Far field
     far = index.get("farUnreal")
@@ -568,7 +588,7 @@ def main():
             if "farfill" in sm.get_name():
                 continue  # corridor fills are for streaming clients; every chunk is resident in the editor level
             assign_materials(sm, mis)
-            configure_chunk_mesh(sm, "far")
+            configure_chunk_mesh(sm, "far", nanite)
             act = eas.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(0, 0, 0))
             act.static_mesh_component.set_static_mesh(sm)
             act.set_actor_label("RidePrep_Far")
@@ -595,7 +615,7 @@ def main():
             if has_hero and kind in replaced:
                 continue
             assign_materials(sm, {**mis, **terrain_mis} if kind == "terrain" else mis)
-            configure_chunk_mesh(sm, "road" if kind == "hero" else kind)
+            configure_chunk_mesh(sm, "road" if kind == "hero" else kind, nanite, full_fallback=kind == "hero")
             act = eas.spawn_actor_from_class(unreal.StaticMeshActor, loc)
             act.static_mesh_component.set_static_mesh(sm)
             if kind in ("markings", "defects"):
@@ -660,14 +680,14 @@ def corridor_bounds_cm(index):
     return ((min(xs) * 100, -max(ys) * 100, min(zs) * 100 - 20000), (max(xs) * 100, -min(ys) * 100, max(zs) * 100 + 20000))
 
 
-def import_pebbles(pkg, hero, mis):
+def import_pebbles(pkg, hero, mis, nanite=True):
     path = os.path.join(pkg, hero["pebbles"])
     if not os.path.exists(path):
         return {}
     out = {}
     for sm in [o for o in import_files([path], f"{ROOT}/Hero") if isinstance(o, unreal.StaticMesh)]:
         assign_materials(sm, mis)
-        configure_chunk_mesh(sm, "road")
+        configure_chunk_mesh(sm, "road", nanite)
         body = sm.get_editor_property("body_setup")
         if body:
             body.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_DEFAULT)

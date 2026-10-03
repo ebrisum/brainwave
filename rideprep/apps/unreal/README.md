@@ -81,11 +81,11 @@ UnrealEditor-Cmd RidePrep.uproject -run=pythonscript \
 | Step | Result |
 |---|---|
 | Kit | `M_RidePrepKit` / `M_RidePrepKit_Masked` (created once), textures, `MI_<material id>` (UVScale = 1/tileM, Tint, Roughness, Metallic) with PhysMats `PM_Asphalt/Setts/Gravel/Grass/Soil/Water/Metal` (surface types in `Config/DefaultEngine.ini`), kit meshes with `<asset>__lod1` as LOD1 |
-| Chunks | static mesh actors per chunk mesh at `EnuToUe(origin)`; complex-as-simple collision on terrain, roads and buildings; Nanite on opaque meshes; far field |
+| Chunks | static mesh actors per chunk mesh at `EnuToUe(origin)`; complex-as-simple collision on terrain, roads and buildings; Nanite on opaque meshes (`--no-nanite`: regular meshes, for GPUs without DirectX 12 SM6, which would otherwise draw the coarse Nanite fallback); far field |
 | Instances | `ARidePrepInstanceActor` per chunk (HISM per asset, cull distances, collision only for solid props); `--overrides` swaps kit meshes for high-quality assets by asset id |
 | PCG | `PCGVolume` per chunk over the land-use mask (graph parameters `LanduseMask`, `LanduseBoundsMinCm/MaxCm`); `ARidePrepRoadSpline` per chunk along the course road (tag `RidePrepRoad`) for exclusion and edge sampling |
 | Sun | directional light from the event start (NOAA solar position) |
-| Hero road | chunks built with `gpx2course game --hero …`: `h<id>.glb` replaces the chunk's `road_/markings_/defects_/shoulder_` meshes (Nanite, complex collision); pebbles as HISM (`pebble_a/b/c`, culled at 60 m) |
+| Hero road | chunks built with `gpx2course game --hero …`: `h<id>.glb` replaces the chunk's `road_/markings_/defects_/shoulder_` meshes (Nanite with a fallback that keeps every triangle, so complex collision and non-Nanite renderers see the real pothole floor); pebbles as HISM (`pebble_a/b/c`, culled at 60 m) |
 | RVT | `RVT_RoadBlend` + volume over the corridor; roadside meshes draw into it, `M_RidePrepKit_Terrain` blends the terrain toward it with the `RoadMask` vertex colour |
 | Rider | `rider_road/tt.glb` (tools/rider) → `/Game/RidePrep/Rider/<bike>`: skeletal mesh + `pedal`, `stand`, `coast` (+ `_drops`) clips |
 

@@ -27,6 +27,9 @@ can't do from a GPX: real terrain and roads, buildings, land use, trees, guardra
 
 - **Unreal Engine 5.4 or newer** (5.6+ recommended) from the Epic Games Launcher. No C++ compiler.
 - A GPU with Nanite/Lumen support (RTX 2070 / RX 6700 class or better), 32 GB RAM, ~15 GB free disk after import.
+  Nanite and Virtual Shadow Maps need DirectX 12 with Shader Model 6 (NVIDIA GTX 900 series or newer, AMD RX Vega /
+  RX 5000 or newer, current driver). An older card still works: see "not supported by your system" under
+  *If something goes wrong*.
 
 ## Step 1 — Unzip
 
@@ -61,6 +64,8 @@ Setts, Gravel, Grass, Soil, Water, Metal.
    `py "D:/RidePrep/RidePrep_EmiliaRomagna703/Scripts/build_level.py" --chunks 84,85,86,87,88`
    (a chunk is 500 m: chunk 86 = km 43.0–43.5; 88–92 = the Bertinoro climb). Running it again without `--chunks`
    builds everything; delete the test level first (or pass `--level MyTest` for the test).
+   If Unreal told you DirectX 12 SM6 is **not supported by your system**, add `--no-nanite` to every run (also the
+   one-click run: type `py "<path>/Scripts/build_level.py" --no-nanite` in the command box instead of using the menu).
 3. When it is done, open the level in the Content Browser: `Content/RidePrep/Courses/c_28f22c31632ed08b1ba7_game/`.
 
 What the script built:
@@ -166,6 +171,7 @@ km:44-46.5` in the RidePrep repository, ~25–30 MB per 500 m; the whole course 
 | Symptom | Fix |
 |---|---|
 | "Missing Project Settings! Shader Model 6 (SM6) is required…" | *Project Settings → Platforms → Windows*: Default RHI **DirectX 12**, *D3D12 Targeted Shader Formats* tick **SM6**, restart the editor (Nanite and Virtual Shadow Maps need it) |
+| "This project attempted to launch DirectX 12 with the SM6 shader format but it is not supported by your system" | Unreal checked your graphics card and driver and fell back to the older shader model: no Nanite, no Virtual Shadow Maps. Find the card in *Task Manager → Performance → GPU*. Then: update the graphics driver (NVIDIA App, AMD Adrenalin, Intel Driver & Support Assistant) and Windows, and restart. On a laptop with two GPUs, run Unreal on the strong one: *Windows Settings → System → Display → Graphics* → add `C:\Program Files\Epic Games\UE_5.x\Engine\Binaries\Win64\UnrealEditor.exe` → *Options → High performance*. Remote Desktop and virtual machines (Parallels, VMware) can't do SM6. If the card is too old (e.g. GTX 700, RX 400/500, Intel HD/UHD): tick *Don't show this again* and build with `--no-nanite`. Every mesh is then a regular full-detail mesh, the hero road keeps its potholes (~1 M triangles per 500 m, fine on any card), shadows use regular shadow maps, and Lumen normally still lights the scene (software ray tracing) |
 | No *Execute Python Script* menu | enable *Python Editor Script Plugin*, restart |
 | Import stops with an error | the Output Log has `[RidePrep]` lines; most steps warn and continue — send the log |
 | Everything grey/checkered | shaders still compiling (bottom-right counter) |
