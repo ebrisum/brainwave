@@ -165,6 +165,7 @@ km:44-46.5` in the RidePrep repository, ~25–30 MB per 500 m; the whole course 
 
 | Symptom | Fix |
 |---|---|
+| "Missing Project Settings! Shader Model 6 (SM6) is required…" | *Project Settings → Platforms → Windows*: Default RHI **DirectX 12**, *D3D12 Targeted Shader Formats* tick **SM6**, restart the editor (Nanite and Virtual Shadow Maps need it) |
 | No *Execute Python Script* menu | enable *Python Editor Script Plugin*, restart |
 | Import stops with an error | the Output Log has `[RidePrep]` lines; most steps warn and continue — send the log |
 | Everything grey/checkered | shaders still compiling (bottom-right counter) |
