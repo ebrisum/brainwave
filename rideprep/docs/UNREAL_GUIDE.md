@@ -37,8 +37,13 @@ can't do from a GPX: real terrain and roads, buildings, land use, trees, guardra
 
 ## Step 2 — Open the project
 
-1. Double-click `RidePrepRender.uproject` and pick your engine version (or Epic Games Launcher → Unreal Engine →
-   Library → *Browse…*).
+1. Open `RidePrepRender.uproject` — easiest from the **Epic Games Launcher**: *Unreal Engine → Library → Launch* your
+   engine, then in the Project Browser click **Browse…** and pick the file. Double-clicking also works once Windows
+   knows the file type: if it asks "How do you want to open this file?", choose
+   `C:\Program Files (x86)\Epic Games\Launcher\Engine\Binaries\Win64\UnrealVersionSelector.exe` (*More apps →
+   Look for another app on this PC*, tick *Always*) — it then asks which engine version to use. If Unreal says the
+   project was made with a different engine version, choose *More Options → Convert in-place* (safe: the project has
+   no content yet; this only records your version).
 2. The first start compiles shaders: 10–30 minutes. Let it finish.
 3. Check *Edit → Plugins* — these must be on (they are listed in the project; enable them and restart if not):
    **Python Editor Script Plugin**, **Editor Scripting Utilities**, **PCG**, **Movie Render Queue**.
