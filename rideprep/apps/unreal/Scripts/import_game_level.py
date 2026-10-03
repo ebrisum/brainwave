@@ -552,11 +552,31 @@ def set_sun(manifest, actors):
             log(f"sun: elevation {el:.1f}°, azimuth {az:.1f}° ({when.isoformat()})")
 
 
+def missing_files(pkg, index, want=None, hero=True):
+    """Course files the import needs (for the chunks in `want`, all when None) that are not on disk — typically a zip
+    part of the hand-off bundle unpacked into its own folder instead of the project folder."""
+    kit = index["kit"]
+    rels = [kit.get("glb") or f"{kit['dir']}/kit.glb", index.get("farUnreal")]
+    if hero and index.get("hero"):
+        rels.append(index["hero"].get("pebbles"))
+    for c in index["chunks"]:
+        if want is None or c["id"] in want:
+            rels += [c.get("glbUnreal") or c["glb"], c.get("instances")] + ([c.get("hero")] if hero and index.get("hero") else [])
+    return [r for r in rels if r and not os.path.exists(os.path.join(pkg, r))]
+
+
 def main():
     a = parse()
     pkg = a.package
     manifest = load_json(os.path.join(pkg, "manifest.json"))
     index = load_json(os.path.join(pkg, "game", "index.json"))
+    want = {int(x) for x in a.chunks.split(",")} if a.chunks else None
+    missing = missing_files(pkg, index, want, not a.no_hero)
+    if missing:
+        unreal.log_error(f"[RidePrep] {len(missing)} course file(s) missing, e.g. {missing[0]}: unzip every zip "
+                         f"(all _part…of… zips and _hero) into the same folder as the project, then run again "
+                         f"(or add --no-hero if you left out the _hero zip). Looked in {pkg}")
+        return
     overrides = load_json(a.overrides) if a.overrides else {}
     level_name = a.level or f"{manifest['courseId']}_game"
     croot = f"{ROOT}/Courses/{level_name}"
@@ -594,7 +614,6 @@ def main():
             act.set_actor_label("RidePrep_Far")
             act.set_folder_path("RidePrep")
     # Chunks
-    want = {int(x) for x in a.chunks.split(",")} if a.chunks else None
     graph = unreal.load_asset(PCG_GRAPH) if not a.no_pcg and eal.does_asset_exist(PCG_GRAPH) else None
     if not a.no_pcg and graph is None:
         warn(f"{PCG_GRAPH} not found — PCG ground detail skipped (author it once, see apps/unreal/README.md)")
