@@ -5,7 +5,7 @@ This folder holds a parametric conceptual massing of the Verdio poshtel ground f
 | File | What it is |
 |---|---|
 | `verdio_ground_floor.py` | One script. It builds the 400 m² plate, walls, openings, the steel Kamer en suite, oak panelling, blocking props, materials (including a procedural Rotband plaster), sun, sky, light portals, practical lights, cameras and Cycles settings. |
-| `previews/` | Low-sample Cycles renders (64 spp, CPU) straight out of the script, with no manual edits. |
+| `previews/` | Low-sample Cycles renders (48 spp, CPU, 960 × 640) straight out of the script, with no manual edits. |
 
 The script was tested headless on Blender 4.2 LTS. API names that changed in 4.x (Principled inputs, displacement method) are handled. If you're on 5.x and the Nishita sky type has been renamed, the world falls back to a flat sky. Use an HDRI there anyway (see §3).
 
