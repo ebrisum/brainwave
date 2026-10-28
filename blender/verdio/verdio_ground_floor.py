@@ -8,9 +8,17 @@ Run it:  Scripting workspace -> Open this file -> Run Script
 Re-running rebuilds the "VERDIO" collection in place.  Materials are rebuilt
 under the same names, so nothing piles up as .001 copies.
 
+Direction: a dune house, not a modern box.  A Dutch coastal farmhouse
+(brick, pantiles, an oak beam ceiling) crossed with an English country
+house (panelling, hearths, window seats), set into the dunes, with a deep
+veranda where most of daily life happens half outdoors.  No polished
+concrete, no flat white ceilings, no LED strips, no powder-coated steel.
+
 Plan convention: +X = east, +Y = north, Z up, 1 unit = 1 m.
 The coast / sea is SOUTH (-Y).  Plate 25.0 x 16.0 m = 400 m2 gross.
 
+                    TRAINING YARD (sand, pull-up rig)
+                          ^ doors ^
     N  y=16.00
     +-------------------------------------------------+
     |  LIBRARY / COWORK      #  ENDURANCE      | WET  |
@@ -20,20 +28,28 @@ The coast / sea is SOUTH (-Y).  Plate 25.0 x 16.0 m = 400 m2 gross.
     |  CULINARY CORE   |  LOUNGE         | MUDROOM    |
     |  grill + table   |  dark oak       | terracotta |
     |  75.1 m2         |  73.0 m2        | 50.2 m2    |
-    +-------------------------------------------------+  y=0
+    +==||====||========+==||===||===||===+===||=======+  y=0   || = French doors
+    :  VERANDA 3.6 m: terracotta runs straight through     :
+    :  oven, long table  |  daybeds          |  porch, shower:  y=-3.6
+    :  vine pergola      |  pantile lean-to roof             :
     x=0               9.5   12.5        18.5  21.5   25
-                  ~~~~~~~~~  COAST / SEA  ~~~~~~~~~
-    #  = steel-and-glass Kamer en suite partition (x = 12.5)
-    (areas are net, inside the walls)
+                                            | boardwalk
+                  ~~~~~~  foredune, beach, sea  ~~~~~~
+    #  = Kamer en suite partition (x = 12.5)
 
-Routes: beach -> mudroom (terracotta) -> lounge (oak), or mudroom ->
-wet core -> endurance room.  The library is reached from the lounge.  The
-library and the endurance room face north on purpose: no solar gain on the
-room you climate-control, and no glare on screens.  The coast-facing rooms
-get the low sun on oak and plaster.
+Indoor/outdoor moves:
+  * The culinary terracotta runs out onto the veranda at the same level.
+  * The ceiling joists and the veranda rafters share one 0.75 m grid, so
+    the ceiling appears to carry on outside.
+  * The French doors on the coast side and the endurance room's yard doors
+    fold fully open; the window shutters fold back against the brick.
+  * Every room looks onto dune, grass or sea; the library has low sills and
+    window seats.
+  * Nature comes indoors: potted olive and fig trees, natural materials.
 
-The en suite leaves are driven by the custom property "open" (0-1) on the
-empty "EnSuite_CONTROL".  Drag it to slide all four leaves into their pockets.
+Two custom-property controllers:
+  EnSuite_CONTROL["open"]  0-1 slides the four en suite leaves into their pockets.
+  FACADE_CONTROL["open"]   0-1 swings every French door and shutter.
 """
 
 import math
@@ -42,17 +58,19 @@ import random
 
 import bpy
 import bmesh
-from mathutils import Vector
+from mathutils import Matrix, Vector
+from mathutils import noise as mnoise
 
 # =============================================================================
 # 1. PARAMETERS.  Change these and re-run; the model rebuilds from them.
 # =============================================================================
 PLATE_X, PLATE_Y = 25.0, 16.0   # 400 m2 gross
-EXT_T = 0.35                    # exterior wall: solid masonry plus Rotband
+EXT_T = 0.35                    # exterior wall: solid masonry, Rotband inside
 INT_T = 0.20                    # internal masonry partitions
-H = 3.60                        # floor to ceiling, a generous 1930s height
+H = 3.60                        # floor to ceiling
 SLAB_T = 0.25
 FINISH_T = 0.03                 # floor finish build-up
+SKIN_T = 0.03                   # brick slip on the exterior faces
 
 # Wall centre-lines that set out the zones
 Y_SPLIT = 8.75          # coast band (south) | rear band (north)
@@ -65,21 +83,47 @@ X_END_WET = 21.50       # endurance | wet core
 ES_DEPTH = 0.60         # deep 1930s partition: vitrines plus pocket cavity
 ES_OPENING = 3.20       # clear width of the sliding-door opening
 ES_CABINET = 1.30       # flanking vitrine cabinet, each side
-ES_DOOR_HEAD = 2.75     # underside of the steel "kalf" (transom rail)
+ES_DOOR_HEAD = 2.75     # underside of the "kalf" (transom rail)
 ES_TRANSOM_TOP = 3.30   # top of the "bovenlicht" glazing; plaster bulkhead above
 ES_SKIN_GAP = 0.10      # acoustic cavity between the two glass skins
 ES_OPEN = 0.0           # 0 = closed (acoustic and climate seal), 1 = pocketed
-ES_LEAF_GRID = (2, 5)   # Crittall-style divided lights per leaf (cols, rows)
+ES_LEAF_GRID = (2, 5)   # divided lights per leaf (cols, rows)
+ENSUITE_FRAME = "iron"  # "iron" = hand-forged blackened iron, "oak" = dark oak
 
 LIBRARY_PANEL_H = 2.40  # full-height oak panelling, to picture-rail height
 LOUNGE_DADO_H = 1.10    # country-house dado panelling
+
+# Timber ceiling, carried outside as the veranda rafters
+JOIST_PITCH = 0.75
+GIRDER_Y = 4.0          # main oak girder across the coast band
+
+# Veranda (outside the 400 m2 plate)
+VERANDA_DEPTH = 3.6
+VERANDA_EAVE = 2.85     # underside of the oak plate beam on the posts
+VERANDA_SEAT = 4.10     # where the rafters bear on the facade
+VERANDA_POSTS = (0.2, 5.0, 9.5, 12.75, 15.25, 18.5, 22.4, 24.8)  # on the facade piers
+PERGOLA_TO_X = 9.5      # open vine pergola over the outdoor kitchen up to here, tiles beyond
+FACADE_OPEN = 1.0       # 0 = French doors and shutters shut, 1 = folded open
+
+# Upper floors (placeholder massing for the exterior silhouette)
+BUILD_UPPER = True
+UPPER_FLOORS = 1
+UPPER_H = 3.0
+ROOF_PITCH_DEG = 45.0   # steep Dutch pantile roof
+
+# Landscape
+BUILD_LANDSCAPE = True
+LANDSCAPE_SEED = 7
+GRASS_COUNT = 9000      # marram tussocks (x 30 blades each at render time)
+SEA_LEVEL = -1.6
+BOARDWALK_X = 21.0      # the path from the mudroom porch to the beach
 
 # Site and light
 SITE_ROTATION_DEG = 0.0     # rotate the building against the sun (-90: coast faces west)
 SUN_AZIMUTH_DEG = 235.0     # compass bearing of the sun: 0 N, 90 E, 180 S (coast), 270 W
 SUN_ELEVATION_DEG = 16.0    # low, late-afternoon raking light
 SUN_STRENGTH = 4.5
-EXPOSURE = 1.5               # interiors sit ~+1.5 EV over the exterior
+EXPOSURE = 1.5              # interiors sit about +1.5 EV over the exterior
 HDRI_PATH = ""              # absolute path to an .exr/.hdr; empty = procedural sky
 HDRI_STRENGTH = 1.0
 HDRI_ROTATION_DEG = 0.0
@@ -99,6 +143,9 @@ YI0, YI1 = EXT_T, PLATE_Y - EXT_T
 HT = INT_T / 2
 YS0, YS1 = Y_SPLIT - HT, Y_SPLIT + HT
 ES_HALF = ES_DEPTH / 2
+ES_MAT = "iron" if ENSUITE_FRAME == "iron" else "oak"
+# The flat pad (building, veranda, yard); dunes rise beyond it
+PAD = (-2.0, -VERANDA_DEPTH - 1.5, PLATE_X + 2.0, PLATE_Y + 6.5)
 
 
 # =============================================================================
@@ -116,12 +163,29 @@ def lin(hex_str):
     return (c(h[0:2]), c(h[2:4]), c(h[4:6]), 1.0)
 
 
+def smooth(e0, e1, x):
+    t = min(1.0, max(0.0, (x - e0) / (e1 - e0)))
+    return t * t * (3 - 2 * t)
+
+
 class MB:
-    """Accumulates axis-aligned boxes into one bmesh, one material slot per key."""
+    """Accumulates boxes, beams and blobs into one bmesh, one material slot per key."""
 
     def __init__(self):
         self.bm = bmesh.new()
         self.mats = []
+
+    def _idx(self, mat):
+        if mat not in self.mats:
+            self.mats.append(mat)
+        return self.mats.index(mat)
+
+    def _hex(self, pts, mat):
+        idx = self._idx(mat)
+        v = [self.bm.verts.new(p) for p in pts]
+        for f in ((0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4),
+                  (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)):
+            self.bm.faces.new([v[i] for i in f]).material_index = idx
 
     def box(self, x0, y0, z0, x1, y1, z1, mat):
         xa, xb = sorted((x0, x1))
@@ -129,20 +193,53 @@ class MB:
         za, zb = sorted((z0, z1))
         if xb - xa < 1e-5 or yb - ya < 1e-5 or zb - za < 1e-5:
             return
-        if mat not in self.mats:
-            self.mats.append(mat)
-        idx = self.mats.index(mat)
-        v = [self.bm.verts.new(p) for p in (
-            (xa, ya, za), (xb, ya, za), (xb, yb, za), (xa, yb, za),
-            (xa, ya, zb), (xb, ya, zb), (xb, yb, zb), (xa, yb, zb))]
-        for f in ((0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4),
-                  (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)):
-            self.bm.faces.new([v[i] for i in f]).material_index = idx
+        self._hex(((xa, ya, za), (xb, ya, za), (xb, yb, za), (xa, yb, za),
+                   (xa, ya, zb), (xb, ya, zb), (xb, yb, zb), (xa, yb, zb)), mat)
+
+    def beam(self, a, b, width, depth, mat):
+        """Box of `width` x `depth` along the segment a-b (rafters, roofs, bent trunks)."""
+        a, b = Vector(a), Vector(b)
+        d = (b - a).normalized()
+        side = d.cross(Vector((0, 0, 1)))
+        side = side.normalized() if side.length > 1e-6 else Vector((1, 0, 0))
+        up = side.cross(d).normalized()
+        s, u = side * (width / 2), up * (depth / 2)
+        self._hex([a - s - u, a + s - u, a + s + u, a - s + u,
+                   b - s - u, b + s - u, b + s + u, b - s + u], mat)
+
+    def prism(self, base, offset, mat):
+        """Extrude a convex polygon by `offset` (gables)."""
+        idx = self._idx(mat)
+        off = Vector(offset)
+        v0 = [self.bm.verts.new(Vector(p)) for p in base]
+        v1 = [self.bm.verts.new(Vector(p) + off) for p in base]
+        n = len(base)
+        self.bm.faces.new(v0).material_index = idx
+        self.bm.faces.new(list(reversed(v1))).material_index = idx
+        for i in range(n):
+            j = (i + 1) % n
+            self.bm.faces.new((v0[i], v0[j], v1[j], v1[i])).material_index = idx
+
+    def blob(self, center, radius, mat, scale=(1, 1, 1), rough=0.22, rng=None, subdiv=2):
+        """Jittered icosphere: canopies, shrubs, oven domes."""
+        rng = rng or random
+        idx = self._idx(mat)
+        c = Vector(center)
+        verts = bmesh.ops.create_icosphere(self.bm, subdivisions=subdiv, radius=radius,
+                                           matrix=Matrix.Identity(4))["verts"]
+        for v in verts:
+            o = Vector(v.co)
+            k = 1.0 + rng.uniform(-rough, rough)
+            v.co = c + Vector((o.x * scale[0], o.y * scale[1], o.z * scale[2])) * k
+        for f in {f for v in verts for f in v.link_faces}:
+            f.material_index = idx
+            f.smooth = True
 
     def build(self, name, col, location=(0.0, 0.0, 0.0)):
         if not self.bm.verts:
             self.bm.free()
             return None
+        bmesh.ops.recalc_face_normals(self.bm, faces=self.bm.faces)
         me = bpy.data.meshes.new(name)
         self.bm.to_mesh(me)
         self.bm.free()
@@ -186,24 +283,52 @@ def along_gaps(A0, A1, cuts):
     return [(p[0], p[1]) for p in solid_pieces(A0, A1, 1.0, [(c0, c1, 0.0, 1.0) for c0, c1 in cuts])]
 
 
-def steel_grid(mb, axis, p, a0, a1, z0, z1, cols=1, rows=1, frame=0.045,
-               bar=0.022, depth=0.05, glass=True, glass_t=0.010):
-    """Matte black steel frame with Crittall-style glazing bars and a glass pane."""
+def glazed_grid(mb, axis, p, a0, a1, z0, z1, cols=1, rows=1, frame=0.045,
+                bar=0.022, depth=0.05, glass=True, glass_t=0.010, mat="iron"):
+    """Frame with divided-light glazing bars and a glass pane (oak or iron)."""
     d = depth / 2
-    abox(mb, axis, p - d, p + d, a0, a0 + frame, z0, z1, "steel")
-    abox(mb, axis, p - d, p + d, a1 - frame, a1, z0, z1, "steel")
-    abox(mb, axis, p - d, p + d, a0 + frame, a1 - frame, z1 - frame, z1, "steel")
-    abox(mb, axis, p - d, p + d, a0 + frame, a1 - frame, z0, z0 + frame, "steel")
+    abox(mb, axis, p - d, p + d, a0, a0 + frame, z0, z1, mat)
+    abox(mb, axis, p - d, p + d, a1 - frame, a1, z0, z1, mat)
+    abox(mb, axis, p - d, p + d, a0 + frame, a1 - frame, z1 - frame, z1, mat)
+    abox(mb, axis, p - d, p + d, a0 + frame, a1 - frame, z0, z0 + frame, mat)
     ia0, ia1, iz0, iz1 = a0 + frame, a1 - frame, z0 + frame, z1 - frame
     bd = d * 0.7
     for i in range(1, cols):
         a = ia0 + (ia1 - ia0) * i / cols
-        abox(mb, axis, p - bd, p + bd, a - bar / 2, a + bar / 2, iz0, iz1, "steel")
+        abox(mb, axis, p - bd, p + bd, a - bar / 2, a + bar / 2, iz0, iz1, mat)
     for j in range(1, rows):
         z = iz0 + (iz1 - iz0) * j / rows
-        abox(mb, axis, p - bd, p + bd, ia0, ia1, z - bar / 2, z + bar / 2, "steel")
+        abox(mb, axis, p - bd, p + bd, ia0, ia1, z - bar / 2, z + bar / 2, mat)
     if glass:
         abox(mb, axis, p - glass_t / 2, p + glass_t / 2, ia0, ia1, iz0, iz1, "glass")
+
+
+def drive(ob, path, index, ctrl, expr):
+    """Scripted driver reading ctrl["open"] as `k` (simple expression, no auto-run needed)."""
+    fc = ob.driver_add(path, index)
+    drv = fc.driver
+    drv.type = "SCRIPTED"
+    var = drv.variables.new()
+    var.name = "k"
+    var.type = "SINGLE_PROP"
+    var.targets[0].id_type = "OBJECT"
+    var.targets[0].id = ctrl
+    var.targets[0].data_path = '["open"]'
+    drv.expression = expr
+
+
+def controller(name, location, value, col, tip):
+    ctrl = bpy.data.objects.new(name, None)
+    ctrl.empty_display_type = "SINGLE_ARROW"
+    ctrl.empty_display_size = 0.6
+    ctrl.location = location
+    ctrl["open"] = float(value)
+    try:
+        ctrl.id_properties_ui("open").update(min=0.0, max=1.0, soft_min=0.0, soft_max=1.0, description=tip)
+    except (AttributeError, TypeError):
+        pass
+    col.objects.link(ctrl)
+    return ctrl
 
 
 # =============================================================================
@@ -309,6 +434,32 @@ def _brick(nt, loc, vector, c1, c2, mortar, width, height, mortar_size,
     return b
 
 
+def _multiply_color(nt, loc, a, b):
+    m = _node(nt, "ShaderNodeVectorMath", loc, operation="MULTIPLY")
+    _link(nt, a, m.inputs[0])
+    _link(nt, b, m.inputs[1])
+    return m.outputs["Vector"]
+
+
+def _wall_plane_uv(nt, loc):
+    """(along-wall, z) coordinates for vertical faces of either orientation,
+    so a 2D Brick texture reads correctly on every facade."""
+    tc = _node(nt, "ShaderNodeTexCoord", (loc[0] - 600, loc[1]))
+    pos = _node(nt, "ShaderNodeSeparateXYZ", (loc[0] - 400, loc[1] + 100))
+    nrm = _node(nt, "ShaderNodeSeparateXYZ", (loc[0] - 400, loc[1] - 150))
+    _link(nt, tc.outputs["Object"], pos.inputs[0])
+    _link(nt, tc.outputs["Normal"], nrm.inputs[0])
+    faces_y = _math(nt, (loc[0] - 250, loc[1] - 150), "GREATER_THAN",
+                    _math(nt, (loc[0] - 300, loc[1] - 250), "ABSOLUTE", nrm.outputs["Y"]).outputs[0], 0.5)
+    inv = _math(nt, (loc[0] - 100, loc[1] - 250), "SUBTRACT", 1.0, faces_y.outputs[0])
+    y_part = _math(nt, (loc[0] - 100, loc[1] - 50), "MULTIPLY", pos.outputs["Y"], inv.outputs[0])
+    u = _math(nt, (loc[0] + 50, loc[1]), "MULTIPLY_ADD", pos.outputs["X"], faces_y.outputs[0], y_part.outputs[0])
+    comb = _node(nt, "ShaderNodeCombineXYZ", (loc[0] + 200, loc[1]))
+    _link(nt, u.outputs[0], comb.inputs["X"])
+    _link(nt, pos.outputs["Z"], comb.inputs["Y"])
+    return comb.outputs["Vector"], tc
+
+
 def new_material(key, name, viewport_hex, roughness=0.5):
     mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
     mat.use_nodes = True
@@ -399,68 +550,83 @@ def mat_plaster():
     set_displacement_method(mat, "BOTH" if HERO_PLASTER else "BUMP")
 
 
-def mat_oak_floor():
-    """Dark-stained, oiled oak boards: 1.6 m x 190 mm, half-bond."""
-    mat, nt, bsdf, out = new_material("oak_floor", "VRD_Oak_Floor_DarkStained", "#2A1A10", 0.42)
+def _planked(key, name, viewport, c1, c2, gap, plank_l, plank_w, grain_scale, shade_stops,
+             rough=(0.36, 0.5)):
+    """Boards in the XY plane: floors, ceilings, decks."""
+    mat, nt, bsdf, out = new_material(key, name, viewport, rough[0])
     tc = _node(nt, "ShaderNodeTexCoord", (-1300, 0))
-    planks = _brick(nt, (-900, 250), tc.outputs["Object"], "#2C1B11", "#3D2717", "#0C0805",
-                    1.6, 0.19, 0.0015, offset=0.5)
-    grain_space = _mapping(nt, (-1000, -150), tc.outputs["Object"], scale=(1.5, 70.0, 70.0))
-    grain = _noise(nt, (-800, -150), grain_space.outputs["Vector"], 1.0, detail=6.0, rough=0.6, distortion=0.8)
-    shade = _ramp(nt, (-550, -150), grain.outputs["Fac"], [(0.3, "#8A8A8A"), (0.7, "#FFFFFF")])
-    tint = _node(nt, "ShaderNodeVectorMath", (-250, 150), operation="MULTIPLY")
-    _link(nt, planks.outputs["Color"], tint.inputs[0])
-    _link(nt, shade.outputs["Color"], tint.inputs[1])
-    _link(nt, tint.outputs["Vector"], bsdf.inputs["Base Color"])
-    rough = _maprange(nt, (-250, -150), grain.outputs["Fac"], 0.3, 0.7, 0.36, 0.5)
-    _link(nt, rough.outputs[0], bsdf.inputs["Roughness"])
+    planks = _brick(nt, (-900, 250), tc.outputs["Object"], c1, c2, gap, plank_l, plank_w, 0.0015)
+    space = _mapping(nt, (-1000, -150), tc.outputs["Object"], scale=grain_scale)
+    grain = _noise(nt, (-800, -150), space.outputs["Vector"], 1.0, detail=6.0, rough=0.6, distortion=0.8)
+    shade = _ramp(nt, (-550, -150), grain.outputs["Fac"], shade_stops)
+    _link(nt, _multiply_color(nt, (-250, 150), planks.outputs["Color"], shade.outputs["Color"]),
+          bsdf.inputs["Base Color"])
+    r = _maprange(nt, (-250, -150), grain.outputs["Fac"], 0.3, 0.7, rough[0], rough[1])
+    _link(nt, r.outputs[0], bsdf.inputs["Roughness"])
     seam = _bump(nt, (100, -300), 0.4, 0.002, planks.outputs["Fac"], invert=True)
     b2 = _bump(nt, (300, -300), 0.05, 0.0005, grain.outputs["Fac"], normal=seam.outputs["Normal"])
     _link(nt, b2.outputs["Normal"], bsdf.inputs["Normal"])
 
 
-def mat_oak_joinery():
-    """Dark-stained oak for panelling, tables and casings; vertical grain."""
-    mat, nt, bsdf, out = new_material("oak", "VRD_Oak_Joinery_DarkStained", "#2B1B11", 0.45)
+def _grained(key, name, viewport, stops, rough=(0.38, 0.52), scale=(45.0, 45.0, 1.5)):
+    """Solid timber with vertical grain: joinery, beams, posts."""
+    mat, nt, bsdf, out = new_material(key, name, viewport, rough[0])
     tc = _node(nt, "ShaderNodeTexCoord", (-1100, 0))
-    space = _mapping(nt, (-900, 0), tc.outputs["Object"], scale=(45.0, 45.0, 1.5))
+    space = _mapping(nt, (-900, 0), tc.outputs["Object"], scale=scale)
     grain = _noise(nt, (-700, 0), space.outputs["Vector"], 1.0, detail=6.0, rough=0.6, distortion=0.9)
-    col = _ramp(nt, (-450, 150), grain.outputs["Fac"], [(0.3, "#1A100A"), (0.7, "#3B2618")])
+    col = _ramp(nt, (-450, 150), grain.outputs["Fac"], stops)
     _link(nt, col.outputs["Color"], bsdf.inputs["Base Color"])
-    rough = _maprange(nt, (-450, -100), grain.outputs["Fac"], 0.3, 0.7, 0.38, 0.52)
-    _link(nt, rough.outputs[0], bsdf.inputs["Roughness"])
-    b = _bump(nt, (0, -300), 0.06, 0.0005, grain.outputs["Fac"])
+    r = _maprange(nt, (-450, -100), grain.outputs["Fac"], 0.3, 0.7, rough[0], rough[1])
+    _link(nt, r.outputs[0], bsdf.inputs["Roughness"])
+    b = _bump(nt, (0, -300), 0.08, 0.0006, grain.outputs["Fac"])
     _link(nt, b.outputs["Normal"], bsdf.inputs["Normal"])
 
 
-def mat_terracotta():
-    """Frisian-style unglazed terracotta plavuizen, 250 x 250 mm, square grid."""
-    mat, nt, bsdf, out = new_material("terracotta", "VRD_Terracotta_Frisian", "#9A4B2D", 0.8)
+def mat_tiles(key, name, viewport, c1, c2, mortar, w, h, mortar_size, offset, rough=(0.72, 0.92)):
+    """Square-jointed floor tiles or stone flags in the XY plane."""
+    mat, nt, bsdf, out = new_material(key, name, viewport, rough[0])
     tc = _node(nt, "ShaderNodeTexCoord", (-1200, 0))
-    tiles = _brick(nt, (-850, 250), tc.outputs["Object"], "#A2532F", "#874026", "#76695E",
-                   0.25, 0.25, 0.006, offset=0.0)
+    tiles = _brick(nt, (-850, 250), tc.outputs["Object"], c1, c2, mortar, w, h, mortar_size, offset=offset)
     mottle = _noise(nt, (-850, -150), tc.outputs["Object"], 6.0, detail=4.0, rough=0.6)
     shade = _ramp(nt, (-600, -150), mottle.outputs["Fac"], [(0.35, "#B8B8B8"), (0.65, "#FFFFFF")])
-    tint = _node(nt, "ShaderNodeVectorMath", (-300, 150), operation="MULTIPLY")
-    _link(nt, tiles.outputs["Color"], tint.inputs[0])
-    _link(nt, shade.outputs["Color"], tint.inputs[1])
-    _link(nt, tint.outputs["Vector"], bsdf.inputs["Base Color"])
-    rough = _maprange(nt, (-300, -100), tiles.outputs["Fac"], 0.0, 1.0, 0.72, 0.92)
-    _link(nt, rough.outputs[0], bsdf.inputs["Roughness"])
+    _link(nt, _multiply_color(nt, (-300, 150), tiles.outputs["Color"], shade.outputs["Color"]),
+          bsdf.inputs["Base Color"])
+    r = _maprange(nt, (-300, -100), tiles.outputs["Fac"], 0.0, 1.0, rough[0], rough[1])
+    _link(nt, r.outputs[0], bsdf.inputs["Roughness"])
     joint = _bump(nt, (100, -300), 0.5, 0.003, tiles.outputs["Fac"], invert=True)
     b2 = _bump(nt, (300, -300), 0.1, 0.0006, mottle.outputs["Fac"], normal=joint.outputs["Normal"])
     _link(nt, b2.outputs["Normal"], bsdf.inputs["Normal"])
 
 
-def mat_concrete():
-    """Polished concrete with soft trowel clouding (wet core, endurance)."""
-    mat, nt, bsdf, out = new_material("concrete", "VRD_Concrete_Polished", "#8C8882", 0.3)
-    tc = _node(nt, "ShaderNodeTexCoord", (-1000, 0))
-    cloud = _noise(nt, (-750, 100), tc.outputs["Object"], 1.2, detail=5.0, rough=0.55)
-    col = _ramp(nt, (-450, 200), cloud.outputs["Fac"], [(0.3, "#7A766F"), (0.7, "#9C978F")])
-    _link(nt, col.outputs["Color"], bsdf.inputs["Base Color"])
-    rough = _maprange(nt, (-450, -50), cloud.outputs["Fac"], 0.3, 0.7, 0.2, 0.38)
-    _link(nt, rough.outputs[0], bsdf.inputs["Roughness"])
+def mat_brick():
+    """Hand-moulded Waal-format brick (210 x 50 mm, 10 mm lime joints), weathered red-brown."""
+    mat, nt, bsdf, out = new_material("brick", "VRD_Brick_Handvorm", "#7E4330", 0.85)
+    uv, tc = _wall_plane_uv(nt, (-900, 0))
+    bricks = _brick(nt, (-450, 250), uv, "#74382A", "#94523A", "#BDB3A3", 0.22, 0.062, 0.009)
+    weather = _noise(nt, (-450, -150), tc.outputs["Object"], 1.8, detail=5.0, rough=0.6)
+    shade = _ramp(nt, (-250, -150), weather.outputs["Fac"], [(0.3, "#9A9A9A"), (0.7, "#FFFFFF")])
+    _link(nt, _multiply_color(nt, (-50, 150), bricks.outputs["Color"], shade.outputs["Color"]),
+          bsdf.inputs["Base Color"])
+    joint = _bump(nt, (200, -300), 0.6, 0.004, bricks.outputs["Fac"], invert=True)
+    _link(nt, joint.outputs["Normal"], bsdf.inputs["Normal"])
+
+
+def mat_pantile():
+    """Aged red Dutch pantiles: courses in plan, S-wave profile as bump."""
+    mat, nt, bsdf, out = new_material("pantile", "VRD_Pantile_OudRood", "#8F3E25", 0.75)
+    tc = _node(nt, "ShaderNodeTexCoord", (-1100, 0))
+    tiles = _brick(nt, (-750, 250), tc.outputs["Object"], "#8A3B24", "#A65233", "#3E2016",
+                   0.24, 0.29, 0.012, offset=0.0)
+    wave = _node(nt, "ShaderNodeTexWave", (-750, -150), wave_type="BANDS", bands_direction="X")
+    _inp(wave, "Scale", 1.0 / 0.24 / 1.0)
+    _link(nt, tc.outputs["Object"], wave.inputs["Vector"])
+    lichen = _noise(nt, (-750, -400), tc.outputs["Object"], 2.5, detail=5.0, rough=0.65)
+    shade = _ramp(nt, (-450, -400), lichen.outputs["Fac"], [(0.45, "#FFFFFF"), (0.62, "#8C8A70")])
+    _link(nt, _multiply_color(nt, (-200, 150), tiles.outputs["Color"], shade.outputs["Color"]),
+          bsdf.inputs["Base Color"])
+    b1 = _bump(nt, (100, -200), 0.6, 0.02, wave.outputs["Fac"])
+    b2 = _bump(nt, (300, -200), 0.5, 0.01, tiles.outputs["Fac"], normal=b1.outputs["Normal"], invert=True)
+    _link(nt, b2.outputs["Normal"], bsdf.inputs["Normal"])
 
 
 def mat_glass():
@@ -483,6 +649,24 @@ def mat_glass():
     mat.diffuse_color = (0.8, 0.9, 0.9, 0.25)
 
 
+def mat_iron():
+    """Hand-forged, blackened iron: dark, satin, faint hammer marks.  Reads as
+    a traditional smith's finish, not as powder coat."""
+    mat, nt, bsdf, out = new_material("iron", "VRD_Iron_Forged", "#1B1A19", 0.55)
+    _inp(bsdf, "Metallic", 0.7)
+    tc = _node(nt, "ShaderNodeTexCoord", (-900, 0))
+    var = _noise(nt, (-650, 100), tc.outputs["Object"], 8.0, detail=4.0, rough=0.6)
+    col = _ramp(nt, (-400, 200), var.outputs["Fac"], [(0.35, "#141312"), (0.7, "#2A2622")])
+    _link(nt, col.outputs["Color"], bsdf.inputs["Base Color"])
+    r = _maprange(nt, (-400, -50), var.outputs["Fac"], 0.3, 0.7, 0.45, 0.72)
+    _link(nt, r.outputs[0], bsdf.inputs["Roughness"])
+    hammer = _node(nt, "ShaderNodeTexVoronoi", (-650, -250), feature="SMOOTH_F1")
+    _inp(hammer, "Scale", 60.0)
+    _link(nt, tc.outputs["Object"], hammer.inputs["Vector"])
+    b = _bump(nt, (0, -300), 0.12, 0.0005, hammer.outputs["Distance"])
+    _link(nt, b.outputs["Normal"], bsdf.inputs["Normal"])
+
+
 def mat_books():
     """Book spines on vertical faces facing +/-Y: Brick texture in the XZ plane."""
     mat, nt, bsdf, out = new_material("books", "VRD_Books", "#3A2A22", 0.6)
@@ -493,6 +677,100 @@ def mat_books():
     _link(nt, spines.outputs["Color"], bsdf.inputs["Base Color"])
 
 
+def mat_foliage(key, name, c_dark, c_light, translucency=0.3):
+    """Leaf mass for blob proxies: colour noise, leaf-scale bump, light through leaves."""
+    mat, nt, bsdf, out = new_material(key, name, c_dark, 0.6)
+    tc = _node(nt, "ShaderNodeTexCoord", (-1000, 0))
+    n = _noise(nt, (-750, 150), tc.outputs["Object"], 3.0, detail=4.0, rough=0.6)
+    col = _ramp(nt, (-500, 200), n.outputs["Fac"], [(0.35, c_dark), (0.7, c_light)])
+    _link(nt, col.outputs["Color"], bsdf.inputs["Base Color"])
+    leaves = _node(nt, "ShaderNodeTexVoronoi", (-750, -200), feature="F1")
+    _inp(leaves, "Scale", 28.0)
+    _link(nt, tc.outputs["Object"], leaves.inputs["Vector"])
+    b = _bump(nt, (-250, -250), 0.7, 0.03, leaves.outputs["Distance"])
+    _link(nt, b.outputs["Normal"], bsdf.inputs["Normal"])
+    trans = _node(nt, "ShaderNodeBsdfTranslucent", (300, -250))
+    _link(nt, col.outputs["Color"], trans.inputs["Color"])
+    _link(nt, b.outputs["Normal"], trans.inputs["Normal"])
+    mix = _node(nt, "ShaderNodeMixShader", (700, 0))
+    mix.inputs[0].default_value = translucency
+    _link(nt, bsdf.outputs["BSDF"], mix.inputs[1])
+    _link(nt, trans.outputs["BSDF"], mix.inputs[2])
+    _link(nt, mix.outputs["Shader"], out.inputs["Surface"])
+
+
+def mat_vine():
+    """Climbing vine over the pergola: one thin plane whose shader cuts out
+    leaf clusters, which casts dappled light on the outdoor table."""
+    mat, nt, bsdf, out = new_material("vine", "VRD_Vine_Canopy", "#4A6330", 0.55)
+    tc = _node(nt, "ShaderNodeTexCoord", (-1300, 0))
+    cluster = _noise(nt, (-1000, 250), tc.outputs["Object"], 1.6, detail=3.0, rough=0.55)
+    dense = _maprange(nt, (-750, 300), cluster.outputs["Fac"], 0.48, 0.58, 0.0, 1.0)
+    leaves = _node(nt, "ShaderNodeTexVoronoi", (-1000, -100), feature="F1")
+    _inp(leaves, "Scale", 22.0)
+    _link(nt, tc.outputs["Object"], leaves.inputs["Vector"])
+    disc = _maprange(nt, (-750, -100), leaves.outputs["Distance"], 0.28, 0.4, 1.0, 0.0)
+    edge = _maprange(nt, (-750, 100), cluster.outputs["Fac"], 0.38, 0.5, 0.0, 1.0)
+    mask = _math(nt, (-500, 100), "MAXIMUM", dense.outputs[0],
+                 _math(nt, (-600, -50), "MULTIPLY", disc.outputs[0], edge.outputs[0]).outputs[0])
+    col = _ramp(nt, (-500, 400), cluster.outputs["Fac"], [(0.4, "#34492A"), (0.7, "#6C7F3A")])
+    _link(nt, col.outputs["Color"], bsdf.inputs["Base Color"])
+    trans = _node(nt, "ShaderNodeBsdfTranslucent", (300, -250))
+    _link(nt, col.outputs["Color"], trans.inputs["Color"])
+    leaf = _node(nt, "ShaderNodeMixShader", (600, -100))
+    leaf.inputs[0].default_value = 0.35
+    _link(nt, bsdf.outputs["BSDF"], leaf.inputs[1])
+    _link(nt, trans.outputs["BSDF"], leaf.inputs[2])
+    hole = _node(nt, "ShaderNodeBsdfTransparent", (600, 150))
+    cut = _node(nt, "ShaderNodeMixShader", (800, 0))
+    _link(nt, mask.outputs[0], cut.inputs[0])
+    _link(nt, hole.outputs["BSDF"], cut.inputs[1])
+    _link(nt, leaf.outputs["Shader"], cut.inputs[2])
+    _link(nt, cut.outputs["Shader"], out.inputs["Surface"])
+
+
+def mat_sand():
+    """Beach to dune: wet sand at the waterline, dry sand, grey-green dune crust inland."""
+    mat, nt, bsdf, out = new_material("sand", "VRD_Sand_Dune", "#D2C09A", 0.9)
+    tc = _node(nt, "ShaderNodeTexCoord", (-1200, 0))
+    sep = _node(nt, "ShaderNodeSeparateXYZ", (-950, 200))
+    _link(nt, tc.outputs["Object"], sep.inputs[0])
+    patch = _noise(nt, (-950, -100), tc.outputs["Object"], 0.15, detail=4.0, rough=0.6)
+    height = _math(nt, (-700, 200), "MULTIPLY_ADD", patch.outputs["Fac"], 1.2, sep.outputs["Z"])
+    fac = _maprange(nt, (-500, 200), height.outputs[0], SEA_LEVEL - 0.1, 3.0, 0.0, 1.0)
+    col = _ramp(nt, (-250, 250), fac.outputs[0],
+                [(0.0, "#7B6A52"), (0.12, "#CDB891"), (0.4, "#D9C8A3"), (0.75, "#A9A07C"), (1.0, "#8F8B68")])
+    _link(nt, col.outputs["Color"], bsdf.inputs["Base Color"])
+    wet = _maprange(nt, (-250, 0), fac.outputs[0], 0.0, 0.12, 0.25, 0.92)
+    _link(nt, wet.outputs[0], bsdf.inputs["Roughness"])
+    ripple_space = _mapping(nt, (-700, -300), tc.outputs["Object"], scale=(1.0, 6.0, 1.0),
+                            rot=(0, 0, math.radians(20)))
+    ripple = _noise(nt, (-500, -300), ripple_space.outputs["Vector"], 3.0, detail=3.0, rough=0.5)
+    b = _bump(nt, (0, -300), 0.3, 0.01, ripple.outputs["Fac"])
+    _link(nt, b.outputs["Normal"], bsdf.inputs["Normal"])
+
+
+def mat_sea():
+    mat, nt, bsdf, out = new_material("sea", "VRD_North_Sea", "#1A3A3E", 0.06)
+    _inp(bsdf, "Base Color", lin("#16353A"))
+    _inp(bsdf, "IOR", 1.33)
+    tc = _node(nt, "ShaderNodeTexCoord", (-900, 0))
+    swell_space = _mapping(nt, (-700, 0), tc.outputs["Object"], scale=(0.35, 1.0, 1.0))
+    swell = _noise(nt, (-500, 0), swell_space.outputs["Vector"], 0.4, detail=8.0, rough=0.62)
+    b = _bump(nt, (0, -200), 0.35, 0.15, swell.outputs["Fac"])
+    _link(nt, b.outputs["Normal"], bsdf.inputs["Normal"])
+
+
+def mat_grass():
+    """Marram grass on hair strands: grey-green to bleached straw per strand."""
+    mat, nt, bsdf, out = new_material("grass", "VRD_Marram_Grass", "#8E8B5E", 0.55)
+    info = _node(nt, "ShaderNodeHairInfo", (-700, 0))
+    mix = _math(nt, (-500, 0), "MULTIPLY_ADD", info.outputs["Intercept"], 0.35, info.outputs["Random"])
+    col = _ramp(nt, (-250, 100), mix.outputs[0],
+                [(0.0, "#6F7650"), (0.5, "#9A9566"), (0.9, "#C4B585"), (1.2, "#D8CBA0")])
+    _link(nt, col.outputs["Color"], bsdf.inputs["Base Color"])
+
+
 def mat_embers():
     mat, nt, bsdf, out = principled("embers", "VRD_Charcoal_Embers", "#1A0A05", 0.9)
     _inp(bsdf, ["Emission Color", "Emission"], lin("#FF4A12"))
@@ -501,23 +779,45 @@ def mat_embers():
 
 def build_materials():
     mat_plaster()
-    mat_oak_floor()
-    mat_oak_joinery()
-    mat_terracotta()
-    mat_concrete()
+    _planked("oak_floor", "VRD_Oak_Floor_DarkStained", "#2A1A10", "#2C1B11", "#3D2717", "#0C0805",
+             1.6, 0.19, (1.5, 70.0, 70.0), [(0.3, "#8A8A8A"), (0.7, "#FFFFFF")], rough=(0.36, 0.5))
+    _planked("boards", "VRD_Ceiling_Boards_Limewashed", "#CFC6B5", "#C9BFAE", "#D8CFBF", "#8F877A",
+             3.0, 0.16, (1.5, 70.0, 70.0), [(0.3, "#D0D0D0"), (0.7, "#FFFFFF")], rough=(0.75, 0.9))
+    _planked("deck", "VRD_Oak_Deck_Weathered", "#8C867C", "#7E786E", "#9A948A", "#3A3630",
+             1.4, 0.145, (70.0, 1.5, 70.0), [(0.3, "#9C9C9C"), (0.7, "#FFFFFF")], rough=(0.7, 0.9))
+    _grained("oak", "VRD_Oak_Joinery_DarkStained", "#2B1B11", [(0.3, "#1A100A"), (0.7, "#3B2618")])
+    _grained("oak_weathered", "VRD_Oak_Weathered_Silver", "#8A8379",
+             [(0.3, "#6A645C"), (0.7, "#A19B90")], rough=(0.7, 0.9))
+    _grained("bark", "VRD_Bark", "#3A2E26", [(0.3, "#2A211B"), (0.7, "#55473B")],
+             rough=(0.85, 0.95), scale=(30.0, 30.0, 3.0))
+    mat_tiles("terracotta", "VRD_Terracotta_Frisian", "#9A4B2D", "#A2532F", "#874026", "#76695E",
+              0.25, 0.25, 0.006, 0.0)
+    mat_tiles("stone", "VRD_Bluestone_Flags", "#575B5C", "#4E5254", "#62676A", "#8A857C",
+              0.6, 0.4, 0.004, 0.5, rough=(0.5, 0.8))
+    mat_brick()
+    mat_pantile()
     mat_glass()
+    mat_iron()
     mat_books()
+    mat_foliage("foliage", "VRD_Foliage", "#2E3F26", "#58693A")
+    mat_foliage("buckthorn", "VRD_Foliage_SeaBuckthorn", "#5E6449", "#8C8D6C", translucency=0.2)
+    mat_vine()
+    mat_sand()
+    mat_sea()
+    mat_grass()
     mat_embers()
-    principled("slab", "VRD_Concrete_Slab", "#6E6A64", 0.9)
-    principled("steel", "VRD_Steel_MatteBlack", "#151515", 0.55)
-    principled("blue", "VRD_SpaceBlue_Lacquer", SPACE_BLUE, 0.32, coat=0.25)
-    principled("bjj", "VRD_BJJ_Tatami", "#2B2D30", 0.65)
+    principled("slab", "VRD_Lime_Mortar_Slab", "#8C857A", 0.9)
+    principled("blue", "VRD_SpaceBlue_Paint", SPACE_BLUE, 0.4, coat=0.15)
+    principled("brass", "VRD_Brass_Aged", "#A88653", 0.38, metallic=1.0)
+    principled("bjj", "VRD_Tatami_Natural", "#A39A74", 0.7)
     principled("rubber", "VRD_Rubber_Black", "#151515", 0.85)
     principled("trainer", "VRD_Trainer_Plastic", "#2C2C2C", 0.35)
     principled("coir", "VRD_Coir_Mat", "#6E5236", 0.95)
     principled("firebox", "VRD_Firebox_Soot", "#070605", 0.95)
     principled("leather", "VRD_Leather_Oxblood", "#3A1D12", 0.45, coat=0.1)
     principled("rug", "VRD_Wool_Rug", "#4B1F1C", 1.0, sheen=0.5)
+    principled("linen", "VRD_Linen_Natural", "#D6CDBC", 0.9, sheen=0.6)
+    principled("pot", "VRD_Terracotta_Pot", "#9C5434", 0.85)
 
 
 # =============================================================================
@@ -533,9 +833,9 @@ ZONES = [
      (X_LNG_MUD, 0, PLATE_X, Y_SPLIT), (X_LNG_MUD + HT, YI0, XI1, YS0)),
     ("Library", "LIBRARY / COWORK", "oak_floor",
      (0, Y_SPLIT, X_ENSUITE, PLATE_Y), (XI0, YS1, X_ENSUITE - ES_HALF, YI1)),
-    ("Endurance", "ENDURANCE ROOM", "concrete",
+    ("Endurance", "ENDURANCE ROOM", "oak_floor",
      (X_ENSUITE, Y_SPLIT, X_END_WET, PLATE_Y), (X_ENSUITE + ES_HALF, YS1, X_END_WET - HT, YI1)),
-    ("WetCore", "WET CORE", "concrete",
+    ("WetCore", "WET CORE", "stone",
      (X_END_WET, Y_SPLIT, PLATE_X, PLATE_Y), (X_END_WET + HT, YS1, XI1, YI1)),
 ]
 
@@ -551,24 +851,25 @@ def O(at, w, sill, head, kind, **kw):
 # outer: -1 / +1 = which side faces outdoors, 0 = internal wall.
 WALLS = {
     "S": dict(axis="x", c=EXT_T / 2, t=EXT_T, a0=0.0, a1=PLATE_X, outer=-1, openings=[
-        O(3.0, 2.4, 0.0, 3.0, "glazed_door"),           # culinary -> terrace
-        O(7.0, 2.4, 0.0, 3.0, "glazed_door"),
-        O(12.0, 2.2, 0.45, 3.0, "window"),              # lounge, deep window seats
-        O(16.0, 2.2, 0.45, 3.0, "window"),
-        O(21.0, 1.8, 0.0, 2.7, "blue_door"),            # main beach entrance
+        O(3.0, 2.4, 0.0, 3.0, "french_door"),           # culinary -> outdoor kitchen
+        O(7.0, 2.4, 0.0, 3.0, "french_door"),
+        O(11.5, 1.8, 0.0, 3.0, "french_door"),          # lounge -> veranda daybeds
+        O(14.0, 1.8, 0.0, 3.0, "french_door"),
+        O(16.5, 1.8, 0.0, 3.0, "french_door"),
+        O(21.0, 1.8, 0.0, 2.7, "blue_door"),            # beach entrance under the porch
         O(23.4, 1.0, 0.9, 2.7, "window"),
     ]),
     "N": dict(axis="x", c=PLATE_Y - EXT_T / 2, t=EXT_T, a0=0.0, a1=PLATE_X, outer=1, openings=[
-        O(2.4, 1.6, 0.9, 2.9, "window"),                # library, north light
-        O(6.2, 1.6, 0.9, 2.9, "window"),
-        O(10.0, 1.6, 0.9, 2.9, "window"),
-        O(15.2, 2.4, 0.7, 3.0, "window"),               # endurance
-        O(19.2, 2.4, 0.7, 3.0, "window"),
+        O(2.4, 1.6, 0.5, 2.9, "window"),                # library: low sills, window seats onto the dune
+        O(6.2, 1.6, 0.5, 2.9, "window"),
+        O(10.0, 1.6, 0.5, 2.9, "window"),
+        O(15.2, 2.4, 0.0, 3.0, "french_door"),          # endurance -> training yard
+        O(19.2, 2.4, 0.0, 3.0, "french_door"),
         O(23.1, 1.2, 1.9, 2.7, "window"),               # wet core clerestory
     ]),
     "W": dict(axis="y", c=EXT_T / 2, t=EXT_T, a0=YI0, a1=YI1, outer=-1, openings=[
-        O(7.75, 1.0, 0.0, 2.4, "oak_door"),             # kitchen service door
-        O(12.25, 1.6, 0.9, 2.9, "window"),              # library
+        O(7.75, 1.0, 0.0, 2.4, "oak_door"),             # kitchen garden door
+        O(12.25, 1.6, 0.5, 2.9, "window"),              # library
     ]),
     "E": dict(axis="y", c=PLATE_X - EXT_T / 2, t=EXT_T, a0=YI0, a1=YI1, outer=1, openings=[
         O(4.6, 1.6, 0.9, 2.7, "window"),                # mudroom, boot bench below
@@ -583,8 +884,8 @@ WALLS = {
         O(4.5, 3.6, 0.0, 2.9, "void", lining="oak"),    # cased opening to the culinary core
     ]),
     "XLM": dict(axis="y", c=X_LNG_MUD, t=INT_T, a0=YI0, a1=YS0, outer=0, openings=[
-        # the wet-to-dry threshold: steel portal plus a flush steel floor strip
-        O(4.6, 2.6, 0.0, 2.75, "void", lining="steel", threshold=True),
+        # the wet-to-dry threshold: oak-cased opening with a flush brass floor strip
+        O(4.6, 2.6, 0.0, 2.75, "void", lining="oak", threshold=True),
     ]),
     "XEW": dict(axis="y", c=X_END_WET, t=INT_T, a0=YS1, a1=YI1, outer=0, openings=[
         O(10.0, 0.9, 0.0, 2.2, "oak_door"),             # wet core -> endurance
@@ -598,7 +899,7 @@ def spans(wall):
 
 
 def frame_plane(wall):
-    """Steel windows sit 100 mm in from the outer face, leaving a deep inner reveal."""
+    """Exterior joinery sits 100 mm in from the outer face, leaving a deep inner reveal."""
     if wall["outer"]:
         return wall["c"] + wall["outer"] * (wall["t"] / 2 - 0.10)
     return wall["c"]
@@ -608,8 +909,44 @@ def inner_face(wall):
     return wall["c"] - wall["outer"] * wall["t"] / 2
 
 
+def outer_face(wall):
+    return wall["c"] + wall["outer"] * wall["t"] / 2
+
+
+def swing_sign(wall, leaf_dir):
+    """Sign of the Z rotation that swings a leaf (extending +a when leaf_dir
+    is +1, -a when -1) outward through the wall's outer side."""
+    axis_sign = 1 if wall["axis"] == "x" else -1
+    return axis_sign * wall["outer"] * leaf_dir
+
+
 # =============================================================================
-# 5. BUILDERS
+# 5. LANDSCAPE HEIGHT FIELD (also used to seat the boardwalk and cameras)
+# =============================================================================
+def terrain_z(x, y):
+    """Flat pad around the house; dunes beyond; a low foredune and beach to
+    the south so the sea stays in view from the lounge (eye 1.5 m)."""
+    dx = max(PAD[0] - x, 0.0, x - PAD[2])
+    dy = max(PAD[1] - y, 0.0, y - PAD[3])
+    t = smooth(0.0, 14.0, math.hypot(dx, dy))
+    n = mnoise.fractal(Vector((x * 0.035 + 31.7, y * 0.035 + 11.3, 0.0)), 1.0, 2.0, 4)
+    dune = 1.0 + 3.0 * (0.5 + 0.5 * n) + 2.0 * max(0.0, n)
+    if y < PAD[1]:
+        dune *= 0.4                     # keep the foredune low: sea view corridor
+    inland = -0.05 + t * dune
+    beach = -0.05 - max(0.0, PAD[1] - y) * 0.055
+    s = smooth(-34.0, PAD[1] - 4.0, y)
+    return beach + (inland - beach) * s
+
+
+def pad_distance(x, y):
+    dx = max(PAD[0] - x, 0.0, x - PAD[2])
+    dy = max(PAD[1] - y, 0.0, y - PAD[3])
+    return math.hypot(dx, dy)
+
+
+# =============================================================================
+# 6. BUILDERS
 # =============================================================================
 def build_structure(col):
     mb = MB()
@@ -628,11 +965,21 @@ def build_structure(col):
         rm.voxel_size = HERO_VOXEL
         rm.use_smooth_shade = True
 
+    # Brick outside: a slip skin cut around the same openings, up to the upper floor
+    skin = MB()
+    top = H + SLAB_T
+    for key in ("S", "N", "W", "E"):
+        w = WALLS[key]
+        f0, f1 = sorted((outer_face(w), outer_face(w) + w["outer"] * SKIN_T))
+        a0, a1 = (-SKIN_T, PLATE_X + SKIN_T) if w["axis"] == "x" else (0.0, PLATE_Y)
+        for p0, p1, z0, z1 in solid_pieces(a0, a1, top, spans(w)):
+            abox(skin, w["axis"], f0, f1, p0, p1, z0, z1, "brick")
+    skin.build("Facade_Brick", col)
+
     if BUILD_CEILING:
         c = MB()
-        c.box(0, 0, H, PLATE_X, PLATE_Y, H + SLAB_T, "plaster")
-        ceiling = c.build("Ceiling_Slab", col)
-        ceiling["note"] = "Hidden in the viewport only; it still renders. Exclude it for the plan camera."
+        c.box(0, 0, H, PLATE_X, PLATE_Y, H + SLAB_T, "boards")
+        c.build("Ceiling_Boards", col)
 
 
 CHIMNEY_X = 14.6
@@ -645,6 +992,27 @@ def build_chimney(walls):
     walls.box(CHIMNEY_X - w / 2, y0, 0, CHIMNEY_X - fw / 2, y1, H, "plaster")
     walls.box(CHIMNEY_X + fw / 2, y0, 0, CHIMNEY_X + w / 2, y1, H, "plaster")
     walls.box(CHIMNEY_X - fw / 2, y0, fh, CHIMNEY_X + fw / 2, y1, H, "plaster")
+
+
+def joist_xs(x0, x1, margin=0.2):
+    """X positions on the shared joist/rafter grid inside [x0, x1]."""
+    k = math.ceil((x0 + margin) / JOIST_PITCH - 0.5)
+    out = []
+    while (k + 0.5) * JOIST_PITCH <= x1 - margin:
+        out.append((k + 0.5) * JOIST_PITCH)
+        k += 1
+    return out
+
+
+def build_ceiling_timber(col):
+    """Exposed dark oak joists under limewashed boards; an oak girder across
+    the 8.3 m coast band.  The joist grid continues outside as rafters."""
+    mb = MB()
+    for _key, _label, _mat, _frect, (x0, y0, x1, y1) in ZONES:
+        for x in joist_xs(x0, x1):
+            mb.box(x - 0.07, y0, H - 0.24, x + 0.07, y1, H, "oak")
+    mb.box(XI0, GIRDER_Y - 0.15, H - 0.56, XI1, GIRDER_Y + 0.15, H - 0.24, "oak")
+    mb.build("Ceiling_Oak_Joists", col)
 
 
 def build_floors(col):
@@ -662,20 +1030,24 @@ def build_floors(col):
 def fill_window(mb, w, o):
     ax, p = w["axis"], frame_plane(w)
     a0, a1 = o["at"] - o["w"] / 2, o["at"] + o["w"] / 2
-    cols = max(1, round(o["w"] / 0.55))
-    rows = max(1, round((o["head"] - o["sill"]) / 0.55))
-    steel_grid(mb, ax, p, a0, a1, o["sill"], o["head"], cols, rows)
+    cols = max(1, round(o["w"] / 0.5))
+    rows = max(1, round((o["head"] - o["sill"]) / 0.5))
+    glazed_grid(mb, ax, p, a0, a1, o["sill"], o["head"], cols, rows,
+                frame=0.07, bar=0.03, depth=0.07, mat="oak")
     if o["sill"] > 0 and w["outer"]:
         room = -w["outer"]
         nose = 0.06 if o["sill"] < 0.6 else 0.03    # low sills become window seats
-        q0, q1 = sorted((p + room * 0.03, inner_face(w) + room * nose))
+        q0, q1 = sorted((p + room * 0.035, inner_face(w) + room * nose))
         abox(mb, ax, q0, q1, a0 - 0.03, a1 + 0.03, o["sill"] - 0.045, o["sill"], "oak")
+        # brick-on-edge outer sill
+        e0, e1 = sorted((p - room * 0.035, outer_face(w) - room * (SKIN_T + 0.05)))
+        abox(mb, ax, e0, e1, a0 - 0.05, a1 + 0.05, o["sill"] - 0.11, o["sill"] - 0.02, "brick")
 
 
 def fill_door(mb, w, o, leaf_mat, lining_mat):
     ax, t, c, p = w["axis"], w["t"], w["c"], frame_plane(w)
     a0, a1, head = o["at"] - o["w"] / 2, o["at"] + o["w"] / 2, o["head"]
-    L, gap, lt = 0.015, 0.004, 0.055
+    L, gap, lt = 0.03, 0.004, 0.055
     abox(mb, ax, c - t / 2, c + t / 2, a0, a0 + L, 0, head, lining_mat)
     abox(mb, ax, c - t / 2, c + t / 2, a1 - L, a1, 0, head, lining_mat)
     abox(mb, ax, c - t / 2, c + t / 2, a0, a1, head - L, head, lining_mat)
@@ -694,8 +1066,68 @@ def fill_door(mb, w, o, leaf_mat, lining_mat):
             f0, f1 = sorted((p + s * lt / 2, p + s * (lt / 2 + 0.008)))
             abox(mb, ax, f0, f1, la0 + m, la1 - m, z0 + m + 0.1, zs - m / 2, leaf_mat)
             abox(mb, ax, f0, f1, la0 + m, la1 - m, zs + m / 2, z1 - m, leaf_mat)
-            b0, b1 = sorted((p + s * (lt / 2 + 0.04), p + s * (lt / 2 + 0.06)))
-            abox(mb, ax, b0, b1, edge - 0.012, edge + 0.012, 0.8, 1.5, "steel")
+            b0, b1 = sorted((p + s * (lt / 2 + 0.01), p + s * (lt / 2 + 0.05)))
+            abox(mb, ax, b0, b1, edge - 0.02, edge + 0.02, 1.0, 1.06, "brass")   # knob
+
+
+def fill_french_door(mb, w, o, col, ctrl):
+    """Pair of oak French doors with a fixed fanlight, swinging outward.
+    The fixed frame goes into `mb`; each leaf is its own object, pivoting on
+    its hinge, driven by FACADE_CONTROL["open"]."""
+    ax, p = w["axis"], frame_plane(w)
+    a0, a1, head = o["at"] - o["w"] / 2, o["at"] + o["w"] / 2, o["head"]
+    F, d = 0.07, 0.045
+    tz = min(2.45, head - 0.35)
+    abox(mb, ax, p - d, p + d, a0, a0 + F, 0, head, "oak")
+    abox(mb, ax, p - d, p + d, a1 - F, a1, 0, head, "oak")
+    abox(mb, ax, p - d, p + d, a0 + F, a1 - F, head - F, head, "oak")
+    abox(mb, ax, p - d, p + d, a0 + F, a1 - F, tz, tz + 0.07, "oak")       # transom
+    glazed_grid(mb, ax, p, a0 + F, a1 - F, tz + 0.07, head - F,
+                cols=max(2, round((a1 - a0) / 0.45)), rows=1, frame=0.015, bar=0.03, depth=0.05, mat="oak")
+    abox(mb, ax, p - d, p + d, a0, a1, 0.0, 0.003, "brass")               # level threshold
+    lw = (a1 - a0 - 2 * F) / 2 - 0.003
+    top = tz - 0.004
+    theta = math.radians(100.0)
+    for side, hinge, leaf_dir in (("L", a0 + F, 1), ("R", a1 - F, -1)):
+        leaf = MB()
+        lo, hi = sorted((0.0, leaf_dir * lw))
+        glazed_grid(leaf, ax, 0.0, lo, hi, 0.008, top, cols=2, rows=4,
+                    frame=0.08, bar=0.028, depth=0.05, mat="oak")
+        abox(leaf, ax, -0.02, 0.02, lo + 0.08, hi - 0.08, 0.008, 0.45, "oak")  # kick panel
+        knob = leaf_dir * (lw - 0.07)
+        for s in (-1, 1):
+            k0, k1 = sorted((s * 0.025, s * 0.06))
+            abox(leaf, ax, k0, k1, knob - 0.015, knob + 0.015, 1.0, 1.05, "brass")
+        loc = (hinge, p, 0.0) if ax == "x" else (p, hinge, 0.0)
+        ob = leaf.build(f"FrenchDoor_{o['at']:.2f}_{side}", col, location=loc)
+        sign = swing_sign(w, leaf_dir)
+        drive(ob, "rotation_euler", 2, ctrl, f"{'-' if sign < 0 else ''}k*{theta:.4f}")
+
+
+def add_shutters(w, o, col, ctrl):
+    """Dutch luiken: boarded Space Blue shutters that fold flat against the
+    brick when open."""
+    ax = w["axis"]
+    a0, a1 = o["at"] - o["w"] / 2, o["at"] + o["w"] / 2
+    plane = outer_face(w) + w["outer"] * (SKIN_T + 0.025)
+    lw = (a1 - a0) / 2 - 0.004
+    z0, z1 = o["sill"] + 0.01, o["head"] - 0.01
+    for side, hinge, leaf_dir in (("L", a0, 1), ("R", a1, -1)):
+        leaf = MB()
+        lo, hi = sorted((0.0, leaf_dir * lw))
+        abox(leaf, ax, -0.0175, 0.0175, lo, hi, z0, z1, "blue")
+        # ledges on the inner face: hidden when shut, showing when folded back
+        l0, l1 = sorted((-w["outer"] * 0.0175, -w["outer"] * 0.04))
+        for z in (z0 + 0.2, z1 - 0.2):
+            abox(leaf, ax, l0, l1, lo + 0.03, hi - 0.03, z - 0.05, z + 0.05, "blue")
+        s0, s1 = sorted((w["outer"] * 0.0175, w["outer"] * 0.024))
+        h0, h1 = sorted((0.0, leaf_dir * 0.6 * lw))
+        for z in (z0 + 0.2, z1 - 0.2):                                      # strap hinges
+            abox(leaf, ax, s0, s1, h0, h1, z - 0.02, z + 0.02, "iron")
+        loc = (hinge, plane, 0.0) if ax == "x" else (plane, hinge, 0.0)
+        ob = leaf.build(f"Shutter_{o['at']:.2f}_{side}", col, location=loc)
+        sign = swing_sign(w, leaf_dir)
+        drive(ob, "rotation_euler", 2, ctrl, f"{'-' if sign < 0 else ''}k*{math.pi:.4f}")
 
 
 def fill_void(mb, w, o):
@@ -703,33 +1135,38 @@ def fill_void(mb, w, o):
     a0, a1, head = o["at"] - o["w"] / 2, o["at"] + o["w"] / 2, o["head"]
     lining = o.get("lining")
     if lining:
-        L = 0.02 if lining == "steel" else 0.03
+        L = 0.03
         abox(mb, ax, c - t / 2 - 0.005, c + t / 2 + 0.005, a0, a0 + L, 0, head, lining)
         abox(mb, ax, c - t / 2 - 0.005, c + t / 2 + 0.005, a1 - L, a1, 0, head, lining)
         abox(mb, ax, c - t / 2 - 0.005, c + t / 2 + 0.005, a0, a1, head - L, head, lining)
     if o.get("threshold"):
-        # flush 25 mm matte black steel T-profile on the terracotta/oak seam
-        abox(mb, ax, c - 0.0125, c + 0.0125, a0, a1, 0.0, 0.002, "steel")
+        # flush 25 mm brass strip on the terracotta/oak seam
+        abox(mb, ax, c - 0.0125, c + 0.0125, a0, a1, 0.0, 0.002, "brass")
 
 
-def build_openings(col):
+def build_openings(col, facade_ctrl):
     mb = MB()
     for w in WALLS.values():
         for o in w["openings"]:
             k = o["kind"]
-            if k in ("window", "glazed_door"):
+            if k == "window":
                 fill_window(mb, w, o)
+                if w["outer"] and 0 < o["sill"] < 1.5 and o["w"] <= 1.8:
+                    add_shutters(w, o, col, facade_ctrl)
+            elif k == "french_door":
+                fill_french_door(mb, w, o, col, facade_ctrl)
             elif k == "blue_door":
-                fill_door(mb, w, o, "blue", "steel")
+                fill_door(mb, w, o, "blue", "oak")
             elif k == "oak_door":
                 fill_door(mb, w, o, "oak", "oak")
             elif k == "void":
                 fill_void(mb, w, o)
-    mb.build("Openings_Steel_Glass_Doors", col)
+    mb.build("Openings_Oak_Glass_Doors", col)
 
 
 def build_ensuite(col):
-    """1930s Dutch Kamer en suite, re-cut in matte black steel and glass.
+    """1930s Dutch Kamer en suite.  Frame in hand-forged iron (or oak, see
+    ENSUITE_FRAME).
 
     Plan of the 600 mm partition (x across, y along):
 
@@ -739,7 +1176,7 @@ def build_ensuite(col):
                  skin A track   skin B track, 100 mm acoustic cavity
 
     Elevation along y: plaster pier | vitrine | 3.2 m opening (2 skins x 2
-    pocket leaves) | vitrine | plaster pier, with a steel kalf at 2.75 m,
+    pocket leaves) | vitrine | plaster pier, with the kalf at 2.75 m,
     double-glazed bovenlicht to 3.30 m and a plaster bulkhead above.
     """
     x0, x1 = X_ENSUITE - ES_HALF, X_ENSUITE + ES_HALF
@@ -756,13 +1193,14 @@ def build_ensuite(col):
     mb.box(x0, y0, 0, x1, c0, H, "plaster")              # piers
     mb.box(x0, c1, 0, x1, y1, H, "plaster")
     mb.box(x0, c0, TT, x1, c1, H, "plaster")             # bulkhead
-    mb.box(x0, o0 - JAMB, 0, x1, o0, DH, "steel")        # steel portal jambs
-    mb.box(x0, o1, 0, x1, o1 + JAMB, DH, "steel")
-    mb.box(x0, c0, DH, x1, c1, DH + KALF, "steel")       # the kalf
-    mb.box(x0, o0, 0, x1, o1, 0.004, "steel")            # threshold plate
+    mb.box(x0, o0 - JAMB, 0, x1, o0, DH, ES_MAT)         # portal jambs
+    mb.box(x0, o1, 0, x1, o1 + JAMB, DH, ES_MAT)
+    mb.box(x0, c0, DH, x1, c1, DH + KALF, ES_MAT)        # the kalf
+    mb.box(x0, o0, 0, x1, o1, 0.004, "brass")            # threshold plate
     n_transom = max(1, round((c1 - c0) / 0.36))
     for px in (x0 + 0.03, x1 - 0.03):                    # double-glazed bovenlicht
-        steel_grid(mb, "y", px, c0, c1, DH + KALF, TT, cols=n_transom, rows=1, frame=0.04, depth=0.04)
+        glazed_grid(mb, "y", px, c0, c1, DH + KALF, TT, cols=n_transom, rows=1,
+                    frame=0.04, depth=0.04, mat=ES_MAT)
 
     for ya, yb in ((c0, o0 - JAMB), (o1 + JAMB, c1)):
         # (outer face, pocket face, glazing plane, shelf front, shelf back) per room
@@ -774,22 +1212,11 @@ def build_ensuite(col):
             mb.box(fo, yb - 0.02, 0.85, fp, yb, DH, "oak")
             for z in (1.35, 1.85, 2.3):
                 mb.box(sf, ya + 0.02, z - 0.012, sb, yb - 0.02, z + 0.012, "oak")
-            steel_grid(mb, "y", glaze, ya, yb, 0.85, DH, cols=2, rows=4, frame=0.04, depth=0.04)
+            glazed_grid(mb, "y", glaze, ya, yb, 0.85, DH, cols=2, rows=4, frame=0.04, depth=0.04, mat=ES_MAT)
     mb.build("EnSuite_Frame", col)
 
-    # Controller: custom property "open" drives all four leaves
-    ctrl = bpy.data.objects.new("EnSuite_CONTROL", None)
-    ctrl.empty_display_type = "SINGLE_ARROW"
-    ctrl.empty_display_size = 0.6
-    ctrl.location = (X_ENSUITE, yc, H + 0.6)
-    ctrl["open"] = float(ES_OPEN)
-    try:
-        ctrl.id_properties_ui("open").update(min=0.0, max=1.0, soft_min=0.0, soft_max=1.0,
-                                             description="0 = sealed, 1 = leaves pocketed")
-    except (AttributeError, TypeError):
-        pass
-    col.objects.link(ctrl)
-
+    ctrl = controller("EnSuite_CONTROL", (X_ENSUITE, yc, H + 0.6), ES_OPEN, col,
+                      "0 = sealed, 1 = leaves pocketed")
     lap = 0.03
     lw = ES_OPENING / 2 + lap
     travel = ES_OPENING / 2
@@ -798,25 +1225,15 @@ def build_ensuite(col):
         for side, sign in (("S", -1), ("N", 1)):
             leaf = MB()
             ha = lw / 2 - 0.0015
-            steel_grid(leaf, "y", 0.0, -ha, ha, 0.006, DH - 0.004, cols=ES_LEAF_GRID[0],
-                       rows=ES_LEAF_GRID[1], frame=0.05, bar=0.022, depth=lt, glass_t=0.016)
-            leaf.box(-lt / 2, -ha, 0.006, lt / 2, ha, 0.15, "steel")   # kick rail
-            # flush pull on the meeting stile, both faces
-            ey = -sign * (ha - 0.06)
+            glazed_grid(leaf, "y", 0.0, -ha, ha, 0.006, DH - 0.004, cols=ES_LEAF_GRID[0],
+                        rows=ES_LEAF_GRID[1], frame=0.05, bar=0.022, depth=lt, glass_t=0.016, mat=ES_MAT)
+            leaf.box(-lt / 2, -ha, 0.006, lt / 2, ha, 0.15, ES_MAT)        # kick rail
+            ey = -sign * (ha - 0.06)                                       # pull on the meeting stile
             for s in (-1, 1):
-                leaf.box(s * lt / 2, ey - 0.01, 0.9, s * (lt / 2 + 0.012), ey + 0.01, 1.4, "steel")
+                leaf.box(s * lt / 2, ey - 0.01, 0.9, s * (lt / 2 + 0.012), ey + 0.01, 1.4, "brass")
             cy = yc + sign * lw / 2      # closed: laps 30 mm into the jamb
             ob = leaf.build(f"EnSuite_Leaf_{skin}_{side}", col, location=(px, cy, 0.0))
-            fc = ob.driver_add("location", 1)
-            drv = fc.driver
-            drv.type = "SCRIPTED"
-            var = drv.variables.new()
-            var.name = "k"
-            var.type = "SINGLE_PROP"
-            var.targets[0].id_type = "OBJECT"
-            var.targets[0].id = ctrl
-            var.targets[0].data_path = '["open"]'
-            drv.expression = f"{cy:.4f} {'+' if sign > 0 else '-'} k*{travel:.4f}"
+            drive(ob, "location", 1, ctrl, f"{cy:.4f} {'+' if sign > 0 else '-'} k*{travel:.4f}")
 
 
 PANEL_T = 0.025
@@ -865,29 +1282,41 @@ def build_joinery(col):
     lng.build("Panelling_Lounge_Dado_Oak", col)
 
 
+def potted_tree(mb, x, y, h, rng, canopy="foliage", pot_r=0.32):
+    """Olive or fig in a terracotta pot: the dune garden brought indoors."""
+    mb.box(x - pot_r, y - pot_r, 0, x + pot_r, y + pot_r, 0.55, "pot")
+    lean = Vector((rng.uniform(-0.15, 0.15), rng.uniform(-0.15, 0.15), 0))
+    mid = Vector((x, y, h * 0.55)) + lean
+    mb.beam((x, y, 0.5), mid, 0.07, 0.07, "bark")
+    mb.beam(mid, mid + Vector((0.2, -0.1, h * 0.25)), 0.05, 0.05, "bark")
+    for _ in range(4):
+        c = mid + Vector((rng.uniform(-0.35, 0.35), rng.uniform(-0.35, 0.35), h * rng.uniform(0.25, 0.45)))
+        mb.blob(c, rng.uniform(0.3, 0.45), canopy, scale=(1.0, 1.0, 0.75), rng=rng)
+
+
 def build_props(col):
     rnd = random.Random(1930)
 
     # --- Culinary core: back kitchen, charcoal-grill hearth, communal table
     k = MB()
     k.box(XI0, 1.0, 0, XI0 + 0.65, 7.0, 0.88, "oak")
-    k.box(XI0, 1.0, 0.88, XI0 + 0.68, 7.0, 0.92, "concrete")
+    k.box(XI0, 1.0, 0.88, XI0 + 0.68, 7.0, 0.92, "stone")
     for z in (1.55, 2.0):
         k.box(XI0, 1.4, z, XI0 + 0.32, 6.6, z + 0.04, "oak")
     ix0, ix1, iy0, iy1 = 2.2, 3.4, 3.0, 6.6
     wx0, wx1, wy0, wy1 = 2.45, 3.15, 4.0, 5.6
-    k.box(ix0, iy0, 0, ix1, iy1, 0.86, "terracotta")                     # masonry hearth
-    k.box(ix0 - 0.05, iy0 - 0.05, 0.86, ix1 + 0.05, wy0, 0.92, "concrete")
-    k.box(ix0 - 0.05, wy1, 0.86, ix1 + 0.05, iy1 + 0.05, 0.92, "concrete")
-    k.box(ix0 - 0.05, wy0, 0.86, wx0, wy1, 0.92, "concrete")
-    k.box(wx1, wy0, 0.86, ix1 + 0.05, wy1, 0.92, "concrete")
-    k.box(wx0, wy0, 0.70, wx1, wy1, 0.86, "steel")                       # charcoal well
+    k.box(ix0, iy0, 0, ix1, iy1, 0.86, "brick")                          # masonry hearth
+    k.box(ix0 - 0.05, iy0 - 0.05, 0.86, ix1 + 0.05, wy0, 0.92, "stone")
+    k.box(ix0 - 0.05, wy1, 0.86, ix1 + 0.05, iy1 + 0.05, 0.92, "stone")
+    k.box(ix0 - 0.05, wy0, 0.86, wx0, wy1, 0.92, "stone")
+    k.box(wx1, wy0, 0.86, ix1 + 0.05, wy1, 0.92, "stone")
+    k.box(wx0, wy0, 0.70, wx1, wy1, 0.86, "iron")                        # charcoal well
     k.box(wx0 + 0.03, wy0 + 0.03, 0.86, wx1 - 0.03, wy1 - 0.03, 0.875, "embers")
     for i in range(12):
         y = wy0 + 0.06 + i * (wy1 - wy0 - 0.12) / 11
-        k.box(wx0, y - 0.006, 0.90, wx1, y + 0.006, 0.912, "steel")       # grate
+        k.box(wx0, y - 0.006, 0.90, wx1, y + 0.006, 0.912, "iron")        # grate
     k.box(2.0, 3.7, 2.3, 3.6, 5.9, H, "plaster")                         # plastered hood
-    k.box(1.98, 3.68, 2.3, 3.62, 5.92, 2.37, "steel")
+    k.box(1.98, 3.68, 2.3, 3.62, 5.92, 2.37, "oak")                      # oak mantel rail
     tx0, tx1, ty0, ty1 = 6.0, 7.2, 1.8, 7.2                              # 5.4 x 1.2 m
     k.box(tx0, ty0, 0.68, tx1, ty1, 0.78, "oak")                         # 100 mm slab top
     for y in (2.4, 4.5, 6.6):
@@ -898,9 +1327,10 @@ def build_props(col):
     for bx in (5.4, 7.55):
         for y in (2.3, 4.5, 6.7):
             k.box(bx, y - 0.05, 0, bx + 0.25, y + 0.05, 0.42, "oak")
+    potted_tree(k, 8.9, 7.9, 2.2, rnd)
     k.build("Props_Culinary", col)
 
-    # --- Lounge: hearth, mantel, chesterfields, rug
+    # --- Lounge: hearth, mantel, chesterfields, rug, olive tree
     lg = MB()
     fw, d = 0.9, 0.5
     lg.box(CHIMNEY_X - fw / 2, YS0 - 0.12, 0, CHIMNEY_X + fw / 2, YS0, 0.85, "firebox")
@@ -916,18 +1346,20 @@ def build_props(col):
         lg.box(sx0, 4.7, 0.42, sx1, 4.92, 0.78, "leather")              # rolled arms
         lg.box(sx0, 6.88, 0.42, sx1, 7.1, 0.78, "leather")
     lg.box(14.05, 5.3, 0, 15.15, 6.5, 0.42, "oak")
+    potted_tree(lg, 17.7, 1.1, 2.4, rnd)
+    potted_tree(lg, 9.98, 0.8, 1.9, rnd, pot_r=0.3)
     lg.build("Props_Lounge", col)
 
     # --- Mudroom: recessed coir mat, linear drain, boot bench, wetsuit rail
     md = MB()
     md.box(20.0, YI0, 0, 22.0, 1.55, 0.001, "coir")
-    md.box(20.0, 1.6, 0, 22.0, 1.7, 0.002, "steel")
+    md.box(20.0, 1.6, 0, 22.0, 1.7, 0.002, "brass")
     md.box(XI1 - 0.5, 1.8, 0.40, XI1, 7.2, 0.46, "oak")
     for y in (2.0, 4.5, 7.0):
-        md.box(XI1 - 0.45, y - 0.04, 0, XI1 - 0.05, y + 0.04, 0.40, "steel")
-    md.box(20.8, YS0 - 0.1, 1.75, 22.5, YS0 - 0.07, 1.78, "steel")
+        md.box(XI1 - 0.45, y - 0.04, 0, XI1 - 0.05, y + 0.04, 0.40, "oak")
+    md.box(20.8, YS0 - 0.1, 1.75, 22.5, YS0 - 0.07, 1.78, "iron")
     for x in (20.8, 22.47):
-        md.box(x, YS0 - 0.1, 1.75, x + 0.03, YS0, 1.78, "steel")
+        md.box(x, YS0 - 0.1, 1.75, x + 0.03, YS0, 1.78, "iron")
     md.build("Props_Mudroom", col)
 
     # --- Library: full-wall bookcase, refectory cowork table, reading chairs
@@ -953,28 +1385,281 @@ def build_props(col):
     for y in (10.2, 14.3):
         lb.box(10.4, y - 0.4, 0, 11.2, y + 0.4, 0.42, "leather")
         lb.box(10.4, y - 0.4, 0.42, 10.6, y + 0.4, 0.95, "leather")
+    for x in (2.4, 6.2, 10.0):                                       # window-seat cushions
+        lb.box(x - 0.75, YI1 - 0.06 - 0.04, 0.5, x + 0.75, YI1 + 0.18, 0.58, "linen")
+    potted_tree(lb, 1.0, 15.0, 2.0, rnd)
     lb.build("Props_Library", col)
 
-    # --- Endurance: four smart-trainer bays behind the glass, ~29 m2 BJJ mat
+    # --- Endurance: four smart-trainer bays behind the glass, ~29 m2 tatami
     en = MB()
     for y in (10.2, 11.5, 12.8, 14.1):
         en.box(13.1, y - 0.45, 0, 15.1, y + 0.45, 0.006, "rubber")
         en.box(13.35, y - 0.24, 0.006, 13.95, y + 0.24, 0.42, "trainer")   # direct-drive unit
-        en.box(13.55, y - 0.03, 0.30, 14.85, y + 0.03, 0.36, "steel")      # frame (simplified)
-        en.box(13.6, y - 0.03, 0.36, 13.66, y + 0.03, 0.95, "steel")
+        en.box(13.55, y - 0.03, 0.30, 14.85, y + 0.03, 0.36, "iron")       # frame (simplified)
+        en.box(13.6, y - 0.03, 0.36, 13.66, y + 0.03, 0.95, "iron")
         en.box(13.5, y - 0.07, 0.95, 13.78, y + 0.07, 1.0, "rubber")
-        en.box(14.75, y - 0.03, 0.36, 14.81, y + 0.03, 1.02, "steel")
+        en.box(14.75, y - 0.03, 0.36, 14.81, y + 0.03, 1.02, "iron")
         en.box(14.72, y - 0.22, 1.0, 14.84, y + 0.22, 1.04, "rubber")
         en.box(14.65, y - 0.12, 0.006, 14.95, y + 0.12, 0.10, "trainer")
     en.box(15.4, 9.65, 0, 20.8, 15.05, 0.04, "bjj")
+    potted_tree(en, 13.4, 9.3, 2.0, rnd)
     en.build("Props_Endurance", col)
 
-    # --- Wet core: shower cubicle fins and a changing bench
+    # --- Wet core: bluestone shower fins and a changing bench
     wc = MB()
     for y in (12.4, 13.5, 14.6):
-        wc.box(XI1 - 1.05, y - 0.04, 0, XI1, y + 0.04, 1.85, "concrete")
+        wc.box(XI1 - 1.05, y - 0.04, 0, XI1, y + 0.04, 1.85, "stone")
     wc.box(X_END_WET + HT, 11.0, 0.40, X_END_WET + HT + 0.4, 15.2, 0.46, "oak")
     wc.build("Props_WetCore", col)
+
+
+def build_veranda(col):
+    """The coast-side room without walls: oak posts on the facade piers, a
+    lean-to pantile roof on rafters that continue the indoor joist grid, an
+    open vine pergola over the outdoor kitchen, and terracotta running
+    straight through from the culinary core."""
+    VD = VERANDA_DEPTH
+    rng = random.Random(55)
+    mb = MB()
+    mb.box(-0.3, -VD, -FINISH_T, PLATE_X + 0.3, 0.0, 0.0, "terracotta")
+    mb.box(-0.4, -VD - 0.25, -0.35, PLATE_X + 0.4, -VD, 0.0, "brick")      # brick kerb
+    mb.box(-0.4, -VD - 0.08, -0.35, PLATE_X + 0.4, -0.0, -FINISH_T, "brick")
+    py = -VD + 0.2
+    for x in VERANDA_POSTS:
+        mb.box(x - 0.16, py - 0.16, 0, x + 0.16, py + 0.16, 0.06, "stone")   # stone post pads
+        mb.box(x - 0.11, py - 0.11, 0.06, x + 0.11, py + 0.11, VERANDA_EAVE, "oak_weathered")
+        mb.beam((x, py, VERANDA_EAVE - 0.6), (x, py + 0.45, VERANDA_EAVE), 0.08, 0.08, "oak_weathered")
+    plate_top = VERANDA_EAVE + 0.22
+    mb.box(-0.3, py - 0.12, VERANDA_EAVE, PLATE_X + 0.3, py + 0.12, plate_top, "oak_weathered")
+    mb.box(-0.3, -SKIN_T - 0.12, VERANDA_SEAT - 0.25, PLATE_X + 0.3, -SKIN_T, VERANDA_SEAT, "oak_weathered")
+
+    slope = (VERANDA_SEAT - plate_top) / (VD - 0.2)
+    y_end = -VD - 0.45
+    z_end = VERANDA_SEAT - slope * (VD + 0.45)
+    for x in joist_xs(-0.3, PLATE_X + 0.3, margin=0.05):
+        mb.beam((x, -SKIN_T, VERANDA_SEAT - 0.09), (x, y_end, z_end - 0.09), 0.1, 0.18, "oak_weathered")
+    roof_x0 = PERGOLA_TO_X
+    xm, wx = (roof_x0 + PLATE_X + 0.3) / 2, PLATE_X + 0.3 - roof_x0
+    mb.beam((xm, -SKIN_T, VERANDA_SEAT + 0.012), (xm, y_end, z_end + 0.012), wx, 0.025, "boards")
+    mb.beam((xm, -SKIN_T, VERANDA_SEAT + 0.07), (xm, y_end - 0.05, z_end + 0.06), wx, 0.07, "pantile")
+    mb.build("Veranda_Structure", col)
+
+    vine = MB()
+    px_m, pw = (-0.3 + PERGOLA_TO_X) / 2, PERGOLA_TO_X + 0.3
+    vine.beam((px_m, -SKIN_T, VERANDA_SEAT + 0.03), (px_m, y_end, z_end + 0.03), pw, 0.006, "vine")
+    for _ in range(14):                                  # trailing tendrils over the front plate
+        x = rng.uniform(0.0, PERGOLA_TO_X)
+        vine.blob((x, py + rng.uniform(-0.2, 0.2), VERANDA_EAVE + 0.1), rng.uniform(0.25, 0.45),
+                  "foliage", scale=(1.3, 0.8, 1.2), rng=rng)
+    for x in (0.2, 5.0):                                 # vine trunks climbing two posts
+        vine.beam((x + 0.14, py, 0.06), (x + 0.1, py + 0.05, VERANDA_EAVE + 0.1), 0.05, 0.05, "bark")
+    vine.build("Veranda_Vine_Pergola", col)
+
+    # Outdoor kitchen and living under the veranda
+    out = MB()
+    out.box(0.35, -3.25, 0, 1.65, -1.95, 0.9, "brick")                    # wood-fired oven base
+    out.blob((1.0, -2.6, 1.0), 0.62, "plaster", scale=(1.0, 1.0, 0.65), rough=0.03)
+    out.box(0.75, -3.0, 1.2, 1.25, -2.85, 1.35, "firebox")
+    out.box(0.9, -2.75, 1.3, 1.1, -2.55, 2.4, "iron")                      # flue
+    out.box(2.6, -2.35, 0.7, 7.8, -1.35, 0.78, "oak_weathered")            # long outdoor table
+    for x in (3.0, 5.2, 7.4):
+        out.box(x - 0.06, -2.25, 0, x + 0.06, -1.45, 0.7, "oak_weathered")
+    out.box(2.8, -2.95, 0.42, 7.6, -2.65, 0.46, "oak_weathered")           # benches
+    out.box(2.8, -1.05, 0.42, 7.6, -0.75, 0.46, "oak_weathered")
+    for bx in (10.7, 15.4):                                                # daybeds facing the sea
+        out.box(bx, -2.9, 0, bx + 2.0, -1.95, 0.38, "oak_weathered")
+        out.box(bx + 0.05, -2.85, 0.38, bx + 1.95, -2.0, 0.5, "linen")
+        out.box(bx + 0.05, -2.05, 0.38, bx + 1.95, -1.9, 0.85, "linen")
+    out.box(19.0, -1.2, 0.42, 20.2, -0.75, 0.46, "oak_weathered")          # porch bench
+    out.box(24.0, -3.3, 0, 24.9, -2.4, 0.04, "deck")                       # outdoor shower
+    out.box(24.82, -3.3, 0, 24.92, -3.2, 2.3, "oak_weathered")
+    out.box(24.4, -3.3, 2.2, 24.85, -3.24, 2.24, "brass")
+    out.box(24.33, -3.36, 2.12, 24.47, -3.18, 2.2, "brass")
+    for i in range(3):                                                     # board rack
+        x = 23.2 + i * 0.25
+        out.blob((x, -0.25, 1.15), 1.0, "linen", scale=(0.05, 0.26, 1.0), rough=0.0, subdiv=2)
+    potted_tree(out, 9.0, -2.9, 1.8, rng)
+    out.build("Veranda_Living", col)
+
+
+def build_upper(col):
+    """Placeholder massing so the exterior reads as a brick dune house under
+    a steep pantile roof, not as a flat-roofed box.  Not designed."""
+    z0 = H + SLAB_T
+    z1 = z0 + UPPER_FLOORS * UPPER_H
+    win = {"S": (3.0, 7.0, 11.5, 14.0, 16.5, 21.0, 23.4), "N": (2.4, 6.2, 10.0, 15.2, 19.2, 23.1),
+           "W": (4.4, 12.0), "E": (4.4, 12.0)}
+    mb = MB()
+    for key, xs in win.items():
+        w = WALLS[key]
+        f0, f1 = sorted((outer_face(w) + w["outer"] * SKIN_T, inner_face(w)))
+        a0, a1 = (-SKIN_T, PLATE_X + SKIN_T) if w["axis"] == "x" else (0.0, PLATE_Y)
+        for fl in range(UPPER_FLOORS):
+            zb = z0 + fl * UPPER_H
+            ops = [(x - 0.65, x + 0.65, 0.85, 2.45) for x in xs]
+            for p0, p1, za, zc in solid_pieces(a0, a1, UPPER_H, ops):
+                abox(mb, w["axis"], f0, f1, p0, p1, zb + za, zb + zc, "brick")
+            p = frame_plane(w)
+            for x in xs:
+                glazed_grid(mb, w["axis"], p, x - 0.65, x + 0.65, zb + 0.85, zb + 2.45,
+                            cols=2, rows=3, frame=0.07, bar=0.03, depth=0.07, mat="oak")
+                q0, q1 = sorted((p - w["outer"] * 0.05, inner_face(w)))
+                abox(mb, w["axis"], q0, q1, x - 0.65, x + 0.65, zb + 0.85, zb + 2.45, "firebox")
+    mb.box(0, 0, z1, PLATE_X, PLATE_Y, z1 + 0.25, "slab")
+
+    eave = z1 + 0.25
+    rise = (PLATE_Y / 2 + 0.45) * math.tan(math.radians(ROOF_PITCH_DEG))
+    ridge = eave + rise
+    yr = PLATE_Y / 2
+    for ys in (-0.45 - SKIN_T, PLATE_Y + 0.45 + SKIN_T):
+        mb.beam((PLATE_X / 2, ys, eave), (PLATE_X / 2, yr, ridge), PLATE_X + 0.6, 0.12, "pantile")
+    for gx, off in ((-SKIN_T, EXT_T + SKIN_T), (PLATE_X + SKIN_T, -(EXT_T + SKIN_T))):
+        mb.prism([(gx, -SKIN_T, z1), (gx, PLATE_Y + SKIN_T, z1), (gx, yr, ridge - 0.1)], (off, 0, 0), "brick")
+    mb.box(CHIMNEY_X - 0.7, YS0 - 0.6, z1, CHIMNEY_X + 0.7, YS0 + 0.3, ridge + 1.0, "brick")
+    mb.box(CHIMNEY_X - 0.8, YS0 - 0.7, ridge + 1.0, CHIMNEY_X + 0.8, YS0 + 0.4, ridge + 1.12, "brick")
+    mb.build("Upper_Massing_Placeholder", col)
+
+
+def build_landscape(col):
+    """Dunes, beach and sea; marram grass as hair on the dunes; sea buckthorn
+    and wind-bent black pines; a silvered oak boardwalk to the beach; a sand
+    training yard behind the endurance room."""
+    rng = random.Random(LANDSCAPE_SEED)
+    X0, X1, Y0, Y1, N = -60.0, 85.0, -70.0, 75.0, 160
+    bm = bmesh.new()
+    verts, weights = [], []
+    patch_off = Vector((5.3, 9.1, 0.0))
+    for j in range(N + 1):
+        y = Y0 + (Y1 - Y0) * j / N
+        for i in range(N + 1):
+            x = X0 + (X1 - X0) * i / N
+            z = terrain_z(x, y)
+            verts.append(bm.verts.new((x, y, z)))
+            d = pad_distance(x, y)
+            patch = 0.5 + 0.5 * mnoise.noise(Vector((x * 0.12, y * 0.12, 0.0)) + patch_off)
+            w = smooth(0.1, 0.9, z) * smooth(1.5, 5.0, d) * (0.35 + 0.65 * patch)
+            if abs(x - BOARDWALK_X) < 1.6 and y < 0:
+                w = 0.0
+            weights.append(w)
+    for j in range(N):
+        for i in range(N):
+            a = j * (N + 1) + i
+            bm.faces.new((verts[a], verts[a + 1], verts[a + N + 2], verts[a + N + 1])).smooth = True
+    me = bpy.data.meshes.new("Terrain_Dunes")
+    bm.to_mesh(me)
+    bm.free()
+    me.materials.append(MAT["sand"])
+    me.materials.append(MAT["grass"])
+    terr = bpy.data.objects.new("Terrain_Dunes", me)
+    col.objects.link(terr)
+    vg = terr.vertex_groups.new(name="marram")
+    for idx, w in enumerate(weights):
+        if w > 0.01:
+            vg.add([idx], w, "REPLACE")
+
+    mod = terr.modifiers.new("Marram_Grass", "PARTICLE_SYSTEM")
+    psys = mod.particle_system
+    psys.vertex_group_density = "marram"
+    psys.seed = LANDSCAPE_SEED
+    st = psys.settings
+    st.name = "VRD_Marram_Grass"
+    st.type = "HAIR"
+    st.count = GRASS_COUNT
+    st.hair_length = 0.6
+    st.emit_from = "FACE"
+    st.use_emit_random = True
+    st.factor_random = 0.12          # slight lean, not combed
+    st.child_type = "SIMPLE"         # each guide becomes a tussock of blades
+    for attr, val in (("child_percent", 6), ("child_nbr", 6), ("rendered_child_count", 30),
+                      ("child_radius", 0.09), ("child_length", 1.0), ("child_length_threshold", 0.35),
+                      ("display_percentage", 15), ("clump_factor", -0.5), ("clump_shape", 0.4),
+                      ("roughness_1", 0.04), ("roughness_endpoint", 0.12), ("roughness_end_shape", 1.5),
+                      ("radius_scale", 0.004), ("root_radius", 1.0), ("tip_radius", 0.05)):
+        if hasattr(st, attr):
+            setattr(st, attr, val)
+    try:
+        st.material_slot = MAT["grass"].name
+    except TypeError:
+        st.material = 2                 # slot index (1-based); the enum fills only after a depsgraph update
+
+    sea = MB()
+    sea.box(-2000, -2000, SEA_LEVEL - 0.5, 2000, 2000, SEA_LEVEL, "sea")
+    sea.build("Sea_North", col)
+
+    # Boardwalk: silvered oak planks on posts, seated on the dune profile
+    bw = MB()
+    y0, y_stop, w = -VERANDA_DEPTH - 0.25, -36.0, 1.6
+
+    def deck_z(y):
+        # leaves the veranda level, then rides 0.3 m above the dune profile
+        ground = max(terrain_z(BOARDWALK_X, y), SEA_LEVEL + 0.2)
+        return ground + 0.03 + 0.27 * smooth(0.0, 4.0, y0 - y)
+
+    y = y0
+    while y > y_stop:
+        z = deck_z(y)
+        bw.box(BOARDWALK_X - w / 2, y - 0.14, z - 0.04, BOARDWALK_X + w / 2, y, z, "deck")
+        y -= 0.152
+    y = y0 - 2.0
+    while y > y_stop:
+        z = deck_z(y) - 0.04
+        g = terrain_z(BOARDWALK_X, y) - 0.4
+        for sx in (-w / 2 + 0.05, w / 2 - 0.05):
+            bw.box(BOARDWALK_X + sx - 0.05, y - 0.05, g, BOARDWALK_X + sx + 0.05, y + 0.05, z, "oak_weathered")
+        y -= 2.4
+    bw.build("Boardwalk_Beach", col)
+
+    # Training yard behind the endurance room: sand, oak pull-up rig, logs
+    yd = MB()
+    yd.box(12.9, PLATE_Y + SKIN_T, -0.05, 21.3, PLATE_Y + 6.0, -0.02, "sand")
+    for x in (15.0, 17.6):
+        yd.box(x - 0.08, 19.4, -0.05, x + 0.08, 19.56, 2.45, "oak_weathered")
+    yd.box(15.0, 19.46, 2.3, 17.6, 19.5, 2.34, "iron")
+    for i in range(3):
+        yd.beam((18.6, 17.5 + i * 0.45, 0.12), (20.6, 17.6 + i * 0.45, 0.12), 0.24, 0.24, "bark")
+    yd.build("Training_Yard", col)
+
+    # Vegetation proxies: one mesh each, many linked instances
+    shrub = MB()
+    for _ in range(4):
+        shrub.blob((rng.uniform(-0.4, 0.4), rng.uniform(-0.4, 0.4), rng.uniform(0.3, 0.6)),
+                   rng.uniform(0.45, 0.7), "buckthorn", scale=(1.2, 1.0, 0.7), rng=rng)
+    shrub_ob = shrub.build("Proxy_SeaBuckthorn", col)
+    pine = MB()
+    base, lean = Vector((0, 0, 0)), Vector((0.9, 0.6, 0))      # bent away from the SW wind
+    pts = [base + lean * (t * t) + Vector((0, 0, 6.5 * t)) for t in (0.0, 0.35, 0.65, 1.0)]
+    for a, b in zip(pts, pts[1:]):
+        pine.beam(a, b, 0.28, 0.28, "bark")
+    for _ in range(9):
+        t = rng.uniform(0.62, 1.0)
+        c = base + lean * (t * t) * 1.3 + Vector((rng.uniform(-1.4, 1.6), rng.uniform(-1.2, 1.3), 6.5 * t))
+        pine.blob(c, rng.uniform(0.7, 1.2), "foliage", scale=(1.4, 1.2, 0.7), rough=0.3, rng=rng, subdiv=3)
+    pine_ob = pine.build("Proxy_BlackPine", col)
+
+    def scatter(src, count, ok, scale_range):
+        placed = 0
+        tries = 0
+        while placed < count and tries < count * 40:
+            tries += 1
+            x, y = rng.uniform(X0 + 10, X1 - 10), rng.uniform(Y0 + 25, Y1 - 10)
+            z = terrain_z(x, y)
+            if not ok(x, y, z):
+                continue
+            inst = bpy.data.objects.new(f"{src.name}_{placed:02d}", src.data)
+            inst.location = (x, y, z - 0.1)
+            inst.rotation_euler[2] = rng.uniform(-0.3, 0.3)
+            s = rng.uniform(*scale_range)
+            inst.scale = (s, s, s)
+            col.objects.link(inst)
+            placed += 1
+        src.location = (0, 0, -100)        # keep the source mesh out of shot
+        src.hide_render = True
+
+    def free(x, y):
+        return abs(x - BOARDWALK_X) > 2.5 or y > 0
+
+    scatter(shrub_ob, 55, lambda x, y, z: z > 0.4 and pad_distance(x, y) > 3.0 and free(x, y), (0.7, 1.6))
+    scatter(pine_ob, 14, lambda x, y, z: z > 1.5 and y > PAD[1] and pad_distance(x, y) > 9.0, (0.8, 1.3))
 
 
 def build_labels(col, areas):
@@ -990,7 +1675,7 @@ def build_labels(col, areas):
 
 
 # =============================================================================
-# 6. LIGHT, WORLD, CAMERAS, RENDER
+# 7. LIGHT, WORLD, CAMERAS, RENDER
 # =============================================================================
 def aim(ob, direction):
     ob.rotation_euler = Vector(direction).to_track_quat("-Z", "Y").to_euler()
@@ -1049,7 +1734,7 @@ def build_lighting(col):
     for key in ("S", "N", "W", "E"):
         w = WALLS[key]
         for i, o in enumerate(w["openings"]):
-            if o["kind"] not in ("window", "glazed_door"):
+            if o["kind"] not in ("window", "french_door"):
                 continue
             room = -w["outer"]
             across = inner_face(w) + room * 0.01
@@ -1070,7 +1755,7 @@ def build_lighting(col):
 
 
 def build_practicals(col):
-    warm, ember, cool = (1.0, 0.62, 0.34), (1.0, 0.42, 0.14), (1.0, 0.9, 0.8)
+    warm, ember = (1.0, 0.62, 0.34), (1.0, 0.42, 0.14)
 
     def point(name, loc, watts, rgb, radius=0.04):
         ld = bpy.data.lights.new(name, "POINT")
@@ -1081,47 +1766,69 @@ def build_practicals(col):
         col.objects.link(ob)
 
     shades = MB()
-    for i, y in enumerate((2.8, 4.5, 6.2)):                    # pendants over the table
+    for i, y in enumerate((2.8, 4.5, 6.2)):                    # forged-iron pendants over the table
         point(f"Pendant_Table_{i}", (6.6, y, 1.98), 45, warm)
-        shades.box(6.42, y - 0.18, 2.03, 6.78, y + 0.18, 2.22, "steel")
-        shades.box(6.59, y - 0.01, 2.22, 6.61, y + 0.01, H, "steel")
+        shades.box(6.42, y - 0.18, 2.03, 6.78, y + 0.18, 2.22, "iron")
+        shades.box(6.59, y - 0.01, 2.22, 6.61, y + 0.01, H - 0.24, "iron")
+    for i, y in enumerate((11.0, 13.5)):                       # iron lanterns in the gym
+        point(f"Lantern_Endurance_{i}", (17.5, y, 2.55), 60, warm, 0.08)
+        shades.box(17.35, y - 0.15, 2.6, 17.65, y + 0.15, 2.85, "iron")
+        shades.box(17.49, y - 0.01, 2.85, 17.51, y + 0.01, H - 0.24, "iron")
     shades.build("Pendant_Shades", col)
     point("Lamp_Library_A", (5.8, 12.25, 1.15), 12, warm)
     point("Lamp_Library_B", (7.8, 12.25, 1.15), 12, warm)
     point("Fire_Lounge", (CHIMNEY_X, YS0 - 0.25, 0.25), 60, ember, 0.15)
     point("Embers_Grill", (2.8, 4.8, 1.0), 30, ember, 0.2)
-    for i, y in enumerate((11.0, 13.5)):                        # cooler, brighter gym
-        ld = bpy.data.lights.new(f"Linear_Endurance_{i}", "AREA")
-        ld.shape, ld.size, ld.size_y = "RECTANGLE", 6.0, 0.15
-        ld.energy, ld.color = 180, cool
-        ob = bpy.data.objects.new(f"Linear_Endurance_{i}", ld)
-        ob.location = (17.0, y, H - 0.05)
-        col.objects.link(ob)
+    point("Oven_Glow", (1.0, -3.1, 1.25), 25, ember, 0.15)
 
 
 CAMERAS = [
-    # name, location, target, lens
-    ("CAM_01_Library_EnSuite", (0.9, 12.25, 1.40), (20.0, 12.25, 1.40), 24),
-    ("CAM_02_Mudroom_Threshold", (23.6, 3.2, 1.50), (12.0, 5.2, 1.40), 21),
-    ("CAM_03_Culinary_Hearth", (8.9, 0.9, 1.65), (2.8, 5.2, 1.10), 24),
-    ("CAM_04_Endurance_to_Library", (20.5, 12.25, 1.45), (2.0, 12.25, 1.30), 24),
+    # name, location, target, lens, shift_y, exposure EV; z = None seats the camera 1.7 m above the sand
+    ("CAM_01_Library_EnSuite", (0.9, 12.25, 1.40), (20.0, 12.25, 1.40), 24, 0.0, EXPOSURE),
+    ("CAM_02_Mudroom_Threshold", (23.6, 3.2, 1.50), (12.0, 5.2, 1.40), 21, 0.0, EXPOSURE),
+    ("CAM_03_Culinary_Hearth", (8.9, 0.9, 1.65), (2.8, 5.2, 1.10), 24, 0.0, EXPOSURE),
+    ("CAM_04_Endurance_to_Library", (20.5, 12.25, 1.45), (2.0, 12.25, 1.30), 24, 0.0, EXPOSURE),
+    ("CAM_05_Beach_to_House", (6.0, -31.0, None), (11.0, 0.0, None), 28, 0.2, 0.0),
+    ("CAM_06_Culinary_Out_To_Sea", (7.0, 8.2, 1.55), (7.0, -20.0, 1.55), 21, 0.0, EXPOSURE - 0.5),
 ]
+
+
+@bpy.app.handlers.persistent
+def verdio_camera_exposure(scene, *_args):
+    """Interiors need about +1.5 EV, the beach shot none: apply the active
+    camera's ["exposure_ev"] whenever the camera changes or a render starts."""
+    cam = scene.camera
+    if cam is not None and "exposure_ev" in cam and scene.view_settings.exposure != cam["exposure_ev"]:
+        scene.view_settings.exposure = cam["exposure_ev"]
+
+
+def install_exposure_handler():
+    for hs in (bpy.app.handlers.render_pre, bpy.app.handlers.depsgraph_update_post):
+        for h in [h for h in hs if getattr(h, "__name__", "") == "verdio_camera_exposure"]:
+            hs.remove(h)
+        hs.append(verdio_camera_exposure)
 
 
 def build_cameras(col):
     first = None
-    for name, loc, target, lens in CAMERAS:
+    for name, loc, target, lens, shift, ev in CAMERAS:
+        loc, target = list(loc), list(target)
+        if loc[2] is None:
+            loc[2] = max(terrain_z(loc[0], loc[1]), SEA_LEVEL) + 1.7
+            target[2] = loc[2]          # level: two-point perspective, reframe with shift
         cam = bpy.data.cameras.new(name)
-        cam.lens, cam.sensor_width, cam.clip_end = lens, 36, 200
+        cam.lens, cam.sensor_width, cam.clip_end = lens, 36, 3000
+        cam.shift_y = shift
         ob = bpy.data.objects.new(name, cam)
         ob.location = loc
-        aim(ob, Vector(target) - Vector(loc))   # level target = two-point perspective
+        ob["exposure_ev"] = float(ev)
+        aim(ob, Vector(target) - Vector(loc))
         col.objects.link(ob)
         first = first or ob
     plan = bpy.data.cameras.new("CAM_00_Plan_Ortho")
-    plan.type, plan.ortho_scale, plan.clip_end = "ORTHO", 27.0, 200
+    plan.type, plan.ortho_scale, plan.clip_end = "ORTHO", 40.0, 200
     ob = bpy.data.objects.new("CAM_00_Plan_Ortho", plan)
-    ob.location = (PLATE_X / 2, PLATE_Y / 2, 30.0)
+    ob.location = (PLATE_X / 2, PLATE_Y / 2 + 0.5, 30.0)
     col.objects.link(ob)
     bpy.context.scene.camera = first
 
@@ -1138,7 +1845,7 @@ def setup_render():
     cy.diffuse_bounces = 6          # dark oak rooms live on bounce light
     cy.glossy_bounces = 4
     cy.transmission_bounces = 12    # several stacked glass skins in the en suite
-    cy.transparent_max_bounces = 16
+    cy.transparent_max_bounces = 24  # vine cut-outs and glass
     cy.caustics_reflective = False
     cy.caustics_refractive = False
     cy.blur_glossy = 1.0
@@ -1162,7 +1869,7 @@ def setup_render():
 
 
 # =============================================================================
-# 7. SCENE MANAGEMENT AND MAIN
+# 8. SCENE MANAGEMENT AND MAIN
 # =============================================================================
 DATA_TYPES = ((bpy.types.Mesh, "meshes"), (bpy.types.Camera, "cameras"),
               (bpy.types.Light, "lights"), (bpy.types.Curve, "curves"))
@@ -1184,6 +1891,9 @@ def wipe_collection(col):
         bpy.data.collections.remove(child)
     for ob in list(col.objects):
         remove_object(ob)
+    for ps in list(bpy.data.particles):
+        if ps.users == 0:
+            bpy.data.particles.remove(ps)
 
 
 def main():
@@ -1207,23 +1917,34 @@ def main():
 
     cols = {k: sub(f"VRD_{k}") for k in (
         "01_Structure", "02_Floors", "03_EnSuite", "04_Openings", "05_Joinery",
-        "06_Props", "07_Lighting", "08_Cameras", "09_Labels")}
+        "06_Props", "07_Veranda", "08_Landscape", "09_UpperMassing",
+        "10_Lighting", "11_Cameras", "12_Labels")}
 
     build_materials()
     build_structure(cols["01_Structure"])
+    if BUILD_CEILING:
+        build_ceiling_timber(cols["01_Structure"])
     areas = build_floors(cols["02_Floors"])
     build_ensuite(cols["03_EnSuite"])
-    build_openings(cols["04_Openings"])
+    facade_ctrl = controller("FACADE_CONTROL", (PLATE_X / 2, -VERANDA_DEPTH - 1.0, 3.0), FACADE_OPEN,
+                             cols["04_Openings"], "0 = French doors and shutters shut, 1 = open")
+    build_openings(cols["04_Openings"], facade_ctrl)
     build_joinery(cols["05_Joinery"])
     if BUILD_PROPS:
         build_props(cols["06_Props"])
+    build_veranda(cols["07_Veranda"])
+    if BUILD_LANDSCAPE:
+        build_landscape(cols["08_Landscape"])
+    if BUILD_UPPER:
+        build_upper(cols["09_UpperMassing"])
     sky = build_world()
-    sun = build_lighting(cols["07_Lighting"])
+    sun = build_lighting(cols["10_Lighting"])
     if BUILD_PRACTICALS:
-        build_practicals(cols["07_Lighting"])
-    build_cameras(cols["08_Cameras"])
-    build_labels(cols["09_Labels"], areas)
+        build_practicals(cols["10_Lighting"])
+    build_cameras(cols["11_Cameras"])
+    build_labels(cols["12_Labels"], areas)
     setup_render()
+    install_exposure_handler()
 
     # Parent the building (not the sun) to one root so SITE_ROTATION_DEG
     # turns the plan against the sky.
@@ -1235,18 +1956,20 @@ def main():
             ob.parent = root
     root.rotation_euler[2] = math.radians(SITE_ROTATION_DEG)
 
-    ceiling = bpy.data.objects.get("Ceiling_Slab")
-    if ceiling is not None:
-        try:
-            ceiling.hide_set(True)      # viewport only; it still renders
-        except RuntimeError:
-            pass
+    for name in ("Ceiling_Boards", "Ceiling_Oak_Joists"):
+        ob = bpy.data.objects.get(name)
+        if ob is not None:
+            try:
+                ob.hide_set(True)      # viewport only; they still render
+            except RuntimeError:
+                pass
 
     total = sum(a for _, a in areas)
     print("\nVERDIO ground floor - net areas")
     for label, a in areas:
         print(f"  {label:<22} {a:6.1f} m2")
     print(f"  {'net total':<22} {total:6.1f} m2   (gross plate {PLATE_X * PLATE_Y:.0f} m2)")
+    print(f"  veranda (covered, outdoor) {PLATE_X * VERANDA_DEPTH:6.1f} m2")
     print(f"  world: {sky}\n")
 
 

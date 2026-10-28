@@ -1,13 +1,15 @@
 # Verdio: ground-floor blocking for Blender
 
-This folder holds a parametric conceptual massing of the Verdio poshtel ground floor, plus a lighting, camera and plaster workflow guide. The design sits in the friction between salt, sweat and performance on one side and heavy, dark, traditional interiors on the other. It is not tropical minimalism.
+This folder holds a parametric conceptual massing of the Verdio poshtel ground floor, in its landscape, plus a lighting, camera and plaster workflow guide.
+
+**Direction: a dune house, not a modern box.** Verdio is a Dutch coastal farmhouse (hand-moulded brick, red pantiles, an exposed oak beam ceiling) crossed with an English country house (panelling, hearths, window seats). It sits low in the dunes. Its coast side is a deep veranda where most of daily life happens half outdoors. The friction is still there, between salt, sweat and athletic performance on one side and heavy, dark, traditional interiors on the other. There's nothing in it that reads as contemporary.
 
 | File | What it is |
 |---|---|
-| `verdio_ground_floor.py` | One script. It builds the 400 m² plate, walls, openings, the steel Kamer en suite, oak panelling, blocking props, materials (including a procedural Rotband plaster), sun, sky, light portals, practical lights, cameras and Cycles settings. |
-| `previews/` | Low-sample Cycles renders (48 spp, CPU, 960 × 640) straight out of the script, with no manual edits. |
+| `verdio_ground_floor.py` | One script. It builds the 400 m² plate, walls, brick facade, the Kamer en suite, oak French doors and shutters, the veranda with its vine pergola and outdoor kitchen, an oak beam ceiling, panelling and blocking props. It also builds the dunes, beach, sea, marram grass, pines, boardwalk and training yard, a placeholder upper floor with a pantile roof, materials (including a procedural Rotband plaster), sun, sky, light portals, practical lights, cameras and Cycles settings. |
+| `previews/` | Low-sample Cycles renders (40 spp, CPU, 960 × 640) straight out of the script, with no manual edits. |
 
-The script was tested headless on Blender 4.2 LTS. API names that changed in 4.x (Principled inputs, displacement method) are handled. If you're on 5.x and the Nishita sky type has been renamed, the world falls back to a flat sky. Use an HDRI there anyway (see §3).
+The script was tested headless on Blender 4.2 LTS. API names that changed in 4.x (Principled inputs, displacement method, particle settings) are handled. If you're on 5.x and the Nishita sky type has been renamed, the world falls back to a flat sky. Use an HDRI there anyway (see §4).
 
 ```
 Scripting workspace → Open → verdio_ground_floor.py → Run Script
@@ -15,15 +17,55 @@ Scripting workspace → Open → verdio_ground_floor.py → Run Script
 blender -b -P verdio_ground_floor.py
 ```
 
-Re-running rebuilds the `VERDIO` collection in place. Edit the parameters at the top of the script, such as wall centre-lines, en suite dimensions, sun bearing and site rotation, then run it again.
+Re-running rebuilds the `VERDIO` collection in place. Edit the parameters at the top of the script and run it again. Useful parameters:
+
+| Parameter | Default | What it does |
+|---|---|---|
+| `FACADE_OPEN` | `1.0` | Swings all French doors open and folds the shutters back against the brick. |
+| `ES_OPEN` | `0.0` | Slides the en suite leaves into their pockets. |
+| `ENSUITE_FRAME` | `"iron"` | Choose `"iron"` (hand-forged, blackened) or `"oak"` for the en suite framing. |
+| `PERGOLA_TO_X` | `9.5` | How much of the veranda is open vine pergola rather than tiled roof. |
+| `SITE_ROTATION_DEG` | `0` | Set to `-90` if the coast faces west, as on the Dutch North Sea coast. |
+| `GRASS_COUNT` | `25000` | Marram grass density. Lower it for a faster viewport. |
+| `BUILD_LANDSCAPE`, `BUILD_UPPER` | `True` | Turn these off for fast interior-only work. |
 
 ---
 
-## 1. The plan
+## 1. Living between inside and outside
 
-Plate: 25.0 × 16.0 m = 400 m² gross. Coast is south (−Y). Exterior walls are 350 mm, internal walls 200 mm masonry, and the clear height is 3.60 m, which is generous and 1930s.
+Seven moves make the house feel like it's part of the dunes, not placed on them:
+
+1. **One floor, inside and out.** The culinary core's Frisian terracotta runs straight out under the veranda at the same level. There's a flush brass strip at the door line and no step. You don't notice going outside to cook.
+2. **One ceiling rhythm, inside and out.** The dark oak joists sit on a 0.75 m grid under limewashed boards. The veranda rafters use the same grid, so the ceiling seems to carry on through the facade.
+3. **A facade that opens.** The coast side is a run of oak French doors with fixed fanlights between brick piers: two to the culinary core, three to the lounge. They swing out fully onto the veranda. The endurance room has two pairs that open onto a sand training yard. The library, mudroom and west windows get Space Blue *luiken*, traditional Dutch shutters that fold flat against the brick.
+4. **The veranda is a room.** It is 3.6 m deep and runs 25 m on oak posts that stand on the facade piers.
+   - Over the outdoor kitchen there's an open **vine pergola**: wood-fired oven, long silvered-oak table and benches, and dappled light through the leaves.
+   - Over the lounge and the porch it has a **pantile lean-to**: linen daybeds facing the sea, the beach entrance, a board rack and an outdoor shower.
+5. **Views into nature from every room.** The south foredune is kept below eye height, so the sea stays in view from the lounge. The library's north windows have 500 mm sills with linen-cushioned window seats looking onto grass and pines. The endurance room trains facing the yard and the dunes.
+6. **Nature indoors.** Potted olive and fig trees sit in the lounge, culinary core, library and gym. Every material is natural: lime plaster, oak, terracotta, bluestone, brass, linen, wool and leather.
+7. **Arriving from the beach.** A silvered-oak boardwalk crosses the foredune to the porch. Sand gets rinsed at the outdoor shower first. Then you come in through the mudroom (terracotta, coir mat, oak boot bench), through an oak-cased opening onto dark oak.
+
+**What was removed to lose the modern look:**
+
+| Removed | Replaced with |
+|---|---|
+| Polished concrete in the wet core and gym | Bluestone flags in the wet core; an oak floor in the gym, like an old gymnasium, with natural tatami |
+| A flat white ceiling | Exposed oak joists, an oak girder and limewashed boards |
+| Powder-coated steel windows and doors | Oak frames with divided lights, brass knobs and hand-forged iron |
+| LED strips in the gym | Forged-iron lanterns, with daylight from the yard doors |
+| A flat, plastered facade | Hand-moulded Waal-format brick with lime joints, a brick sill to every window, and a steep pantile roof with a chimney stack |
+
+**One tension to resolve.** The brief makes the endurance room climate-controlled, and the new direction opens it to the yard.
+- In the model, the yard doors open in mild weather and close for conditioning. The en suite stays sealed either way, so the library is never affected.
+- If the yard doors are open most of the time, put the endurance room's conditioning on presence and door sensors.
+
+## 2. The plan
+
+Plate: 25.0 × 16.0 m = 400 m² gross. The coast is south (−Y). Exterior walls are 350 mm, internal walls 200 mm masonry, and the clear height is 3.60 m. The veranda adds 90 m² covered outdoors.
 
 ```
+                    TRAINING YARD (sand, pull-up rig)
+                          ^ doors ^
     N  y=16.00
     +-------------------------------------------------+
     |  LIBRARY / COWORK      #  ENDURANCE      | WET  |
@@ -33,25 +75,29 @@ Plate: 25.0 × 16.0 m = 400 m² gross. Coast is south (−Y). Exterior walls are
     |  CULINARY CORE   |  LOUNGE         | MUDROOM    |
     |  grill + table   |  dark oak       | terracotta |
     |  75.1 m2         |  73.0 m2        | 50.2 m2    |
-    +-------------------------------------------------+  y=0
+    +==||====||========+==||===||===||===+===||=======+  y=0   || = French doors
+    :  VERANDA 3.6 m: terracotta runs straight through     :
+    :  oven, long table  |  daybeds          |  porch, shower:  y=-3.6
+    :  vine pergola      |  pantile lean-to roof             :
     x=0               9.5   12.5        18.5  21.5   25
-                  ~~~~~~~~~  COAST / SEA  ~~~~~~~~~
-    #  = steel-and-glass Kamer en suite (x = 12.5)
+                                            | boardwalk
+                  ~~~~~~  foredune, beach, sea  ~~~~~~
+    #  = Kamer en suite partition (x = 12.5)
 ```
 
 The total net area is 358 m². The rest is walls and the 600 mm partition.
 
 **Why this arrangement**
 
-- **Wet-to-dry sequence.** Beach → Space Blue double door → mudroom (terracotta, recessed coir mat, linear drain, boot bench) → a 2.6 m cased opening lined in matte black steel → lounge (dark oak). The terracotta-to-oak change sits exactly on the wall centre-line, under a flush 25 mm black steel T-strip. There's no step and no ramp. Athletes can also go mudroom → wet core (showers) → endurance and never cross the oak.
-- **North-facing rear band.** The endurance room and the library both face north. The climate-controlled room gets no solar gain, and screens in the cowork get no glare. The low coastal sun goes to the rooms that should glow: culinary, lounge and mudroom.
-- **The culinary core** is a terracotta-clad masonry grill hearth with an open charcoal well and a plastered hood. A 5.4 × 1.2 m oak table with a 100 mm slab top and trestles runs parallel to it, with benches. The back kitchen sits on the west wall with its service door. Two steel-framed glazed doors open onto a south terrace.
-- **The lounge** is an English country-house room: chimney breast, oak mantel and terracotta hearth on the north wall, oak dado panelling (1.10 m), deep oak window seats in the south windows, and two oxblood chesterfields on a wool rug.
-- **The library** has oak panelling to 2.40 m with skirting, mid rail, cap rail and stiles. A full-wall bookcase runs along the south wall, an oak refectory cowork table runs on the camera axis toward the en suite, and two reading chairs face the glass.
+- **Wet-to-dry sequence.** Beach → boardwalk → outdoor shower on the porch → Space Blue double door → mudroom → a 2.6 m oak-cased opening → lounge. The terracotta-to-oak change sits exactly on the wall centre-line, under a flush brass strip. Athletes can also go mudroom → wet core → endurance room and never cross the oak.
+- **North-facing rear band.** The endurance room gets no solar gain and screens in the library get no glare. The low coastal sun goes to the culinary core, lounge and mudroom. The veranda roof shades them from high summer sun but lets the low autumn and winter sun in: at 16° elevation, the sun reaches about 10 m into the house under the 2.85 m eave.
+- **The culinary core** has a brick grill hearth with an open charcoal well and a plastered hood. A 5.4 × 1.2 m oak table with a 100 mm slab top runs parallel to it. The core continues outside to the wood-fired oven and the long outdoor table under the vines.
+- **The lounge** has a chimney breast, oak mantel and terracotta hearth, an oak dado, oxblood chesterfields and a wool rug. Three pairs of French doors open onto the daybeds.
+- **The library** has oak panelling to 2.40 m, a full-wall bookcase, an oak refectory table on the camera axis, and window seats onto the dune.
 
-## 2. The structural anchor: the steel Kamer en suite
+## 3. The structural anchor: the Kamer en suite
 
-The classic 1930s Dutch en suite partition is a deep wall with built-in cabinets either side of a wide pair of sliding doors, and a glazed *bovenlicht* above a timber rail (the *kalf*). The script keeps that anatomy and swaps the timber for matte black steel:
+The classic 1930s Dutch en suite partition is a deep wall with built-in cabinets either side of a wide pair of sliding doors, and a glazed *bovenlicht* above a rail called the *kalf*. The model keeps that anatomy. The framing is **hand-forged, blackened iron**, which keeps the original brief's "matte black frame with glass" but in a smith's finish, satin with faint hammer marks, not powder coat. If you want no metal at all, set `ENSUITE_FRAME = "oak"`.
 
 ```
  PLAN (600 mm deep)          library | vitrine | pocket | vitrine | endurance
@@ -60,48 +106,47 @@ The classic 1930s Dutch en suite partition is a deep wall with built-in cabinets
                                     skin A track   skin B track  (100 mm acoustic cavity)
 
  ELEVATION   plaster pier | vitrine 1.3 | opening 3.2 m: 2 skins × 2 pocket leaves | vitrine 1.3 | pier
-             steel kalf at 2.75 m · double-glazed bovenlicht to 3.30 m · plaster bulkhead to 3.60 m
+             kalf at 2.75 m · double-glazed bovenlicht to 3.30 m · plaster bulkhead to 3.60 m
 ```
 
-- **Two independent glass skins.** Each skin has two Crittall-style leaves on 2 × 5 divided lights, with a 16 mm laminated pane, a 50 mm steel frame and a 150 mm kick rail. The skins sit 100 mm apart. That double skin is what keeps the acoustic and climate isolation honest while the sightlines stay open.
-- **Pockets.** The leaves slide into a 200 mm cavity behind the oak pocket walls of the vitrines. When closed they lap 30 mm into the steel jambs.
-- **Vitrines.** Each side has oak drawer bases to 850 mm and steel-framed glazed display doors with oak shelves above. The library faces books and objects; the endurance room faces trophies and kit.
-- **Animate it.** Select `EnSuite_CONTROL`, go to Object Properties → Custom Properties, and drag `open` from 0 to 1. All four leaves are driven from that one value, each travelling 1.6 m.
+- **Two independent glass skins.** Each skin has two leaves on 2 × 5 divided lights, with a 16 mm laminated pane. The skins sit 100 mm apart. That double skin keeps the rooms acoustically and climatically separate while the sightlines stay open.
+- **Pockets and vitrines.** The leaves slide into a 200 mm cavity behind the oak pocket walls of the vitrines. Each vitrine has an oak drawer base and glazed display doors with oak shelves above.
+- **Animate it.** Drag `open` on `EnSuite_CONTROL` from 0 to 1 and all four leaves slide 1.6 m into their pockets.
+- **Real-world notes.**
+  - Specify acoustic laminated glass and drop seals.
+  - Seal the endurance skin tighter than the library skin, so humid gym air can't condense in the cavity.
+  - Keep the gym at slight negative pressure relative to the library.
 
-Real-world notes to carry into the next design stage:
-- Specify acoustic laminated glass on both skins and drop seals at the threshold plate. Seal the endurance skin tighter than the library skin, so warm, humid gym air can't get into the cavity and condense.
-- Put the endurance room on its own HVAC zone at slight negative pressure relative to the library, so any air that leaks goes from the library to the gym and not the other way.
-
-## 3. Lighting and camera
+## 4. Lighting and camera
 
 ### HDRI choice
 
-You want sky fill that you can rotate, plus a separately controllable sun:
+The ground, the sea and the vegetation are now modelled, so the sky only has to be sky:
 
-1. **Use a "pure sky" HDRI.** It should be partly cloudy, with the sun 10–25° above the horizon and no ground plate. Poly Haven publishes many in `_puresky` variants; filter by *Sky* and *Unclipped*. Partly cloudy beats clear blue because the cloud breaks the sky into soft, directional fill. That fill models plaster better than an evenly blue sky, which flattens it.
-2. **Keep the sun out of the HDRI.** Either pick an HDRI whose sun is clipped or soft, or use one that is fully unclipped but turn it down. Then let the **Sun lamp** carry the direct light. The script does this: Sun at bearing 235° (south-west), 16° elevation, 4.5 W/m², 0.6° angular size, warm 1.0/0.86/0.72. You get crisp, rotatable, art-directable shadows. An HDRI sun can't be moved without moving the whole sky.
-3. **Align them.** Set `HDRI_PATH`, then rotate `HDRI_ROTATION_DEG` until the HDRI's bright quadrant matches `SUN_AZIMUTH_DEG`. Coastal skies are blue-heavy, which gives a cool fill against warm sun. That warm/cool split makes dark oak look rich and not muddy.
-4. **Real site.** If Verdio sits on the Dutch North Sea coast, the sea is to the west. Set `SITE_ROTATION_DEG = -90` and keep the sun at a western bearing (250–270°) for golden hour over the water.
+1. **Use a "pure sky" HDRI.** It should be partly cloudy, with the sun 10–25° above the horizon. Poly Haven has many in `_puresky` variants; filter by *Sky* and *Unclipped*. A pure sky won't fight the modelled dunes the way an HDRI with its own ground plate would. Partly cloudy gives soft, directional fill and a sky with character.
+2. **Let the Sun lamp carry the direct light.** The script places it at bearing 235° (south-west), 16° elevation, 4.5 W/m², 0.6° angular size, warm 1.0/0.86/0.72. Rotate `HDRI_ROTATION_DEG` until the HDRI's bright quadrant matches `SUN_AZIMUTH_DEG`.
+3. **The "being in nature" light** is golden hour with haze. Keep the sun at 10–20°. The procedural fallback sky already uses `dust_density = 2.5` for salt haze off the water. For hero exteriors, add a very thin world Volume Scatter (density 0.0005–0.001). That softens the far dunes and the sea into the sky, the way coastal air does.
+4. **Real site.** On the Dutch North Sea coast the sea is to the west. Set `SITE_ROTATION_DEG = -90` and put the sun at 250–270° for golden hour over the water.
 
-### Why low, raking sun
+### What sells the indoor/outdoor feeling
 
-- **Dark oak** has an albedo of about 0.05–0.10, so it reads through **sheen and grain**, not brightness. Low sun across the floor gives long specular streaks along the boards and warm pools of light. A high sun produces small, dull patches.
-- **Rotband plaster** reads only at **grazing light**, roughly 5–20° to the wall surface. Frame shots so the sun or window light skims the side walls, which run perpendicular to the glazing. Don't face the lit wall head-on, where the texture flattens, and don't face straight into the windows, where everything turns to silhouette.
+- **Dappled light.** The vine pergola is a single plane whose shader cuts out leaf clusters, so it throws moving pools of sun across the outdoor table and in through the culinary doors. For a breeze, switch the vine shader's cluster Noise to 4D and drive its W input with `#frame/200`.
+- **Sun reaching deep inside.** Low sun passes under the veranda eave and across the terracotta and oak floors, so inside and outside share the same light.
+- **Seeing out.** Frame interiors so an open door or window shows grass, dune or sea in the frame. That's what `CAM_06_Culinary_Out_To_Sea` and `CAM_01_Library_EnSuite` do.
+- **Wind.** Marram grass is hair. Add a Wind force field from the south-west with strength 1–2 and turbulence, and enable *Hair Dynamics* to bend it. Even in a still image, slightly combed grass reads as weather.
 
 ### Settings the script applies (and why)
 
 | Setting | Value | Reason |
 |---|---|---|
-| Engine | Cycles | Interior bounce light in dark rooms, and true displacement. |
-| Light portals | An area light flagged as a portal in every exterior window | Much less noise from sky light entering small openings. |
+| Engine | Cycles | Bounce light in dark rooms, hair, and true displacement. |
+| Light portals | An area light flagged as a portal in every exterior window and door | Much less noise from sky light entering small openings. |
 | Glass | Mix by *Is Shadow Ray* with Transparent BSDF | Sunlight passes through window glass instead of casting black shadows. |
 | Caustics | Off, with *Filter Glossy* at 1.0 | Interiors don't need them, and they cause fireflies. |
-| Bounces | Diffuse 6, transmission 12 | Dark oak rooms depend on bounce light, and the en suite stacks four or more layers of glass. |
-| Clamp indirect | 10 | Kills fireflies from the polished concrete. |
-| View transform | AgX, Medium High Contrast | Holds the sun patches without crushing the oak. |
-| Practicals | 2700 K pendants, desk lamps, fire and embers; 4000 K linear lights in the gym | Warm heavy rooms against a cool performance room, seen through the glass. |
-
-Exposure: interiors usually need about +1 to +2 EV relative to the outside. The script sets `EXPOSURE = 1.5` (Color Management → Exposure). Raise that, not the sky strength, because raising sky strength flattens the contrast between sun and fill.
+| Bounces | Diffuse 6, transmission 12, transparent 24 | For the dark oak rooms, the en suite glass layers and the vine cut-outs. |
+| Clamp indirect | 10 | Kills fireflies from glossy oak and brass. |
+| View transform | AgX, Medium High Contrast, exposure +1.5 | Holds the sun patches without crushing the oak. Raise exposure, not sky strength. |
+| Practicals | 2700 K iron pendants, lanterns, desk lamps, fire, oven and grill embers | Warm light only; there are no cool LEDs anywhere. |
 
 Albedo discipline: keep plaster around sRGB 190–220 (linear about 0.5–0.7), not white, and oak at no less than about sRGB 25. Values darker than that lose grain under any tonemapper.
 
@@ -109,21 +154,22 @@ Albedo discipline: keep plaster around sRGB 190–220 (linear about 0.5–0.7), 
 
 | Camera | Shot |
 |---|---|
-| `CAM_01_Library_EnSuite` | The hero shot. Looks down the refectory table into the steel en suite, with the trainers lit cool behind the glass. 24 mm. |
-| `CAM_02_Mudroom_Threshold` | Terracotta in the foreground, the steel portal, then oak and the lounge beyond. 21 mm. |
-| `CAM_03_Culinary_Hearth` | From the terrace doors toward the grill hearth and the table. 24 mm. |
-| `CAM_04_Endurance_to_Library` | The reverse view: from the mat through two glass skins into the warm library. |
-| `CAM_00_Plan_Ortho` | A top-down check. Hide `Ceiling_Slab` from render first; it is already hidden in the viewport. |
+| `CAM_05_Beach_to_House` | From the beach across the foredune: the brick house, pantile roof, veranda and boardwalk. Shot level with shift. |
+| `CAM_06_Culinary_Out_To_Sea` | From the culinary core, down the table, through open French doors and the vine pergola to the sea. |
+| `CAM_01_Library_EnSuite` | Down the refectory table into the en suite, with the endurance room and its yard doors beyond. |
+| `CAM_04_Endurance_to_Library` | The reverse view: from the mat through two glass skins into the library. |
+| `CAM_02_Mudroom_Threshold` | Terracotta, the oak-cased threshold, then the lounge. |
+| `CAM_03_Culinary_Hearth` | From the terrace doors toward the grill hearth and the table. |
+| `CAM_00_Plan_Ortho` | Top-down. Hide `Ceiling_*`, `Veranda_Structure`, `Veranda_Vine_Pergola` and the `VRD_09_UpperMassing` collection first. |
 
 Camera rules for this brief:
-- **Two-point perspective.** Keep the camera dead level and use **Shift Y** to reframe, never tilt. Heavy panelled rooms look wrong when their verticals converge.
-- **Lens and height.** Use 21–28 mm on a 36 mm sensor for rooms, and 35–50 mm for material vignettes such as the steel jamb against the plaster pier, or the T-strip on the floor seam. Shoot from 1.2–1.5 m.
-- **Depth of field.** Barely any; at most f/8 equivalent. For detail shots, use f/2.8 focused on the material.
-- **Atmosphere (optional).** Add a very low-density Volume Scatter cube, density 0.002–0.004, **in the endurance room only**. Sun shafts through its windows give a hint of humid air. Keep the library air dry and clear; that difference is the story.
+- **Two-point perspective.** Keep the camera level and reframe with **Shift Y**, never tilt. The exterior camera already does this.
+- **Lens and height.** Use 21–28 mm on a 36 mm sensor for rooms, 28–35 mm for exteriors, and 50 mm for material vignettes: the brass strip on the floor seam, a shutter hinge on the brick, vine shadows on plaster. Shoot from 1.2–1.6 m.
+- **Foreground nature.** In exteriors, put grass in the bottom of the frame. In interiors, let a potted olive or an open door edge into the frame.
 
-## 4. Procedural Knauf Rotband plaster
+## 5. Procedural Knauf Rotband plaster
 
-Rotband is a hand-floated gypsum base coat. Left raw, it is a warm pinkish putty with cloudy drying marks. What makes it "tactile" is three overlapping scales of relief:
+Rotband is a hand-floated gypsum base coat. Left raw, it is a warm pinkish putty with cloudy drying marks. It is the one material carried through every room, and it is what makes the house feel hand-made. Its tactile quality comes from three overlapping scales of relief:
 
 | Scale | Real size | Node | Where it goes |
 |---|---|---|---|
@@ -150,7 +196,6 @@ Key points:
 - **One noise per frequency, one destination each.** Macro goes only to displacement, and fine detail goes only to the BSDF normal, so nothing is counted twice. In *Bump Only* mode, Cycles turns the displacement output into bump automatically. Switch to real geometry and the same noise moves real vertices.
 - **Domain warping** is what turns Voronoi cells, which look like crystals, into curved trowel sweeps. The warp amount (0.6) and the Mapping Z scale are the two values to tune.
 - **Keep the laps subtle.** If the ridge mask drives colour or bump too hard, the wall reads as crazy-paving flagstones and not plaster. The first preview pass did exactly that. Leave its colour weight at about 0.05 and let the grazing light do the work.
-- **Burnished laps.** Where trowel strokes overlap, the plaster is compressed and slightly glossier. That is why the ridge mask also drives roughness and lightens the colour a little.
 - **Object coordinates** keep the texture locked to real metres. If you scale a wall object, apply the scale (Ctrl+A → Scale) or the texture will stretch.
 - **Colour.** The raw Rotband ramp runs from `#C2B19F` to `#DDD2C4`. For a limewashed finish, change it to `#E4DCCD` → `#EFE8DC` and drop sheen to 0.05.
 
@@ -167,7 +212,7 @@ The walls are built as separate cuboids (piers, aprons, lintels). That's ideal f
 1. Apply **Remesh** (Voxel, 0.04 m).
 2. Add a **Displace** modifier: a new *Clouds* texture with size 0.8 and depth 2, Coordinates *Global*, Direction *Normal*, strength 0.003–0.004, midlevel 0.5.
 3. Add a second **Displace** with a *Voronoi* texture (size 0.3, Intensity 1), strength 0.0012, for the trowel pads.
-4. Add **Shade Auto Smooth** (Smooth by Angle, 30°) and keep the shader's bump nodes for the grain.
+4. Add **Smooth by Angle** (30°) and keep the shader's bump nodes for the grain.
 
 **C. Geometry Nodes** (a non-destructive version of B, with an exportable attribute)
 ```
@@ -181,9 +226,19 @@ In the shader, read the edge mask with an **Attribute** node (`trowel`) in place
 
 **Scanned textures.** For close-up hero shots you can layer a scanned plaster texture from ambientCG or Poly Haven on top. Use an Image Texture with **Box** projection (blend 0.2) on Object coordinates, and mix it into the bump at about 30%. Keep the procedural macro layer, because scans tile visibly at room scale.
 
-## 5. What's deliberately not here yet
+## 6. Landscape and vegetation: making it real
 
-- **Vertical circulation.** A poshtel needs a stair and lift core to the rooms above. The obvious slot is the lounge's west half, or the mudroom/lounge junction, so arriving guests go up without crossing the culinary core.
-- **Charcoal grill services.** The hood is massing only. An open charcoal grill needs a commercial extract, make-up air and fire separation. Size the hood early, because it will shape the culinary core's ceiling.
-- **Structure.** There's no grid yet. The 600 mm en suite and the 200 mm internal walls could carry the loads, but check the spans: the culinary core and the library are about 9 m deep.
-- **Ceiling detail.** English country-house cornices and exposed oak beams in the culinary core would be the next pass. The ceiling is a flat plastered slab for now.
+The landscape is built for blocking, but it's set up so you can upgrade it piece by piece:
+
+- **Terrain.** A 145 × 145 m height field. Dunes (fractal noise) rise beyond a flat pad around the house, and a low foredune slopes down to the beach and the sea at −1.6 m. The sand shader shifts from wet, dark and glossy at the waterline, to dry sand, to grey-green dune crust inland.
+- **Marram grass.** A hair particle system with 25,000 guides and 12 children each. Density comes from a `marram` vertex group: none on the beach, the pad or the boardwalk; patchy on the dunes.
+  - To upgrade, replace the hair with a Geometry Nodes scatter of real grass clumps. Poly Haven and BlenderKit both have dune grasses. Keep the `marram` group as the density mask.
+- **Sea buckthorn and black pine.** Linked-duplicate proxies: one mesh each, so swapping it changes every instance. The pines lean away from the south-west wind. Replace them with real assets (Sapling Tree Gen, or a scanned *Pinus nigra*) without touching their placement.
+- **Indoor trees.** These are blob proxies in terracotta pots. Swap in olive and fig assets.
+
+## 7. What's deliberately not here yet
+
+- **Vertical circulation.** A poshtel needs a stair and lift core to the rooms above. The upper floor and roof are placeholder massing only, there for the exterior silhouette.
+- **Grill and oven services.** The hoods are massing only. An open charcoal grill and a wood-fired oven both need extract, make-up air and fire separation.
+- **Structure.** There's no grid yet. The oak girder and joists are visual intent, not engineering; check the spans, since the coast band is 8.3 m deep.
+- **Planting design.** The vegetation is generic dune habitat. A landscape architect should specify local dune species and how the dune is stabilised around the boardwalk.
