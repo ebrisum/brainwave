@@ -101,7 +101,7 @@ You want sky fill that you can rotate, plus a separately controllable sun:
 | View transform | AgX, Medium High Contrast | Holds the sun patches without crushing the oak. |
 | Practicals | 2700 K pendants, desk lamps, fire and embers; 4000 K linear lights in the gym | Warm heavy rooms against a cool performance room, seen through the glass. |
 
-Exposure: interiors usually need about +1 to +2 EV relative to the outside. Raise **Film → Exposure**, not the sky strength. Raising sky strength flattens the contrast between sun and fill.
+Exposure: interiors usually need about +1 to +2 EV relative to the outside. The script sets `EXPOSURE = 1.5` (Color Management → Exposure). Raise that, not the sky strength, because raising sky strength flattens the contrast between sun and fill.
 
 Albedo discipline: keep plaster around sRGB 190–220 (linear about 0.5–0.7), not white, and oak at no less than about sRGB 25. Values darker than that lose grain under any tonemapper.
 
@@ -128,7 +128,7 @@ Rotband is a hand-floated gypsum base coat. Left raw, it is a warm pinkish putty
 | Scale | Real size | Node | Where it goes |
 |---|---|---|---|
 | Macro undulation of the float coat | 0.8–1.5 m wavelength, ±1–3 mm | Noise, scale 0.8, detail 3 | **Material Output → Displacement** (Displacement node, scale 0.004, midlevel 0.5) |
-| Trowel pads and lap ridges | 200–400 mm pads with burnished edges | Domain-warped Voronoi: *Smooth F1* for the pads, *Distance to Edge* for the ridges | Bump 1 (strength 0.35, distance 2 mm) |
+| Trowel pads and lap ridges | 200–400 mm pads with burnished edges | Domain-warped Voronoi: *Smooth F1* for the pads, *Distance to Edge* for the ridges | Bump 1 (strength 0.2, distance 2 mm) |
 | Grain / tooth | < 1 mm | Noise, scale 600, detail 8 | Bump 2 (strength 0.12, distance 0.4 mm), chained after Bump 1 |
 
 The script builds this as `VRD_Plaster_Rotband`:
@@ -136,19 +136,20 @@ The script builds this as `VRD_Plaster_Rotband`:
 ```
 TexCoord.Object ─┬─ Noise(0.8) ── macro ──────────────────────┬─► Displacement ─► Output.Displacement
                  │                                            └─► tone ─► ColorRamp ─► Base Color
-                 ├─ Noise(1.5).Color ×0.35 + Object  (domain warp: turns cells into trowel sweeps)
+                 ├─ Noise(1.5).Color ×0.6 + Object  (domain warp: turns cells into trowel sweeps)
                  │     └─ Mapping (scale Z 1.5: strokes run horizontal)
                  │           ├─ Voronoi Smooth F1 ── pads ──┐
-                 │           └─ Voronoi Dist-to-Edge ─ MapRange(0–0.06 → 1–0) = ridges
+                 │           └─ Voronoi Dist-to-Edge ─ MapRange(0–0.035 → 1–0) = ridges
                  │                                           ├─► Bump 1 ─► Bump 2 ─► Normal
                  └─ Noise(600) ── grain ───────────────────────────────┘
-ridges ─► MapRange → Roughness 0.93 (matte) … 0.72 (burnished laps)
+ridges ─► MapRange → Roughness 0.92 (matte) … 0.82 (burnished laps)
 Sheen 0.15 (dusty grazing-angle sheen)
 ```
 
 Key points:
 - **One noise per frequency, one destination each.** Macro goes only to displacement, and fine detail goes only to the BSDF normal, so nothing is counted twice. In *Bump Only* mode, Cycles turns the displacement output into bump automatically. Switch to real geometry and the same noise moves real vertices.
-- **Domain warping** is what turns Voronoi cells, which look like crystals, into curved trowel sweeps. The warp amount (0.35) and the Mapping Z scale are the two values to tune.
+- **Domain warping** is what turns Voronoi cells, which look like crystals, into curved trowel sweeps. The warp amount (0.6) and the Mapping Z scale are the two values to tune.
+- **Keep the laps subtle.** If the ridge mask drives colour or bump too hard, the wall reads as crazy-paving flagstones and not plaster. The first preview pass did exactly that. Leave its colour weight at about 0.05 and let the grazing light do the work.
 - **Burnished laps.** Where trowel strokes overlap, the plaster is compressed and slightly glossier. That is why the ridge mask also drives roughness and lightens the colour a little.
 - **Object coordinates** keep the texture locked to real metres. If you scale a wall object, apply the scale (Ctrl+A → Scale) or the texture will stretch.
 - **Colour.** The raw Rotband ramp runs from `#C2B19F` to `#DDD2C4`. For a limewashed finish, change it to `#E4DCCD` → `#EFE8DC` and drop sheen to 0.05.

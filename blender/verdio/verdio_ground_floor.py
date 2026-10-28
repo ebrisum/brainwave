@@ -79,6 +79,7 @@ SITE_ROTATION_DEG = 0.0     # rotate the building against the sun (-90: coast fa
 SUN_AZIMUTH_DEG = 235.0     # compass bearing of the sun: 0 N, 90 E, 180 S (coast), 270 W
 SUN_ELEVATION_DEG = 16.0    # low, late-afternoon raking light
 SUN_STRENGTH = 4.5
+EXPOSURE = 1.5               # interiors sit ~+1.5 EV over the exterior
 HDRI_PATH = ""              # absolute path to an .exr/.hdr; empty = procedural sky
 HDRI_STRENGTH = 1.0
 HDRI_ROTATION_DEG = 0.0
@@ -360,7 +361,7 @@ def mat_plaster():
     warp = _noise(nt, (-1450, -150), obj, 1.5, detail=2.0, rough=0.5)
     warped = _node(nt, "ShaderNodeVectorMath", (-1250, -150), operation="MULTIPLY_ADD")
     _link(nt, warp.outputs["Color"], warped.inputs[0])
-    warped.inputs[1].default_value = (0.35, 0.35, 0.35)
+    warped.inputs[1].default_value = (0.6, 0.6, 0.6)
     _link(nt, obj, warped.inputs[2])
     stroke_space = _mapping(nt, (-1050, -150), warped.outputs["Vector"], scale=(1.0, 1.0, 1.5))
 
@@ -372,20 +373,20 @@ def mat_plaster():
     _inp(pads, "Smoothness", 1.0)
     _link(nt, stroke_space.outputs["Vector"], pads.inputs["Vector"])
 
-    ridge = _maprange(nt, (-600, -50), edges.outputs["Distance"], 0.0, 0.06, 1.0, 0.0)
-    trowel_h = _math(nt, (-400, -200), "MULTIPLY_ADD", pads.outputs["Distance"], 0.6,
-                     _math(nt, (-600, -300), "MULTIPLY", ridge.outputs[0], 0.4).outputs[0])
+    ridge = _maprange(nt, (-600, -50), edges.outputs["Distance"], 0.0, 0.035, 1.0, 0.0)
+    trowel_h = _math(nt, (-400, -200), "MULTIPLY_ADD", pads.outputs["Distance"], 0.8,
+                     _math(nt, (-600, -300), "MULTIPLY", ridge.outputs[0], 0.2).outputs[0])
 
     grain = _noise(nt, (-600, -550), obj, 600.0, detail=8.0, rough=0.7)
-    b1 = _bump(nt, (-150, -250), 0.35, 0.002, trowel_h.outputs[0])
+    b1 = _bump(nt, (-150, -250), 0.2, 0.002, trowel_h.outputs[0])
     b2 = _bump(nt, (100, -350), 0.12, 0.0004, grain.outputs["Fac"], normal=b1.outputs["Normal"])
     _link(nt, b2.outputs["Normal"], bsdf.inputs["Normal"])
 
-    tone = _math(nt, (-400, 300), "MULTIPLY_ADD", ridge.outputs[0], 0.25, macro.outputs["Fac"])
+    tone = _math(nt, (-400, 300), "MULTIPLY_ADD", ridge.outputs[0], 0.05, macro.outputs["Fac"])
     col = _ramp(nt, (-150, 350), tone.outputs[0],
                 [(0.35, "#C2B19F"), (0.55, "#D1C3B2"), (0.80, "#DDD2C4")])
     _link(nt, col.outputs["Color"], bsdf.inputs["Base Color"])
-    rough = _maprange(nt, (-150, 100), ridge.outputs[0], 0.0, 1.0, 0.93, 0.72)
+    rough = _maprange(nt, (-150, 100), ridge.outputs[0], 0.0, 1.0, 0.92, 0.82)
     _link(nt, rough.outputs[0], bsdf.inputs["Roughness"])
     _inp(bsdf, ["Sheen Weight", "Sheen"], 0.15)     # dusty grazing-angle sheen
     _inp(bsdf, "Sheen Roughness", 0.6)
@@ -946,9 +947,9 @@ def build_props(col):
         for z in shelves[:-1]:
             fill = rnd.uniform(0.55, 0.86)
             lb.box(xa, by0 + 0.04, z, xa + fill, by0 + 0.30, z + rnd.uniform(0.22, 0.31), "books")
-    lb.box(3.6, 12.05, 0.72, 8.4, 13.15, 0.78, "oak")
-    for x in (4.1, 7.9):
-        lb.box(x - 0.06, 12.2, 0, x + 0.06, 13.0, 0.72, "oak")
+    lb.box(4.4, 11.7, 0.72, 9.2, 12.8, 0.78, "oak")
+    for x in (4.9, 8.7):
+        lb.box(x - 0.06, 11.85, 0, x + 0.06, 12.65, 0.72, "oak")
     for y in (10.2, 14.3):
         lb.box(10.4, y - 0.4, 0, 11.2, y + 0.4, 0.42, "leather")
         lb.box(10.4, y - 0.4, 0.42, 10.6, y + 0.4, 0.95, "leather")
@@ -1085,8 +1086,8 @@ def build_practicals(col):
         shades.box(6.42, y - 0.18, 2.03, 6.78, y + 0.18, 2.22, "steel")
         shades.box(6.59, y - 0.01, 2.22, 6.61, y + 0.01, H, "steel")
     shades.build("Pendant_Shades", col)
-    point("Lamp_Library_A", (5.0, 12.6, 1.15), 12, warm)
-    point("Lamp_Library_B", (7.0, 12.6, 1.15), 12, warm)
+    point("Lamp_Library_A", (5.8, 12.25, 1.15), 12, warm)
+    point("Lamp_Library_B", (7.8, 12.25, 1.15), 12, warm)
     point("Fire_Lounge", (CHIMNEY_X, YS0 - 0.25, 0.25), 60, ember, 0.15)
     point("Embers_Grill", (2.8, 4.8, 1.0), 30, ember, 0.2)
     for i, y in enumerate((11.0, 13.5)):                        # cooler, brighter gym
@@ -1100,7 +1101,7 @@ def build_practicals(col):
 
 CAMERAS = [
     # name, location, target, lens
-    ("CAM_01_Library_EnSuite", (3.0, 12.25, 1.30), (20.0, 12.25, 1.30), 24),
+    ("CAM_01_Library_EnSuite", (0.9, 12.25, 1.40), (20.0, 12.25, 1.40), 24),
     ("CAM_02_Mudroom_Threshold", (23.6, 3.2, 1.50), (12.0, 5.2, 1.40), 21),
     ("CAM_03_Culinary_Hearth", (8.9, 0.9, 1.65), (2.8, 5.2, 1.10), 24),
     ("CAM_04_Endurance_to_Library", (20.5, 12.25, 1.45), (2.0, 12.25, 1.30), 24),
@@ -1157,7 +1158,7 @@ def setup_render():
             break
         except TypeError:
             continue
-    vs.exposure = 0.0
+    vs.exposure = EXPOSURE
 
 
 # =============================================================================
