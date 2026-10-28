@@ -2,12 +2,18 @@
 
 This folder holds a parametric conceptual massing of the Verdio poshtel ground floor, in its landscape, plus a lighting, camera and plaster workflow guide.
 
-**Direction: a dune house, not a modern box.** Verdio is a Dutch coastal farmhouse (hand-moulded brick, red pantiles, an exposed oak beam ceiling) crossed with an English country house (panelling, hearths, window seats). It sits low in the dunes. Its coast side is a deep veranda where most of daily life happens half outdoors. The friction is still there, between salt, sweat and athletic performance on one side and heavy, dark, traditional interiors on the other. There's nothing in it that reads as contemporary.
+**Direction: a dune house, not a modern box.** Verdio is a Dutch coastal farmhouse (hand-moulded brick, red pantiles, an exposed oak beam ceiling) crossed with an English country house (panelling, hearths, window seats). It sits low in the dunes. Its coast side is a deep veranda where most of daily life happens half outdoors.
+
+**The garden is laid out like a hillside resort,** such as Shanti Natural Panorama View in north Bali, but on a temperate coast:
+- **Terraces to the sea.** The house terrace sits 4.6 m above the sea. In front of the veranda, a natural swimming pond overflows toward the view. Terraces step down from there: a wildflower meadow, then tulip strips that echo the bulb fields behind the Dutch dunes, then a boardwalk to the beach.
+- **Garden pavilions.** Four reed-thatched pavilions sit in dense planting on the dunes either side, each with an open-air living veranda and an outdoor soaking tub. Boardwalks link them to the house.
+
+The friction is still there, between salt, sweat and athletic performance on one side and heavy, dark, traditional interiors on the other. There's nothing in it that reads as contemporary.
 
 | File | What it is |
 |---|---|
-| `verdio_ground_floor.py` | One script. It builds the 400 m² plate, walls, brick facade, the Kamer en suite, oak French doors and shutters, the veranda with its vine pergola and outdoor kitchen, an oak beam ceiling, panelling and blocking props. It also builds the dunes, beach, sea, marram grass, pines, boardwalk and training yard, a placeholder upper floor with a pantile roof, materials (including a procedural Rotband plaster), sun, sky, light portals, practical lights, cameras and Cycles settings. |
-| `previews/` | Low-sample Cycles renders (40 spp, CPU, 960 × 640) straight out of the script, with no manual edits. |
+| `verdio_ground_floor.py` | One script. It builds the 400 m² plate, walls, brick facade, the Kamer en suite, oak French doors and shutters, the veranda with its vine pergola and outdoor kitchen, an oak beam ceiling, panelling and blocking props. It also builds the terraced garden with its pond, reed bed, meadow and tulip strips; the four thatched pavilions; boardwalks; the dunes, beach and sea; grass, shrubs, pines and oaks; a training yard; and a placeholder upper floor with a pantile roof. On top of that it sets up materials (including a procedural Rotband plaster), sun, sky, light portals, practical lights, cameras and Cycles settings. It can also pull CC0 scanned assets from Poly Haven (see §6). |
+| `previews/` | Low-sample Cycles renders (40 spp, CPU, 960 × 640, procedural stand-ins, Poly Haven offline) straight out of the script, with no manual edits. |
 
 The script was tested headless on Blender 4.2 LTS. API names that changed in 4.x (Principled inputs, displacement method, particle settings) are handled. If you're on 5.x and the Nishita sky type has been renamed, the world falls back to a flat sky. Use an HDRI there anyway (see §4).
 
@@ -26,7 +32,11 @@ Re-running rebuilds the `VERDIO` collection in place. Edit the parameters at the
 | `ENSUITE_FRAME` | `"iron"` | Choose `"iron"` (hand-forged, blackened) or `"oak"` for the en suite framing. |
 | `PERGOLA_TO_X` | `9.5` | How much of the veranda is open vine pergola rather than tiled roof. |
 | `SITE_ROTATION_DEG` | `0` | Set to `-90` if the coast faces west, as on the Dutch North Sea coast. |
-| `GRASS_COUNT` | `25000` | Marram grass density. Lower it for a faster viewport. |
+| `QUALITY` | `"preview"` | `"preview"` is 128 spp at half resolution. `"final"` is 1024 spp at full 3000 × 2000, with remeshed and displaced plaster. |
+| `USE_POLYHAVEN` | `True` | Downloads and uses scanned textures, plants and an HDRI when Poly Haven is reachable. Otherwise the procedural stand-ins are used. |
+| `PAVILIONS` | 4 sites | Position and rotation of each garden pavilion. Add or remove entries. |
+| `TERRACE_STEPS`, `POND` | – | Levels of the garden terraces and the pond's footprint. |
+| `GRASS_COUNT` | `9000` | Marram tussock count. Lower it for a faster viewport. |
 | `BUILD_LANDSCAPE`, `BUILD_UPPER` | `True` | Turn these off for fast interior-only work. |
 
 ---
@@ -154,13 +164,17 @@ Albedo discipline: keep plaster around sRGB 190–220 (linear about 0.5–0.7), 
 
 | Camera | Shot |
 |---|---|
-| `CAM_05_Beach_to_House` | From the beach across the foredune: the brick house, pantile roof, veranda and boardwalk. Shot level with shift. |
+| `CAM_05_Beach_to_House` | From the beach, up the terraces to the house, with the thatched pavilions on the dunes either side. Shot level with shift. |
+| `CAM_07_Veranda_Pond_Panorama` | From the veranda over the pond and reed bed, past the overflow edge, to the sea. This is the "panorama" shot. |
+| `CAM_08_Garden_Pavilion` | From a pavilion's front lawn into its open-air living veranda under the thatch. |
 | `CAM_06_Culinary_Out_To_Sea` | From the culinary core, down the table, through open French doors and the vine pergola to the sea. |
 | `CAM_01_Library_EnSuite` | Down the refectory table into the en suite, with the endurance room and its yard doors beyond. |
 | `CAM_04_Endurance_to_Library` | The reverse view: from the mat through two glass skins into the library. |
 | `CAM_02_Mudroom_Threshold` | Terracotta, the oak-cased threshold, then the lounge. |
 | `CAM_03_Culinary_Hearth` | From the terrace doors toward the grill hearth and the table. |
-| `CAM_00_Plan_Ortho` | Top-down. Hide `Ceiling_*`, `Veranda_Structure`, `Veranda_Vine_Pergola` and the `VRD_09_UpperMassing` collection first. |
+| `CAM_00_Plan_Ortho` | Top-down. Hide `Ceiling_*`, `Veranda_Structure`, `Veranda_Vine_Pergola`, `Pavilion_Roof_Thatch*` and the `VRD_10_UpperMassing` collection first. |
+
+Each camera has an `exposure_ev` custom property. The script installs a handler that applies it whenever that camera becomes active or a render starts: +1.5 EV for interiors, 0 for exteriors. A handler only lives for the current Blender session, so after reopening the .blend, run the script again or set Color Management → Exposure by hand.
 
 Camera rules for this brief:
 - **Two-point perspective.** Keep the camera level and reframe with **Shift Y**, never tilt. The exterior camera already does this.
@@ -226,19 +240,45 @@ In the shader, read the edge mask with an **Attribute** node (`trowel`) in place
 
 **Scanned textures.** For close-up hero shots you can layer a scanned plaster texture from ambientCG or Poly Haven on top. Use an Image Texture with **Box** projection (blend 0.2) on Object coordinates, and mix it into the bump at about 30%. Keep the procedural macro layer, because scans tile visibly at room scale.
 
-## 6. Landscape and vegetation: making it real
+## 6. Making it photoreal: Poly Haven assets
 
-The landscape is built for blocking, but it's set up so you can upgrade it piece by piece:
+The geometry is blocking, and so are the proxies: blob trees, box furniture and procedural textures. Real photorealism comes from scanned assets. The script can fetch CC0 assets from [Poly Haven](https://polyhaven.com) by itself:
 
-- **Terrain.** A 145 × 145 m height field. Dunes (fractal noise) rise beyond a flat pad around the house, and a low foredune slopes down to the beach and the sea at −1.6 m. The sand shader shifts from wet, dark and glossy at the waterline, to dry sand, to grey-green dune crust inland.
-- **Marram grass.** A hair particle system with 25,000 guides and 12 children each. Density comes from a `marram` vertex group: none on the beach, the pad or the boardwalk; patchy on the dunes.
-  - To upgrade, replace the hair with a Geometry Nodes scatter of real grass clumps. Poly Haven and BlenderKit both have dune grasses. Keep the `marram` group as the density mask.
-- **Sea buckthorn and black pine.** Linked-duplicate proxies: one mesh each, so swapping it changes every instance. The pines lean away from the south-west wind. Replace them with real assets (Sapling Tree Gen, or a scanned *Pinus nigra*) without touching their placement.
-- **Indoor trees.** These are blob proxies in terracotta pots. Swap in olive and fig assets.
+1. **Allow the domains.** `api.polyhaven.com` and `dl.polyhaven.org` must be reachable. In a Claude Code cloud environment, add them under the environment's network settings, then start a new session, because running sessions keep the policy they started with. On your own machine this works out of the box.
+2. **Run the script** with `USE_POLYHAVEN = True`, which is the default. It caches everything under `~/.cache/verdio_polyhaven`, so only the first run downloads. The console prints which asset filled each role.
+3. **What gets replaced.**
+
+   | Role | Replaces |
+   |---|---|
+   | Textures (2k, box-projected at real-world size) | Oak floor (stained darker to the brand's dark oak), terracotta, brick, pantile, bluestone, thatch, deck, soil, shell gravel, sand |
+   | Models (1k) | Potted plants indoors and on the pavilions; shrubs, trees and pines on the dunes; ferns around the pavilions; grass clumps on the lawn (scattered with Geometry Nodes) |
+   | HDRI (4k) | The partly-cloudy pure sky, in place of the procedural fallback |
+
+   The Rotband plaster stays procedural on purpose (see §5).
+4. **Pin what you like.** Each role lists preferred asset IDs first (`PH_TEXTURES`, `PH_MODEL_ROLES`, `PH_HDRI` in the script). If an ID doesn't exist, the script falls back to the best keyword match on Poly Haven. After the first run, look at the renders and put the IDs you want at the front of each list.
+5. **Align the sky.** A Poly Haven sky has its own sun, and so does the script's Sun lamp. Rotate `HDRI_ROTATION_DEG` until the HDRI's sun sits at `SUN_AZIMUTH_DEG`. Alternatively, keep the lamp and lower `HDRI_STRENGTH` to about 0.6 so the HDRI acts only as sky fill.
+
+**Final render.** Set `QUALITY = "final"` and render on a GPU (Preferences → System → Cycles Render Devices). Then add the details that sell realism:
+- Depth of field at f/4–f/5.6 on the 50 mm detail shots.
+- Volume Scatter haze for the exteriors (§4).
+- Hair Dynamics with a Wind force for the grass and reeds.
+
+### The procedural stand-ins (offline)
+
+- **Terrain.** A 145 × 145 m height field on a 1 m grid, so the terrace walls fall on grid lines.
+  - The house terrace and the terraces below it are flat ground boxes. Each pavilion gets its own flat pad blended into the dunes.
+  - The dune shader shifts from wet sand at the waterline, to dry sand, to grey-green dune crust inland.
+- **Marram grass.** A hair system: 9,000 tussocks with 30 blades each. Density comes from a `marram` vertex group: none on the beach, the terraces, the pads or the paths.
+- **Garden planting.**
+  - The lawn and the meadow grass are hair.
+  - Wildflowers and tulips are Geometry Nodes scatters of small proxies. The meadow flowers take random colours per instance; the tulip strips each take one colour.
+  - The reeds in the pond are hair.
+- **Shrubs, pines and oaks.** Linked duplicates of one proxy mesh each, planted densely around the sides and backs of the pavilions. The sea-facing front of each pavilion is left open.
 
 ## 7. What's deliberately not here yet
 
 - **Vertical circulation.** A poshtel needs a stair and lift core to the rooms above. The upper floor and roof are placeholder massing only, there for the exterior silhouette.
 - **Grill and oven services.** The hoods are massing only. An open charcoal grill and a wood-fired oven both need extract, make-up air and fire separation.
 - **Structure.** There's no grid yet. The oak girder and joists are visual intent, not engineering; check the spans, since the coast band is 8.3 m deep.
-- **Planting design.** The vegetation is generic dune habitat. A landscape architect should specify local dune species and how the dune is stabilised around the boardwalk.
+- **Planting design.** The vegetation is generic. A landscape architect should specify local dune species, the pond's planting and filtration, and how the dune is stabilised around the boardwalks and pavilions.
+- **Pavilion interiors.** Each pavilion is one room with a bed, plus its veranda. Bathrooms and services aren't designed.

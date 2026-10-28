@@ -923,7 +923,7 @@ def build_materials():
     mat_iron()
     mat_books()
     mat_foliage("foliage", "VRD_Foliage", "#2E3F26", "#58693A")
-    mat_foliage("buckthorn", "VRD_Foliage_SeaBuckthorn", "#5E6449", "#8C8D6C", translucency=0.2)
+    mat_foliage("buckthorn", "VRD_Foliage_SeaBuckthorn", "#4E5C38", "#87925E", translucency=0.3)
     mat_vine()
     mat_sand()
     mat_sea()
@@ -1340,7 +1340,7 @@ def terrain_z(x, y):
     z = raw_terrain(x, y)
     for i, site in enumerate(PAVILIONS):
         cx, cy = pavilion_point(site, 0.0, 1.0)
-        w = 1.0 - smooth(7.5, 13.0, math.hypot(x - cx, y - cy))
+        w = 1.0 - smooth(9.0, 16.0, math.hypot(x - cx, y - cy))
         if w > 0.0:
             z += (pavilion_z(i) - 0.05 - z) * w
     if in_pond(x, y, 0.6):
@@ -2147,9 +2147,11 @@ def build_garden(col):
     tx0, tx1 = TERRACE_X
     path = (BOARDWALK_X - 0.8, BOARDWALK_X + 0.8)
     bands = terrace_bands()
+    pond_cut = (POND[0] - 0.45, POND[1] - 0.25, REED_BED[2] + 0.45, POND[3] + 0.45)
     mb = MB()
     for yn, ys, lv in bands:
-        mb.box(tx0, ys, lv - 0.6, tx1, yn, lv - 0.02, "soil")
+        for x0, y0, x1, y1 in rect_minus((tx0, ys, tx1, yn), [pond_cut]):
+            mb.box(x0, y0, lv - 0.6, x1, y1, lv - 0.02, "soil")
         mb.box(path[0], ys, lv - 0.02, path[1], yn, lv + 0.01, "shell")       # shell path to the beach
     walls = [(bands[i][1], bands[i][2], bands[i + 1][2]) for i in range(len(bands) - 1)]
     walls.append((TERRACE_END, bands[-1][2], TERRACE_FOOT))
@@ -2364,7 +2366,7 @@ def build_landscape(col):
             w = smooth(SEA_LEVEL + 0.4, SEA_LEVEL + 1.2, z) * smooth(1.5, 5.0, pad_distance(x, y))
             w *= (0.35 + 0.65 * patch) * (1.0 - terrace_weight(x, y))
             for cx, cy in pav_centres:
-                w *= smooth(7.0, 9.0, math.hypot(x - cx, y - cy))
+                w *= smooth(5.5, 7.5, math.hypot(x - cx, y - cy))
             if w > 0.01 and near_path(x, y, 1.2):
                 w = 0.0
             weights.append(w)
@@ -2609,7 +2611,7 @@ CAMERAS = [
     ("CAM_04_Endurance_to_Library", (20.5, 12.25, 1.45), (2.0, 12.25, 1.30), 24, 0.0, EXPOSURE),
     ("CAM_05_Beach_to_House", (8.0, -34.0, None), (11.5, 0.0, None), 28, 0.25, 0.0),
     ("CAM_06_Culinary_Out_To_Sea", (7.0, 8.2, 1.55), (7.0, -20.0, 1.55), 21, 0.0, EXPOSURE - 0.5),
-    ("CAM_07_Veranda_Pond_Panorama", (14.0, -2.6, 1.45), (12.0, -60.0, 1.45), 21, 0.0, 0.3),
+    ("CAM_07_Veranda_Pond_Panorama", (14.0, -2.6, 1.45), (12.0, -60.0, 1.45), 21, -0.14, 0.3),
     ("CAM_08_Garden_Pavilion", (-5.5, -7.5, None), (-13.0, 1.0, None), 28, 0.08, 0.3),
 ]
 
@@ -2634,6 +2636,10 @@ def build_cameras(col):
     first = None
     for name, loc, target, lens, shift, ev in CAMERAS:
         loc, target = list(loc), list(target)
+        if name == "CAM_08_Garden_Pavilion":       # stand on the first pavilion's front lawn
+            gz = pavilion_z(0) + 1.6
+            loc = [*pavilion_point(PAVILIONS[0], 3.2, -7.5), gz]
+            target = [*pavilion_point(PAVILIONS[0], -0.6, 0.0), gz]
         ev = 0.0 if name == "CAM_00_Plan_Ortho" else ev
         if loc[2] is None:
             loc[2] = max(terrain_z(loc[0], loc[1]), SEA_LEVEL) + 1.7
