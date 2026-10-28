@@ -47,6 +47,18 @@ Indoor/outdoor moves:
     window seats.
   * Nature comes indoors: potted olive and fig trees, natural materials.
 
+Garden (a temperate take on a hillside resort like Shanti, north Bali):
+  the house terrace sits 4.6 m above the sea.  In front of the veranda a
+  natural swimming pond overflows to the view; below it, terraces step down
+  (wildflower meadow, then tulip strips like the bulb fields behind the
+  Dutch dunes) to a boardwalk and the beach.  Four reed-thatched garden
+  pavilions sit in dense planting on the dunes either side, each with an
+  open-air living veranda, and boardwalks link them to the house.
+
+Realism: with api.polyhaven.com and dl.polyhaven.org reachable, CC0 scanned
+textures, plants and an HDRI sky replace the procedural stand-ins (cached
+under PH_CACHE).  QUALITY = "final" renders at full resolution and samples.
+
 Two custom-property controllers:
   EnSuite_CONTROL["open"]  0-1 slides the four en suite leaves into their pockets.
   FACADE_CONTROL["open"]   0-1 swings every French door and shutter.
@@ -115,8 +127,18 @@ ROOF_PITCH_DEG = 45.0   # steep Dutch pantile roof
 BUILD_LANDSCAPE = True
 LANDSCAPE_SEED = 7
 GRASS_COUNT = 9000      # marram tussocks (x 30 blades each at render time)
-SEA_LEVEL = -1.6
-BOARDWALK_X = 21.0      # the path from the mudroom porch to the beach
+SEA_LEVEL = -4.6        # the house terrace sits 4.6 m above the sea: a panorama
+BOARDWALK_X = 21.0      # the path from the mudroom porch down to the beach
+
+# Garden, laid out like a hillside resort on a temperate coast
+TERRACE_X = (-8.0, 33.0)                          # formal terraces between these x
+TERRACE_STEPS = ((-10.0, -1.2), (-16.0, -2.35))   # (retaining wall y, level south of it)
+TERRACE_END = -22.0                               # last wall; dune slope to the beach below
+TERRACE_FOOT = -3.5                               # ground at the foot of the last wall
+POND = (2.0, -10.0, 16.0, -6.2)                   # natural swimming pond, overflowing to the view
+REED_BED = (16.0, -10.0, 20.0, -6.2)              # planted regeneration zone that cleans it
+PAVILIONS = ((-13.0, 2.5, 0.0), (-14.5, 15.0, 10.0), (38.5, 2.0, 0.0), (40.0, 14.5, -10.0))  # (x, y, rot)
+BULB_COLOURS = ("#B5172B", "#F0B83C", "#EDE6D8", "#7E3A86")  # tulip strips on the lowest terrace
 
 # Site and light
 SITE_ROTATION_DEG = 0.0     # rotate the building against the sun (-90: coast faces west)
@@ -131,9 +153,16 @@ HDRI_ROTATION_DEG = 0.0
 BUILD_PROPS = True
 BUILD_CEILING = True
 BUILD_PRACTICALS = True
-HERO_PLASTER = False        # voxel-remesh the walls + true displacement (Cycles; heavy)
+QUALITY = "preview"         # "preview" (128 spp, half res) or "final" (1024 spp, full res, remeshed plaster)
+HERO_PLASTER = QUALITY == "final"   # voxel-remesh the walls + true displacement (Cycles; heavy)
 HERO_VOXEL = 0.04
 REMOVE_DEFAULT_OBJECTS = True   # delete the startup Cube / Light / Camera
+
+# Poly Haven (CC0 scanned assets).  Needs api.polyhaven.com and dl.polyhaven.org
+# reachable; without them everything falls back to the procedural stand-ins.
+USE_POLYHAVEN = True
+PH_CACHE = os.path.join(os.path.expanduser("~"), ".cache", "verdio_polyhaven")
+PH_TEX_RES, PH_MODEL_RES, PH_HDRI_RES = "2k", "1k", "4k"
 
 SPACE_BLUE = "#1D2951"
 
@@ -219,6 +248,12 @@ class MB:
         for i in range(n):
             j = (i + 1) % n
             self.bm.faces.new((v0[i], v0[j], v1[j], v1[i])).material_index = idx
+
+    def hull(self, verts, faces, mats):
+        """Arbitrary closed solid: `faces` index into `verts`, one material key per face."""
+        v = [self.bm.verts.new(Vector(p)) for p in verts]
+        for f, m in zip(faces, mats):
+            self.bm.faces.new([v[i] for i in f]).material_index = self._idx(m)
 
     def blob(self, center, radius, mat, scale=(1, 1, 1), rough=0.22, rng=None, subdiv=2):
         """Jittered icosphere: canopies, shrubs, oven domes."""
@@ -767,7 +802,7 @@ def mat_grass():
     info = _node(nt, "ShaderNodeHairInfo", (-700, 0))
     mix = _math(nt, (-500, 0), "MULTIPLY_ADD", info.outputs["Intercept"], 0.35, info.outputs["Random"])
     col = _ramp(nt, (-250, 100), mix.outputs[0],
-                [(0.0, "#6F7650"), (0.5, "#9A9566"), (0.9, "#C4B585"), (1.2, "#D8CBA0")])
+                [(0.0, "#6F7650"), (0.45, "#9A9566"), (0.75, "#C4B585"), (1.0, "#D8CBA0")])
     _link(nt, col.outputs["Color"], bsdf.inputs["Base Color"])
 
 
@@ -775,6 +810,94 @@ def mat_embers():
     mat, nt, bsdf, out = principled("embers", "VRD_Charcoal_Embers", "#1A0A05", 0.9)
     _inp(bsdf, ["Emission Color", "Emission"], lin("#FF4A12"))
     _inp(bsdf, "Emission Strength", 8.0)
+
+
+def mat_thatch():
+    """Aged Dutch reed thatch: streaks run down the slope on every roof face
+    (they follow Z in object space), with moss in patches."""
+    mat, nt, bsdf, out = new_material("thatch", "VRD_Reed_Thatch", "#6F604A", 0.95)
+    tc = _node(nt, "ShaderNodeTexCoord", (-1100, 0))
+    space = _mapping(nt, (-900, 100), tc.outputs["Object"], scale=(55.0, 55.0, 2.5))
+    reed = _noise(nt, (-700, 100), space.outputs["Vector"], 1.0, detail=8.0, rough=0.7, distortion=0.4)
+    moss = _noise(nt, (-700, -200), tc.outputs["Object"], 0.6, detail=4.0, rough=0.6)
+    tone = _math(nt, (-450, 100), "MULTIPLY_ADD", moss.outputs["Fac"], 0.35,
+                 _math(nt, (-550, 250), "MULTIPLY", reed.outputs["Fac"], 0.65).outputs[0])
+    col = _ramp(nt, (-250, 150), tone.outputs[0],
+                [(0.3, "#4A4232"), (0.5, "#7A6A4E"), (0.62, "#9A8762"), (0.75, "#666B45")])
+    _link(nt, col.outputs["Color"], bsdf.inputs["Base Color"])
+    b = _bump(nt, (0, -250), 0.9, 0.03, reed.outputs["Fac"])
+    _link(nt, b.outputs["Normal"], bsdf.inputs["Normal"])
+
+
+def mat_pool_water():
+    """Natural swimming pond: clear on top, green-teal with depth (volume
+    absorption), soft ripples, and sun reaching the floor (shadow-ray trick)."""
+    mat, nt, bsdf, out = new_material("pool_water", "VRD_Pond_Water", "#4F7A70", 0.02)
+    _inp(bsdf, "Base Color", lin("#E6F0EC"))
+    _inp(bsdf, ["Transmission Weight", "Transmission"], 1.0)
+    _inp(bsdf, "IOR", 1.333)
+    tc = _node(nt, "ShaderNodeTexCoord", (-700, -200))
+    ripple = _noise(nt, (-500, -200), tc.outputs["Object"], 2.5, detail=4.0, rough=0.5)
+    b = _bump(nt, (-250, -200), 0.12, 0.02, ripple.outputs["Fac"])
+    _link(nt, b.outputs["Normal"], bsdf.inputs["Normal"])
+    lp = _node(nt, "ShaderNodeLightPath", (100, 300))
+    clear = _node(nt, "ShaderNodeBsdfTransparent", (300, -200))
+    mix = _node(nt, "ShaderNodeMixShader", (700, 0))
+    _link(nt, lp.outputs["Is Shadow Ray"], mix.inputs[0])
+    _link(nt, bsdf.outputs["BSDF"], mix.inputs[1])
+    _link(nt, clear.outputs["BSDF"], mix.inputs[2])
+    _link(nt, mix.outputs["Shader"], out.inputs["Surface"])
+    vol = _node(nt, "ShaderNodeVolumeAbsorption", (500, -350))
+    vol.inputs["Color"].default_value = lin("#3E7A68")
+    vol.inputs["Density"].default_value = 0.9
+    _link(nt, vol.outputs["Volume"], out.inputs["Volume"])
+
+
+def mat_hair(key, name, stops, by="Random"):
+    """Grass, reeds: colour per strand (Random) or root to tip (Intercept)."""
+    mat, nt, bsdf, out = new_material(key, name, stops[len(stops) // 2][1], 0.55)
+    info = _node(nt, "ShaderNodeHairInfo", (-700, 0))
+    col = _ramp(nt, (-300, 100), info.outputs[by], stops)
+    _link(nt, col.outputs["Color"], bsdf.inputs["Base Color"])
+
+
+def mat_wildflowers():
+    """One material for every flower head: each instance picks a meadow colour."""
+    mat, nt, bsdf, out = new_material("wildflower", "VRD_Wildflower_Heads", "#C9302C", 0.5)
+    info = _node(nt, "ShaderNodeObjectInfo", (-700, 0))
+    col = _ramp(nt, (-350, 100), info.outputs["Random"],
+                [(0.0, "#C3292A"), (0.3, "#3A5BA9"), (0.5, "#F1EDE0"), (0.75, "#E9C23A"), (0.9, "#7D4E9E")])
+    col.color_ramp.interpolation = "CONSTANT"
+    _link(nt, col.outputs["Color"], bsdf.inputs["Base Color"])
+    _inp(bsdf, ["Sheen Weight", "Sheen"], 0.4)
+
+
+def mat_shell():
+    """Crushed-shell path, the Dutch coastal path surface."""
+    mat, nt, bsdf, out = new_material("shell", "VRD_Shell_Path", "#D9D3C6", 0.85)
+    tc = _node(nt, "ShaderNodeTexCoord", (-900, 0))
+    bits = _node(nt, "ShaderNodeTexVoronoi", (-650, 0), feature="F1")
+    _inp(bits, "Scale", 60.0)
+    _link(nt, tc.outputs["Object"], bits.inputs["Vector"])
+    col = _ramp(nt, (-350, 150), bits.outputs["Distance"], [(0.05, "#9C968A"), (0.35, "#E2DCCF"), (0.7, "#F0ECE2")])
+    _link(nt, col.outputs["Color"], bsdf.inputs["Base Color"])
+    b = _bump(nt, (-50, -250), 0.6, 0.006, bits.outputs["Distance"])
+    _link(nt, b.outputs["Normal"], bsdf.inputs["Normal"])
+
+
+def build_garden_materials():
+    mat_thatch()
+    mat_pool_water()
+    mat_wildflowers()
+    mat_shell()
+    mat_hair("lawn", "VRD_Lawn_Grass", [(0.0, "#3B5524"), (0.5, "#56722F"), (1.0, "#7A8A44")])
+    mat_hair("meadow", "VRD_Meadow_Grass", [(0.0, "#5A6B35"), (0.6, "#8C9052"), (1.0, "#B9AE76")])
+    mat_hair("reed", "VRD_Reed_Common", [(0.0, "#4F6232"), (0.7, "#7E8550"), (1.0, "#B7A574")], by="Intercept")
+    _grained("soil", "VRD_Garden_Soil", "#3E3226", [(0.3, "#2E251C"), (0.7, "#4A3D2F")],
+             rough=(0.9, 1.0), scale=(4.0, 4.0, 4.0))
+    principled("stem", "VRD_Plant_Stem", "#4C6B2F", 0.6)
+    for i, c in enumerate(BULB_COLOURS):
+        principled(f"tulip{i}", f"VRD_Tulip_{i}", c, 0.45, sheen=0.3)
 
 
 def build_materials():
@@ -818,6 +941,226 @@ def build_materials():
     principled("rug", "VRD_Wool_Rug", "#4B1F1C", 1.0, sheen=0.5)
     principled("linen", "VRD_Linen_Natural", "#D6CDBC", 0.9, sheen=0.6)
     principled("pot", "VRD_Terracotta_Pot", "#9C5434", 0.85)
+    build_garden_materials()
+
+
+# =============================================================================
+# 3b. POLY HAVEN: CC0 scanned textures, plants and sky
+#     Everything here is optional; offline, the procedural setup stays.
+# =============================================================================
+PH_API = "https://api.polyhaven.com"
+PH_MODELS = {}                      # role -> list of Collections of scanned assets
+PH_STATUS = {"online": False, "used": []}
+
+# material key: (preferred asset ids, fallback keywords, real-world tile size in m, stain hex or None)
+PH_TEXTURES = {
+    "oak_floor": (("wood_floor_worn", "dark_wooden_planks", "wood_floor"), ("wood", "floor", "planks"), 2.0, "#5A3E2B"),
+    "terracotta": (("terracotta_tiles", "floor_tiles_06"), ("terracotta", "tiles"), 1.0, None),
+    "brick": (("red_brick", "red_brick_03", "brick_wall_001"), ("brick", "red"), 2.0, None),
+    "pantile": (("roof_tiles", "clay_roof_tiles", "roof_tiles_14"), ("roof", "tiles"), 2.0, None),
+    "stone": (("stone_tiles", "slate_floor"), ("stone", "tiles", "slate"), 2.0, None),
+    "thatch": (("thatch_roof", "thatch"), ("thatch", "straw"), 2.0, None),
+    "deck": (("old_planks_02", "weathered_planks", "old_wood_floor"), ("planks", "weathered", "old"), 2.0, None),
+    "soil": (("brown_mud", "forest_ground_01", "aerial_mud_1"), ("soil", "mud", "ground"), 3.0, None),
+    "shell": (("gravel_floor", "gravel_floor_02"), ("gravel",), 2.0, None),
+    "sand": (("coast_sand_01", "sand_01", "aerial_beach_01"), ("sand", "beach"), 4.0, None),
+}
+# role: (preferred asset ids, fallback keywords)
+PH_MODEL_ROLES = {
+    "potted": (("potted_plant_01", "potted_plant_02", "potted_plant_04"), ("potted", "plant")),
+    "shrub": (("shrub_01", "shrub_02", "shrub_03", "shrub_04"), ("shrub", "bush")),
+    "tree": (("island_tree_01", "island_tree_02", "island_tree_03"), ("tree",)),
+    "pine": (("pine_tree_01", "fir_tree_01", "fir_sapling"), ("pine", "fir", "conifer")),
+    "grass": (("grass_medium_01", "grass_medium_02"), ("grass",)),
+    "fern": (("fern_02", "fern_01"), ("fern",)),
+}
+PH_HDRI = (("kloofendal_48d_partly_cloudy_puresky", "kloofendal_43d_clear_puresky"), ("puresky", "partly", "cloudy"))
+
+
+def _ph_request(url):
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": "Verdio-Blender-Blocking/1.0"})
+    return urllib.request.urlopen(req, timeout=60)
+
+
+def _ph_json(path):
+    import json
+    os.makedirs(PH_CACHE, exist_ok=True)
+    cache = os.path.join(PH_CACHE, "api_" + "".join(c if c.isalnum() else "_" for c in path) + ".json")
+    if os.path.exists(cache):
+        with open(cache) as f:
+            return json.load(f)
+    with _ph_request(PH_API + path) as r:
+        data = json.loads(r.read().decode())
+    with open(cache, "w") as f:
+        json.dump(data, f)
+    return data
+
+
+def _ph_download(url, dest):
+    import shutil
+    if os.path.exists(dest) and os.path.getsize(dest) > 0:
+        return dest
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with _ph_request(url) as r, open(dest + ".part", "wb") as f:
+        shutil.copyfileobj(r, f)
+    os.replace(dest + ".part", dest)
+    return dest
+
+
+def ph_pick(kind, prefer, keywords, n=1):
+    """Asset ids: preferred ids that exist first, then the best keyword matches."""
+    assets = _ph_json(f"/assets?t={kind}")
+    picked = [p for p in prefer if p in assets][:n]
+    if len(picked) < n:
+        scored = []
+        for aid, info in assets.items():
+            if aid in picked:
+                continue
+            hay = " ".join([aid, info.get("name", "")] + list(info.get("tags", [])) +
+                           list(info.get("categories", []))).lower()
+            score = sum(1 for k in keywords if k in hay)
+            if score:
+                scored.append((-score, -info.get("download_count", 0), aid))
+        picked += [aid for _s, _d, aid in sorted(scored)[: n - len(picked)]]
+    return picked
+
+
+def _pick_file(entry, formats):
+    for fmt in formats:
+        if fmt in entry:
+            return entry[fmt]["url"]
+    return next(iter(entry.values()))["url"]
+
+
+def ph_texture_maps(aid, res=None):
+    files = _ph_json(f"/files/{aid}")
+    res = res or PH_TEX_RES
+    maps = {}
+    for key, names in (("diff", ("Diffuse", "diffuse")), ("rough", ("Rough", "rough")),
+                       ("nor", ("nor_gl", "Normal")), ("disp", ("Displacement", "disp"))):
+        for nm in names:
+            if nm in files:
+                entry = files[nm].get(res) or next(iter(files[nm].values()))
+                url = _pick_file(entry, ("jpg", "png", "exr"))
+                maps[key] = _ph_download(url, os.path.join(PH_CACHE, "textures", aid, os.path.basename(url)))
+                break
+    return maps
+
+
+def ph_material(key, aid, maps, size, stain):
+    """Rebuild MAT[key] in place (same name, so slots stay) from scanned maps,
+    box-projected on Object coordinates at real-world scale."""
+    old = MAT[key]
+    viewport = old.diffuse_color[:]
+    mat, nt, bsdf, out = new_material(key, old.name, "#808080", 0.6)
+    mat.diffuse_color = viewport
+    tc = _node(nt, "ShaderNodeTexCoord", (-1200, 0))
+    mp = _mapping(nt, (-1000, 0), tc.outputs["Object"], scale=(1.0 / size,) * 3)
+
+    def img(path, loc, non_color):
+        n = _node(nt, "ShaderNodeTexImage", loc)
+        n.image = bpy.data.images.load(path, check_existing=True)
+        n.projection = "BOX"
+        n.projection_blend = 0.25
+        if non_color:
+            n.image.colorspace_settings.name = "Non-Color"
+        _link(nt, mp.outputs["Vector"], n.inputs["Vector"])
+        return n
+
+    if "diff" in maps:
+        d = img(maps["diff"], (-700, 300), False)
+        colour = d.outputs["Color"]
+        if stain:
+            st = _node(nt, "ShaderNodeVectorMath", (-350, 300), operation="MULTIPLY")
+            _link(nt, colour, st.inputs[0])
+            st.inputs[1].default_value = lin(stain)[:3]
+            colour = st.outputs["Vector"]
+        _link(nt, colour, bsdf.inputs["Base Color"])
+    if "rough" in maps:
+        _link(nt, img(maps["rough"], (-700, 0), True).outputs["Color"], bsdf.inputs["Roughness"])
+    if "nor" in maps:
+        nm = _node(nt, "ShaderNodeNormalMap", (-300, -250))
+        _link(nt, img(maps["nor"], (-700, -300), True).outputs["Color"], nm.inputs["Color"])
+        _link(nt, nm.outputs["Normal"], bsdf.inputs["Normal"])
+    if "disp" in maps:
+        dn = _node(nt, "ShaderNodeDisplacement", (500, -400))
+        _link(nt, img(maps["disp"], (-700, -600), True).outputs["Color"], dn.inputs["Height"])
+        _inp(dn, "Scale", 0.01 * size)
+        _link(nt, dn.outputs["Displacement"], out.inputs["Displacement"])
+        set_displacement_method(mat, "BUMP")
+
+
+def ph_model_collection(aid):
+    """Append a scanned model's objects into a Collection that is not linked to
+    the scene: it renders only through the instances that point at it."""
+    name = f"PH_{aid}"
+    existing = bpy.data.collections.get(name)
+    if existing is not None and existing.objects:
+        return existing
+    files = _ph_json(f"/files/{aid}")
+    blend = files["blend"]
+    entry = (blend.get(PH_MODEL_RES) or next(iter(blend.values())))["blend"]
+    folder = os.path.join(PH_CACHE, "models", aid)
+    path = _ph_download(entry["url"], os.path.join(folder, os.path.basename(entry["url"])))
+    for rel, inc in entry.get("include", {}).items():
+        _ph_download(inc["url"], os.path.join(folder, rel))
+    with bpy.data.libraries.load(path, link=False) as (src, dst):
+        dst.objects = list(src.objects)
+    coll = existing or bpy.data.collections.new(name)
+    for ob in dst.objects:
+        if ob is not None:
+            coll.objects.link(ob)
+    for im in bpy.data.images:                # appended texture paths are relative to the source file
+        if im.filepath.startswith("//") and not os.path.exists(bpy.path.abspath(im.filepath)):
+            cand = os.path.join(folder, im.filepath[2:])
+            if os.path.exists(cand):
+                im.filepath = cand
+    return coll
+
+
+def ph_hdri_path(aid):
+    files = _ph_json(f"/files/{aid}")
+    hdri = files["hdri"]
+    entry = hdri.get(PH_HDRI_RES) or next(iter(hdri.values()))
+    url = _pick_file(entry, ("exr", "hdr"))
+    return _ph_download(url, os.path.join(PH_CACHE, "hdris", os.path.basename(url)))
+
+
+def load_polyhaven():
+    global HDRI_PATH
+    if not USE_POLYHAVEN:
+        return
+    try:
+        _ph_json("/types")
+    except Exception as e:                  # offline or blocked: keep the procedural scene
+        print(f"  Poly Haven unreachable ({type(e).__name__}); using procedural materials and proxies")
+        return
+    PH_STATUS["online"] = True
+    for key, (prefer, words, size, stain) in PH_TEXTURES.items():
+        try:
+            aid = ph_pick("textures", prefer, words)[0]
+            ph_material(key, aid, ph_texture_maps(aid), size, stain)
+            PH_STATUS["used"].append(f"texture {key:<11} <- {aid}")
+        except Exception as e:
+            print(f"  Poly Haven texture for {key} skipped: {e}")
+    for role, (prefer, words) in PH_MODEL_ROLES.items():
+        cols = []
+        for aid in ph_pick("models", prefer, words, n=3):
+            try:
+                cols.append(ph_model_collection(aid))
+                PH_STATUS["used"].append(f"model   {role:<11} <- {aid}")
+            except Exception as e:
+                print(f"  Poly Haven model {aid} skipped: {e}")
+        if cols:
+            PH_MODELS[role] = cols
+    if not HDRI_PATH:
+        try:
+            aid = ph_pick("hdris", *PH_HDRI)[0]
+            HDRI_PATH = ph_hdri_path(aid)
+            PH_STATUS["used"].append(f"hdri    sky         <- {aid}")
+        except Exception as e:
+            print(f"  Poly Haven HDRI skipped: {e}")
 
 
 # =============================================================================
@@ -921,28 +1264,110 @@ def swing_sign(wall, leaf_dir):
 
 
 # =============================================================================
-# 5. LANDSCAPE HEIGHT FIELD (also used to seat the boardwalk and cameras)
+# 5. LANDSCAPE HEIGHT FIELD (also used to seat paths, pavilions and cameras)
 # =============================================================================
-def terrain_z(x, y):
-    """Flat pad around the house; dunes beyond; a low foredune and beach to
-    the south so the sea stays in view from the lounge (eye 1.5 m)."""
-    dx = max(PAD[0] - x, 0.0, x - PAD[2])
-    dy = max(PAD[1] - y, 0.0, y - PAD[3])
-    t = smooth(0.0, 14.0, math.hypot(dx, dy))
-    n = mnoise.fractal(Vector((x * 0.035 + 31.7, y * 0.035 + 11.3, 0.0)), 1.0, 2.0, 4)
-    dune = 1.0 + 3.0 * (0.5 + 0.5 * n) + 2.0 * max(0.0, n)
-    if y < PAD[1]:
-        dune *= 0.4                     # keep the foredune low: sea view corridor
-    inland = -0.05 + t * dune
-    beach = -0.05 - max(0.0, PAD[1] - y) * 0.055
-    s = smooth(-34.0, PAD[1] - 4.0, y)
-    return beach + (inland - beach) * s
+def terrace_level(y):
+    """Formal terrace level at y: the house terrace, then one step per wall."""
+    lv = -0.05
+    for edge, below in TERRACE_STEPS:
+        if y < edge:
+            lv = below
+    return lv
+
+
+def south_base(y):
+    """The general fall of the site from the house terrace to the sea."""
+    if y >= PAD[1]:
+        return -0.05
+    if y >= TERRACE_END:
+        last = TERRACE_STEPS[-1][1]
+        return -0.05 + (last + 0.05) * smooth(PAD[1], TERRACE_END, y)
+    return max(TERRACE_FOOT - (TERRACE_END - y) * 0.08, SEA_LEVEL - 3.0)
 
 
 def pad_distance(x, y):
     dx = max(PAD[0] - x, 0.0, x - PAD[2])
     dy = max(PAD[1] - y, 0.0, y - PAD[3])
     return math.hypot(dx, dy)
+
+
+def terrace_weight(x, y):
+    """1 inside the formal terrace band, fading to 0 into the dunes either side."""
+    if not (TERRACE_END - 1.0 <= y < -VERANDA_DEPTH - 0.2):
+        return 0.0
+    tx0, tx1 = TERRACE_X
+    return smooth(tx0 - 5.0, tx0, x) * (1.0 - smooth(tx1, tx1 + 5.0, x))
+
+
+def raw_terrain(x, y):
+    t = smooth(0.0, 14.0, pad_distance(x, y))
+    n = mnoise.fractal(Vector((x * 0.035 + 31.7, y * 0.035 + 11.3, 0.0)), 1.0, 2.0, 4)
+    dune = 1.0 + 3.0 * (0.5 + 0.5 * n) + 2.0 * max(0.0, n)
+    base = south_base(y)
+    wt = terrace_weight(x, y)
+    if wt > 0.0:
+        # under the terrace ground boxes: always below the lower neighbouring level
+        stepped = min(terrace_level(y + 1.2), terrace_level(y), terrace_level(y - 1.2)) - 0.3
+        base += (stepped - base) * wt
+    if y < PAD[1]:
+        dune *= 0.45 * (1.0 - wt)       # low foredune either side: keeps the panorama open
+    return base + t * dune
+
+
+_PAV_Z = {}
+
+
+def pavilion_z(i):
+    if i not in _PAV_Z:
+        cx, cy = pavilion_point(PAVILIONS[i], 0.0, 1.0)
+        _PAV_Z[i] = max(raw_terrain(cx, cy), 0.4)
+    return _PAV_Z[i]
+
+
+def pavilion_point(site, lx, ly):
+    x, y, r = site
+    a = math.radians(r)
+    return (x + lx * math.cos(a) - ly * math.sin(a), y + lx * math.sin(a) + ly * math.cos(a))
+
+
+def in_pond(x, y, margin=0.0):
+    return (POND[0] - margin <= x <= REED_BED[2] + margin) and (POND[1] - margin <= y <= POND[3] + margin)
+
+
+def terrain_z(x, y):
+    """Flat house pad; terraces stepping down to the sea in front of it; dunes
+    either side and behind; flat pads for the garden pavilions."""
+    z = raw_terrain(x, y)
+    for i, site in enumerate(PAVILIONS):
+        cx, cy = pavilion_point(site, 0.0, 1.0)
+        w = 1.0 - smooth(7.5, 13.0, math.hypot(x - cx, y - cy))
+        if w > 0.0:
+            z += (pavilion_z(i) - 0.05 - z) * w
+    if in_pond(x, y, 0.6):
+        z = min(z, -1.9)
+    return z
+
+
+def path_segments():
+    """Boardwalk routes: house <-> pavilions, and the terraces' foot <-> beach."""
+    segs = []
+    starts = ((-0.45, -2.0), (-0.45, 7.75), (PLATE_X + 0.45, -2.0), (PLATE_X + 0.45, -0.8))
+    for i, site in enumerate(PAVILIONS):
+        segs.append((starts[i % len(starts)], pavilion_point(site, 0.0, -4.3), i))
+    foot = TERRACE_END - 0.32 * max(2, round((TERRACE_STEPS[-1][1] - TERRACE_FOOT) / 0.18))
+    segs.append(((BOARDWALK_X, foot), (BOARDWALK_X, -37.0), None))
+    return segs
+
+
+def near_path(x, y, r=1.6):
+    p = Vector((x, y))
+    for a, b, _i in path_segments():
+        a, b = Vector(a), Vector(b)
+        d = b - a
+        t = max(0.0, min(1.0, (p - a).dot(d) / d.length_squared))
+        if (a + d * t - p).length < r:
+            return True
+    return abs(x - BOARDWALK_X) < r and TERRACE_END - 1 <= y < PAD[1]
 
 
 # =============================================================================
@@ -1282,16 +1707,23 @@ def build_joinery(col):
     lng.build("Panelling_Lounge_Dado_Oak", col)
 
 
-def potted_tree(mb, x, y, h, rng, canopy="foliage", pot_r=0.32):
-    """Olive or fig in a terracotta pot: the dune garden brought indoors."""
-    mb.box(x - pot_r, y - pot_r, 0, x + pot_r, y + pot_r, 0.55, "pot")
+PLANT_SPOTS = []    # potted-plant positions filled by scanned assets after the build
+
+
+def potted_tree(mb, x, y, h, rng, canopy="foliage", pot_r=0.32, z0=0.0):
+    """Olive or fig in a terracotta pot: the dune garden brought indoors.
+    With Poly Haven online the spot gets a scanned potted plant instead."""
+    if PH_MODELS.get("potted"):
+        PLANT_SPOTS.append((x, y, z0))
+        return
+    mb.box(x - pot_r, y - pot_r, z0, x + pot_r, y + pot_r, z0 + 0.55, "pot")
     lean = Vector((rng.uniform(-0.15, 0.15), rng.uniform(-0.15, 0.15), 0))
-    mid = Vector((x, y, h * 0.55)) + lean
-    mb.beam((x, y, 0.5), mid, 0.07, 0.07, "bark")
+    mid = Vector((x, y, z0 + h * 0.55)) + lean
+    mb.beam((x, y, z0 + 0.5), mid, 0.07, 0.07, "bark")
     mb.beam(mid, mid + Vector((0.2, -0.1, h * 0.25)), 0.05, 0.05, "bark")
     for _ in range(4):
         c = mid + Vector((rng.uniform(-0.35, 0.35), rng.uniform(-0.35, 0.35), h * rng.uniform(0.25, 0.45)))
-        mb.blob(c, rng.uniform(0.3, 0.45), canopy, scale=(1.0, 1.0, 0.75), rng=rng)
+        mb.blob(c, rng.uniform(0.3, 0.45), canopy, scale=(1.0, 1.0, 0.75), rng=rng, subdiv=3)
 
 
 def build_props(col):
@@ -1520,94 +1952,442 @@ def build_upper(col):
     mb.build("Upper_Massing_Placeholder", col)
 
 
+# -----------------------------------------------------------------------------
+# Scatter helpers
+# -----------------------------------------------------------------------------
+def rect_minus(rect, holes):
+    """Axis-aligned rectangles covering `rect` minus the `holes`."""
+    x0, y0, x1, y1 = rect
+    xs = sorted({x0, x1} | {h[0] for h in holes if x0 < h[0] < x1} | {h[2] for h in holes if x0 < h[2] < x1})
+    out = []
+    for a, b in zip(xs, xs[1:]):
+        cuts = sorted((max(y0, h[1]), min(y1, h[3])) for h in holes
+                      if h[0] < b and h[2] > a and h[1] < y1 and h[3] > y0)
+        cur = y0
+        for c0, c1 in cuts:
+            if c0 > cur:
+                out.append((a, cur, b, c0))
+            cur = max(cur, c1)
+        if cur < y1:
+            out.append((a, cur, b, y1))
+    return [r for r in out if r[2] - r[0] > 0.05 and r[3] - r[1] > 0.05]
+
+
+def plane_object(name, rects, z, col):
+    """Flat emitter made of quads (for hair and scatter; not rendered itself)."""
+    bm = bmesh.new()
+    for x0, y0, x1, y1 in rects:
+        bm.faces.new([bm.verts.new(p) for p in ((x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z))])
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new(name, me)
+    col.objects.link(ob)
+    return ob
+
+
+def add_hair(ob, name, mat_key, count, length, children=20, child_radius=0.05, radius=0.004,
+             tip=0.05, lean=0.12, seed=1, vgroup=None, show_emitter=False, rough_end=0.1):
+    """Hair-particle grass/reeds: `count` guides, each a tuft of `children` blades."""
+    if MAT[mat_key].name not in [m.name for m in ob.data.materials if m]:
+        ob.data.materials.append(MAT[mat_key])
+    slot = [m.name for m in ob.data.materials].index(MAT[mat_key].name) + 1
+    mod = ob.modifiers.new(name, "PARTICLE_SYSTEM")
+    ps = mod.particle_system
+    ps.seed = seed
+    if vgroup:
+        ps.vertex_group_density = vgroup
+    st = ps.settings
+    st.name = name
+    st.type = "HAIR"
+    st.count = count
+    st.hair_length = length
+    st.emit_from = "FACE"
+    st.use_emit_random = True
+    st.factor_random = lean
+    ob.show_instancer_for_render = show_emitter      # hide the emitter plane, keep the hair
+    st.child_type = "SIMPLE" if children else "NONE"
+    for attr, val in (("child_percent", max(1, children // 5)), ("rendered_child_count", children),
+                      ("child_radius", child_radius), ("child_length", 1.0), ("child_length_threshold", 0.35),
+                      ("display_percentage", 15), ("clump_factor", -0.5), ("clump_shape", 0.4),
+                      ("roughness_1", 0.04), ("roughness_endpoint", rough_end), ("roughness_end_shape", 1.5),
+                      ("radius_scale", radius), ("root_radius", 1.0), ("tip_radius", tip)):
+        if hasattr(st, attr):
+            setattr(st, attr, val)
+    try:
+        st.material_slot = MAT[mat_key].name
+    except TypeError:
+        st.material = slot          # the enum fills only after a depsgraph update
+    return st
+
+
+def gn_scatter(ob, name, instance, density, scale=(0.8, 1.2), seed=0, tilt=0.08):
+    """Geometry Nodes scatter of an object or a collection (pick per point)
+    over `ob`'s faces.  The emitter itself is not kept."""
+    ng = bpy.data.node_groups.new(name, "GeometryNodeTree")
+    ng.interface.new_socket(name="Geometry", in_out="INPUT", socket_type="NodeSocketGeometry")
+    ng.interface.new_socket(name="Geometry", in_out="OUTPUT", socket_type="NodeSocketGeometry")
+    n, link = ng.nodes, ng.links.new
+    gi, go = n.new("NodeGroupInput"), n.new("NodeGroupOutput")
+    dist = n.new("GeometryNodeDistributePointsOnFaces")
+    dist.inputs["Density"].default_value = density
+    dist.inputs["Seed"].default_value = seed
+    link(gi.outputs[0], dist.inputs["Mesh"])
+    iop = n.new("GeometryNodeInstanceOnPoints")
+    link(dist.outputs["Points"], iop.inputs["Points"])
+    if isinstance(instance, bpy.types.Collection):
+        info = n.new("GeometryNodeCollectionInfo")
+        info.inputs["Collection"].default_value = instance
+        info.inputs["Separate Children"].default_value = True
+        info.inputs["Reset Children"].default_value = True
+        link(info.outputs[0], iop.inputs["Instance"])
+        iop.inputs["Pick Instance"].default_value = True
+        pick = n.new("FunctionNodeRandomValue")
+        pick.data_type = "INT"
+        pick.inputs[4].default_value, pick.inputs[5].default_value = 0, 99
+        pick.inputs[8].default_value = seed + 7
+        link(pick.outputs[2], iop.inputs["Instance Index"])
+    else:
+        info = n.new("GeometryNodeObjectInfo")
+        info.inputs["Object"].default_value = instance
+        info.inputs["As Instance"].default_value = True
+        link(info.outputs["Geometry"], iop.inputs["Instance"])
+    rot = n.new("FunctionNodeRandomValue")
+    rot.data_type = "FLOAT_VECTOR"
+    rot.inputs[0].default_value = (-tilt, -tilt, 0.0)
+    rot.inputs[1].default_value = (tilt, tilt, 2 * math.pi)
+    rot.inputs[8].default_value = seed + 1
+    link(rot.outputs[0], iop.inputs["Rotation"])
+    sc = n.new("FunctionNodeRandomValue")
+    sc.data_type = "FLOAT"
+    sc.inputs[2].default_value, sc.inputs[3].default_value = scale
+    sc.inputs[8].default_value = seed + 2
+    link(sc.outputs[1], iop.inputs["Scale"])
+    link(iop.outputs[0], go.inputs[0])
+    mod = ob.modifiers.new(name, "NODES")
+    mod.node_group = ng
+    return mod
+
+
+def place_instance(src, loc, rot_z, scale, col, name):
+    """Instance a proxy object (linked duplicate) or a scanned-asset Collection."""
+    if isinstance(src, bpy.types.Collection):
+        ob = bpy.data.objects.new(name, None)
+        ob.instance_type = "COLLECTION"
+        ob.instance_collection = src
+    else:
+        ob = bpy.data.objects.new(name, src.data)
+    ob.location = loc
+    ob.rotation_euler[2] = rot_z
+    ob.scale = (scale, scale, scale)
+    col.objects.link(ob)
+    return ob
+
+
+def source_object(name, mb, col):
+    """Build a hidden instance source, parked out of shot."""
+    ob = mb.build(name, col)
+    ob.location = (0.0, 0.0, -200.0)
+    ob.hide_render = True
+    try:
+        ob.hide_set(True)
+    except RuntimeError:
+        pass
+    return ob
+
+
+def boardwalk(mb, a, b, z_start=None, z_end=None, width=1.4):
+    """Silvered oak planks across a straight route, riding 0.25 m over the
+    ground on posts and easing to the given levels at either end."""
+    a, b = Vector((a[0], a[1], 0.0)), Vector((b[0], b[1], 0.0))
+    d = b - a
+    length = d.length
+    u = d / length
+    side = Vector((-u.y, u.x, 0.0)) * (width / 2)
+    n = max(1, int(length / 0.152))
+
+    def deck_z(s):
+        p = a + u * s
+        z = max(terrain_z(p.x, p.y), SEA_LEVEL + 0.2) + 0.25
+        if z_start is not None:
+            w = 1.0 - smooth(0.0, 3.0, s)
+            z += (z_start - z) * w
+        if z_end is not None:
+            w = 1.0 - smooth(0.0, 3.0, length - s)
+            z += (z_end - z) * w
+        return z
+
+    for i in range(n):
+        s = (i + 0.5) * length / n
+        p = a + u * s
+        z = deck_z(s)
+        mb.beam(p - side + Vector((0, 0, z - 0.02)), p + side + Vector((0, 0, z - 0.02)), 0.14, 0.04, "deck")
+    s = 1.2
+    while s < length - 1.0:
+        p = a + u * s
+        z = deck_z(s) - 0.04
+        g = terrain_z(p.x, p.y) - 0.4
+        for sgn in (-1, 1):
+            q = p + side * sgn * 0.93
+            mb.box(q.x - 0.05, q.y - 0.05, g, q.x + 0.05, q.y + 0.05, z, "oak_weathered")
+        s += 2.4
+
+
+# -----------------------------------------------------------------------------
+# Garden: terraces, pond, meadow, bulbs
+# -----------------------------------------------------------------------------
+def terrace_bands():
+    """(north y, south y, level) for each formal terrace, house terrace first."""
+    edges = [-VERANDA_DEPTH - 0.25] + [e for e, _ in TERRACE_STEPS] + [TERRACE_END]
+    levels = [-0.05] + [lv for _, lv in TERRACE_STEPS]
+    return [(edges[i], edges[i + 1], levels[i]) for i in range(len(levels))]
+
+
+def build_garden(col):
+    tx0, tx1 = TERRACE_X
+    path = (BOARDWALK_X - 0.8, BOARDWALK_X + 0.8)
+    bands = terrace_bands()
+    mb = MB()
+    for yn, ys, lv in bands:
+        mb.box(tx0, ys, lv - 0.6, tx1, yn, lv - 0.02, "soil")
+        mb.box(path[0], ys, lv - 0.02, path[1], yn, lv + 0.01, "shell")       # shell path to the beach
+    walls = [(bands[i][1], bands[i][2], bands[i + 1][2]) for i in range(len(bands) - 1)]
+    walls.append((TERRACE_END, bands[-1][2], TERRACE_FOOT))
+    for e, up, lo in walls:
+        for a, b in along_gaps(tx0, tx1, [path]):
+            mb.box(a, e - 0.45, lo - 0.6, b, e, up + 0.1, "brick")              # retaining wall
+            mb.box(a, e - 0.5, up + 0.1, b, e + 0.05, up + 0.16, "stone")       # bluestone coping
+        n = max(2, round((up - lo) / 0.18))
+        rise = (up - lo) / n
+        for k in range(n):                                                     # steps down to the next level
+            mb.box(path[0], e - (k + 1) * 0.32, lo - 0.3, path[1], e - k * 0.32, up - (k + 1) * rise + 0.02, "stone")
+        for x in (path[0] - 0.3, path[1]):                                      # stair cheeks
+            mb.box(x, e - n * 0.32, lo - 0.3, x + 0.3, e, up + 0.1, "brick")
+    mb.build("Garden_Terraces", col)
+
+    build_pond(col)
+
+    # House terrace lawn around the pond; wildflower meadow; tulip strips at the bottom
+    pond_hole = (POND[0] - 0.5, POND[1] - 0.3, REED_BED[2] + 0.5, POND[3] + 2.1)
+    path_hole = (path[0], -100.0, path[1], 100.0)
+    yn, ys, lv = bands[0]
+    lawn = plane_object("Lawn_HouseTerrace", rect_minus((tx0, ys, tx1, yn), [pond_hole, path_hole]), lv - 0.02, col)
+    if PH_MODELS.get("grass"):
+        gn_scatter(lawn, "Lawn_Scanned_Grass", PH_MODELS["grass"][0], 8.0, scale=(0.5, 0.8), seed=3)
+    else:
+        add_hair(lawn, "Lawn_Hair", "lawn", 30000, 0.09, children=16, child_radius=0.03, radius=0.0015, seed=3)
+
+    if len(bands) > 1:
+        yn, ys, lv = bands[1]
+        meadow = plane_object("Meadow_Terrace", rect_minus((tx0, ys + 0.1, tx1, yn - 0.5), [path_hole]), lv - 0.02, col)
+        add_hair(meadow, "Meadow_Hair", "meadow", 9000, 0.38, children=18, child_radius=0.06, radius=0.002, seed=4)
+        flower = MB()
+        flower.beam((0, 0, 0), (0.01, 0.0, 0.42), 0.004, 0.004, "stem")
+        flower.blob((0.01, 0.0, 0.44), 0.025, "wildflower", scale=(1.0, 1.0, 0.45), rough=0.0, subdiv=1)
+        src = source_object("Proxy_Wildflower", flower, col)
+        gn_scatter(meadow, "Meadow_Flowers", src, 5.0, scale=(0.7, 1.25), seed=5, tilt=0.15)
+
+    yn, ys, lv = bands[-1]
+    tulips = []
+    for i, _c in enumerate(BULB_COLOURS):
+        t = MB()
+        t.beam((0, 0, 0), (0, 0, 0.36), 0.006, 0.006, "stem")
+        t.beam((0, 0, 0.02), (0.06, 0.02, 0.2), 0.035, 0.003, "stem")
+        t.beam((0, 0, 0.02), (-0.05, -0.03, 0.18), 0.035, 0.003, "stem")
+        t.blob((0, 0, 0.4), 0.03, f"tulip{i}", scale=(1.0, 1.0, 1.45), rough=0.05, subdiv=2)
+        tulips.append(source_object(f"Proxy_Tulip_{i}", t, col))
+    y = yn - 0.6
+    k = 0
+    while y - 0.8 > ys + 0.3:
+        strip = plane_object(f"Bulb_Strip_{k}", rect_minus((tx0 + 0.5, y - 0.8, tx1 - 0.5, y), [path_hole]), lv - 0.02, col)
+        gn_scatter(strip, f"Bulb_Strip_{k}_Tulips", tulips[k % len(tulips)], 55.0, scale=(0.85, 1.15), seed=10 + k)
+        y -= 1.2
+        k += 1
+
+
+def build_pond(col):
+    """Natural swimming pond on the house terrace.  Its south edge is an
+    overflow lip on the retaining wall, so from the veranda the water runs
+    straight into the meadow, the dunes and the sea."""
+    x0, y0, x1, y1 = POND
+    rx = REED_BED[2]
+    top, wl, C = -0.05, -0.17, 0.45
+    mb = MB()
+    mb.box(x0 - C, y1, top - 0.2, rx + C, y1 + C, top + 0.04, "stone")            # bluestone coping
+    mb.box(x0 - C, y0, top - 0.2, x0, y1, top + 0.04, "stone")
+    mb.box(rx, y0, top - 0.2, rx + C, y1, top + 0.04, "stone")
+    mb.box(x0 - C, y0 - 0.25, -1.7, rx + C, y0, wl - 0.012, "stone")              # overflow lip
+    mb.box(x0 - C, y0 - 0.25, -1.75, rx + C, y1 + C, -1.6, "stone")               # basin floor
+    for bx0, bx1 in ((x0 - 0.15, x0), (rx, rx + 0.15)):
+        mb.box(bx0, y0, -1.6, bx1, y1, top - 0.2, "stone")
+    mb.box(x0, y1, -1.6, rx, y1 + 0.15, top - 0.2, "stone")
+    mb.box(x1 - 0.1, y0, -1.6, x1 + 0.1, y1, wl - 0.15, "stone")                  # submerged divider
+    mb.box(x1 + 0.1, y0, -1.6, rx, y1, -0.6, "shell")                             # gravel of the reed bed
+    for i in range(4):                                                            # steps down into the swim zone
+        mb.box(x0 + 0.2, y1 - 0.35 * (i + 1), -1.6, x0 + 1.6, y1 - 0.35 * i, top - 0.3 - 0.3 * i, "stone")
+    mb.box(x0 - C, y1 + C, top - 0.06, rx + C, y1 + C + 1.6, top + 0.02, "deck")  # sun deck
+    for x in (5.0, 7.2, 11.6, 13.8):                                              # loungers
+        mb.box(x, y1 + C + 0.25, top + 0.02, x + 0.7, y1 + C + 1.35, top + 0.32, "oak_weathered")
+        mb.box(x + 0.03, y1 + C + 0.28, top + 0.32, x + 0.67, y1 + C + 1.32, top + 0.4, "linen")
+    mb.build("Pond_Basin", col)
+    water = MB()
+    water.box(x0, y0 - 0.25, -1.6, rx, y1, wl, "pool_water")
+    water.build("Pond_Water", col)
+    reeds = plane_object("Reed_Bed", [(x1 + 0.15, y0 + 0.1, rx - 0.1, y1 - 0.1)], -0.6, col)
+    add_hair(reeds, "Reeds", "reed", 900, 1.7, children=14, child_radius=0.1, radius=0.005, tip=0.2,
+             lean=0.05, seed=8, rough_end=0.05)
+
+
+# -----------------------------------------------------------------------------
+# Garden pavilions: brick room, open-air living veranda, reed-thatched roof
+# -----------------------------------------------------------------------------
+def build_pavilion_parts(col):
+    """One pavilion in local space (front faces -Y).  Returns its objects."""
+    fl = 0.3                  # floor on a brick plinth
+    eave = fl + 2.5
+    s = MB()
+    s.box(-4.4, -3.4, -0.5, 4.4, 5.4, fl - 0.03, "brick")
+    s.box(-3.5, 0.0, fl - 0.03, 3.5, 5.0, fl, "oak_floor")
+    s.box(-4.4, -3.4, fl - 0.03, 4.4, 0.0, fl, "terracotta")
+    s.box(-1.2, -3.72, -0.5, 1.2, -3.4, 0.15, "stone")                            # step
+    for p0, p1, z0, z1 in solid_pieces(-3.5, 3.5, 2.5, [(-1.6, 1.6, 0.0, 2.25)]):
+        s.box(p0, 0.0, fl + z0, p1, 0.3, fl + z1, "brick")                        # front, wide opening
+    s.box(-3.5, 4.7, fl, 3.5, 5.0, eave, "brick")                                 # back
+    for x0, x1 in ((-3.5, -3.2), (3.2, 3.5)):
+        for p0, p1, z0, z1 in solid_pieces(0.3, 4.7, 2.5, [(1.8, 3.0, 0.9, 2.2)]):
+            s.box(x0, p0, fl + z0, x1, p1, fl + z1, "brick")
+        glazed_grid(s, "y", (x0 + x1) / 2, 1.8, 3.0, fl + 0.9, fl + 2.2, cols=2, rows=3,
+                    frame=0.06, bar=0.028, depth=0.06, mat="oak")
+    s.box(-3.2, 4.68, fl, 3.2, 4.7, eave, "plaster")
+    s.box(-1.6, 0.0, fl + 2.2, 1.6, 0.3, fl + 2.25, "oak")                        # oak lintel
+    for side in (-1, 1):                                                           # glazed doors folded back
+        a0, a1 = sorted((side * 1.6, side * 3.13))
+        glazed_grid(s, "x", -0.045, a0, a1, fl + 0.01, fl + 2.18, cols=2, rows=4,
+                    frame=0.08, bar=0.028, depth=0.05, mat="oak")
+    for x in (-4.1, 4.1):
+        s.box(x - 0.1, -3.2, fl, x + 0.1, -3.0, eave, "oak_weathered")            # veranda posts
+    s.box(-4.3, -3.22, eave - 0.2, 4.3, -2.98, eave, "oak_weathered")             # plate
+    for x in (-4.1, 4.1):
+        s.box(x - 0.08, -3.0, eave - 0.18, x + 0.08, 0.0, eave, "oak_weathered")  # tie beams
+    struct = s.build("Pavilion_Structure", col)
+
+    r = MB()
+    ex0, ex1, ey0, ey1 = -4.9, 4.9, -3.95, 5.95
+    rise = (ex1 - ex0) / 2 * math.tan(math.radians(52.0))
+    yc = (ey0 + ey1) / 2
+    half_ridge = max(0.05, ((ey1 - ey0) - (ex1 - ex0)) / 2)
+    verts = [(ex0, ey0, eave), (ex1, ey0, eave), (ex1, ey1, eave), (ex0, ey1, eave),
+             (0.0, yc - half_ridge, eave + rise), (0.0, yc + half_ridge, eave + rise)]
+    faces = [(0, 3, 2, 1), (0, 1, 4), (1, 2, 5, 4), (2, 3, 5), (3, 0, 4, 5)]
+    r.hull(verts, faces, ["boards", "thatch", "thatch", "thatch", "thatch"])
+    for b in ((ex0 - 0.15, ey0 - 0.2, ex1 + 0.15, ey0 + 0.15),                    # chunky thatch eave roll
+              (ex0 - 0.15, ey1 - 0.15, ex1 + 0.15, ey1 + 0.2),
+              (ex0 - 0.2, ey0 - 0.2, ex0 + 0.15, ey1 + 0.2),
+              (ex1 - 0.15, ey0 - 0.2, ex1 + 0.2, ey1 + 0.2)):
+        r.box(b[0], b[1], eave - 0.28, b[2], b[3], eave + 0.12, "thatch")
+    r.box(-0.25, yc - half_ridge - 0.3, eave + rise - 0.35, 0.25, yc + half_ridge + 0.3, eave + rise + 0.12, "thatch")
+    roof = r.build("Pavilion_Roof_Thatch", col)
+
+    f = MB()
+    f.box(-1.0, 2.8, fl, 1.0, 4.65, fl + 0.45, "oak")                              # bed
+    f.box(-0.97, 2.83, fl + 0.45, 0.97, 4.62, fl + 0.62, "linen")
+    f.box(-1.1, 4.6, fl, 1.1, 4.68, fl + 1.3, "oak")
+    f.box(-3.9, -2.9, fl, -1.8, -1.95, fl + 0.36, "oak_weathered")                # veranda daybed
+    f.box(-3.85, -2.85, fl + 0.36, -1.85, -2.0, fl + 0.5, "linen")
+    f.box(-3.85, -2.05, fl + 0.36, -1.85, -1.9, fl + 0.85, "linen")
+    for x in (0.2, 1.2):                                                           # chairs + table
+        f.box(x - 0.35, -2.4, fl, x + 0.35, -1.7, fl + 0.42, "leather")
+        f.box(x - 0.35, -1.85, fl + 0.42, x + 0.35, -1.7, fl + 0.85, "leather")
+    f.box(0.25, -3.1, fl, 1.15, -2.6, fl + 0.45, "oak")
+    f.box(2.0, -3.1, fl, 3.9, -1.95, fl + 0.6, "stone")                           # outdoor soaking tub
+    f.box(2.1, -3.0, fl + 0.3, 3.8, -2.05, fl + 0.56, "pool_water")
+    f.box(-0.15, -1.75, eave - 0.75, 0.15, -1.45, eave - 0.45, "iron")            # lantern
+    f.box(-0.01, -1.61, eave - 0.45, 0.01, -1.59, eave, "iron")
+    furn = f.build("Pavilion_Furnishing", col)
+    return [struct, roof, furn]
+
+
+def build_pavilions(col, light_col):
+    parts = build_pavilion_parts(col)
+    rng = random.Random(77)
+    for i, site in enumerate(PAVILIONS):
+        x, y, rot = site
+        holder = bpy.data.objects.new(f"Pavilion_{i}", None)
+        holder.location = (x, y, pavilion_z(i))
+        holder.rotation_euler[2] = math.radians(rot)
+        col.objects.link(holder)
+        for p in parts:
+            ob = p if i == 0 else bpy.data.objects.new(f"{p.name}_{i}", p.data)
+            if i:
+                col.objects.link(ob)
+            ob.parent = holder
+        ld = bpy.data.lights.new(f"Lantern_Pavilion_{i}", "POINT")
+        ld.energy, ld.color, ld.shadow_soft_size = 25, (1.0, 0.62, 0.34), 0.08
+        lamp = bpy.data.objects.new(f"Lantern_Pavilion_{i}", ld)
+        lamp.location = (0.0, -1.6, 2.2)
+        lamp.parent = holder
+        light_col.objects.link(lamp)
+        px, py = pavilion_point(site, 3.9, -3.0)
+        pot = MB()
+        potted_tree(pot, px, py, 1.8, rng, z0=pavilion_z(i) + 0.3)
+        pot.build(f"Potted_Pavilion_{i}", col)
+
+
+def build_paths(col):
+    bw = MB()
+    for a, b, i in path_segments():
+        if i is None:
+            boardwalk(bw, a, b, z_start=TERRACE_FOOT + 0.03)
+        else:
+            boardwalk(bw, a, b, z_start=0.0, z_end=pavilion_z(i) + 0.03)
+    bw.build("Boardwalks", col)
+
+
 def build_landscape(col):
-    """Dunes, beach and sea; marram grass as hair on the dunes; sea buckthorn
-    and wind-bent black pines; a silvered oak boardwalk to the beach; a sand
-    training yard behind the endurance room."""
+    """Dunes either side and behind, terraces and a foredune in front, the sea
+    below; marram grass on the dunes; buckthorn, black pines and oaks planted
+    densely around the pavilions; a sand training yard behind the gym."""
     rng = random.Random(LANDSCAPE_SEED)
-    X0, X1, Y0, Y1, N = -60.0, 85.0, -70.0, 75.0, 160
+    X0, X1, Y0, Y1 = -60.0, 85.0, -70.0, 75.0
+    NX, NY = int(X1 - X0), int(Y1 - Y0)          # 1 m grid: terrace walls land on grid lines
     bm = bmesh.new()
     verts, weights = [], []
     patch_off = Vector((5.3, 9.1, 0.0))
-    for j in range(N + 1):
-        y = Y0 + (Y1 - Y0) * j / N
-        for i in range(N + 1):
-            x = X0 + (X1 - X0) * i / N
+    pav_centres = [pavilion_point(s, 0.0, 1.0) for s in PAVILIONS]
+    for j in range(NY + 1):
+        y = Y0 + (Y1 - Y0) * j / NY
+        for i in range(NX + 1):
+            x = X0 + (X1 - X0) * i / NX
             z = terrain_z(x, y)
             verts.append(bm.verts.new((x, y, z)))
-            d = pad_distance(x, y)
             patch = 0.5 + 0.5 * mnoise.noise(Vector((x * 0.12, y * 0.12, 0.0)) + patch_off)
-            w = smooth(0.1, 0.9, z) * smooth(1.5, 5.0, d) * (0.35 + 0.65 * patch)
-            if abs(x - BOARDWALK_X) < 1.6 and y < 0:
+            w = smooth(SEA_LEVEL + 0.4, SEA_LEVEL + 1.2, z) * smooth(1.5, 5.0, pad_distance(x, y))
+            w *= (0.35 + 0.65 * patch) * (1.0 - terrace_weight(x, y))
+            for cx, cy in pav_centres:
+                w *= smooth(7.0, 9.0, math.hypot(x - cx, y - cy))
+            if w > 0.01 and near_path(x, y, 1.2):
                 w = 0.0
             weights.append(w)
-    for j in range(N):
-        for i in range(N):
-            a = j * (N + 1) + i
-            bm.faces.new((verts[a], verts[a + 1], verts[a + N + 2], verts[a + N + 1])).smooth = True
+    for j in range(NY):
+        for i in range(NX):
+            a = j * (NX + 1) + i
+            bm.faces.new((verts[a], verts[a + 1], verts[a + NX + 2], verts[a + NX + 1])).smooth = True
     me = bpy.data.meshes.new("Terrain_Dunes")
     bm.to_mesh(me)
     bm.free()
     me.materials.append(MAT["sand"])
-    me.materials.append(MAT["grass"])
     terr = bpy.data.objects.new("Terrain_Dunes", me)
     col.objects.link(terr)
     vg = terr.vertex_groups.new(name="marram")
     for idx, w in enumerate(weights):
         if w > 0.01:
             vg.add([idx], w, "REPLACE")
-
-    mod = terr.modifiers.new("Marram_Grass", "PARTICLE_SYSTEM")
-    psys = mod.particle_system
-    psys.vertex_group_density = "marram"
-    psys.seed = LANDSCAPE_SEED
-    st = psys.settings
-    st.name = "VRD_Marram_Grass"
-    st.type = "HAIR"
-    st.count = GRASS_COUNT
-    st.hair_length = 0.6
-    st.emit_from = "FACE"
-    st.use_emit_random = True
-    st.factor_random = 0.12          # slight lean, not combed
-    st.child_type = "SIMPLE"         # each guide becomes a tussock of blades
-    for attr, val in (("child_percent", 6), ("child_nbr", 6), ("rendered_child_count", 30),
-                      ("child_radius", 0.09), ("child_length", 1.0), ("child_length_threshold", 0.35),
-                      ("display_percentage", 15), ("clump_factor", -0.5), ("clump_shape", 0.4),
-                      ("roughness_1", 0.04), ("roughness_endpoint", 0.12), ("roughness_end_shape", 1.5),
-                      ("radius_scale", 0.004), ("root_radius", 1.0), ("tip_radius", 0.05)):
-        if hasattr(st, attr):
-            setattr(st, attr, val)
-    try:
-        st.material_slot = MAT["grass"].name
-    except TypeError:
-        st.material = 2                 # slot index (1-based); the enum fills only after a depsgraph update
+    add_hair(terr, "Marram_Grass", "grass", GRASS_COUNT, 0.6, children=30, child_radius=0.09, radius=0.004,
+             seed=LANDSCAPE_SEED, vgroup="marram", show_emitter=True)
 
     sea = MB()
     sea.box(-2000, -2000, SEA_LEVEL - 0.5, 2000, 2000, SEA_LEVEL, "sea")
     sea.build("Sea_North", col)
-
-    # Boardwalk: silvered oak planks on posts, seated on the dune profile
-    bw = MB()
-    y0, y_stop, w = -VERANDA_DEPTH - 0.25, -36.0, 1.6
-
-    def deck_z(y):
-        # leaves the veranda level, then rides 0.3 m above the dune profile
-        ground = max(terrain_z(BOARDWALK_X, y), SEA_LEVEL + 0.2)
-        return ground + 0.03 + 0.27 * smooth(0.0, 4.0, y0 - y)
-
-    y = y0
-    while y > y_stop:
-        z = deck_z(y)
-        bw.box(BOARDWALK_X - w / 2, y - 0.14, z - 0.04, BOARDWALK_X + w / 2, y, z, "deck")
-        y -= 0.152
-    y = y0 - 2.0
-    while y > y_stop:
-        z = deck_z(y) - 0.04
-        g = terrain_z(BOARDWALK_X, y) - 0.4
-        for sx in (-w / 2 + 0.05, w / 2 - 0.05):
-            bw.box(BOARDWALK_X + sx - 0.05, y - 0.05, g, BOARDWALK_X + sx + 0.05, y + 0.05, z, "oak_weathered")
-        y -= 2.4
-    bw.build("Boardwalk_Beach", col)
 
     # Training yard behind the endurance room: sand, oak pull-up rig, logs
     yd = MB()
@@ -1619,47 +2399,86 @@ def build_landscape(col):
         yd.beam((18.6, 17.5 + i * 0.45, 0.12), (20.6, 17.6 + i * 0.45, 0.12), 0.24, 0.24, "bark")
     yd.build("Training_Yard", col)
 
-    # Vegetation proxies: one mesh each, many linked instances
-    shrub = MB()
-    for _ in range(4):
-        shrub.blob((rng.uniform(-0.4, 0.4), rng.uniform(-0.4, 0.4), rng.uniform(0.3, 0.6)),
-                   rng.uniform(0.45, 0.7), "buckthorn", scale=(1.2, 1.0, 0.7), rng=rng)
-    shrub_ob = shrub.build("Proxy_SeaBuckthorn", col)
-    pine = MB()
-    base, lean = Vector((0, 0, 0)), Vector((0.9, 0.6, 0))      # bent away from the SW wind
-    pts = [base + lean * (t * t) + Vector((0, 0, 6.5 * t)) for t in (0.0, 0.35, 0.65, 1.0)]
-    for a, b in zip(pts, pts[1:]):
-        pine.beam(a, b, 0.28, 0.28, "bark")
-    for _ in range(9):
-        t = rng.uniform(0.62, 1.0)
-        c = base + lean * (t * t) * 1.3 + Vector((rng.uniform(-1.4, 1.6), rng.uniform(-1.2, 1.3), 6.5 * t))
-        pine.blob(c, rng.uniform(0.7, 1.2), "foliage", scale=(1.4, 1.2, 0.7), rough=0.3, rng=rng, subdiv=3)
-    pine_ob = pine.build("Proxy_BlackPine", col)
+    # Vegetation sources: scanned Poly Haven assets when available, proxies otherwise
+    def proxy_shrub():
+        mb = MB()
+        for _ in range(7):
+            mb.blob((rng.uniform(-0.5, 0.5), rng.uniform(-0.5, 0.5), rng.uniform(0.35, 0.8)),
+                    rng.uniform(0.35, 0.6), "buckthorn", scale=(1.2, 1.0, 0.8), rough=0.3, rng=rng, subdiv=3)
+        return source_object("Proxy_SeaBuckthorn", mb, col)
 
-    def scatter(src, count, ok, scale_range):
-        placed = 0
-        tries = 0
-        while placed < count and tries < count * 40:
-            tries += 1
-            x, y = rng.uniform(X0 + 10, X1 - 10), rng.uniform(Y0 + 25, Y1 - 10)
-            z = terrain_z(x, y)
-            if not ok(x, y, z):
+    def proxy_pine():
+        mb = MB()
+        lean = Vector((0.9, 0.6, 0))          # bent away from the south-west wind
+        pts = [lean * (t * t) + Vector((0, 0, 6.5 * t)) for t in (0.0, 0.35, 0.65, 1.0)]
+        for a, b in zip(pts, pts[1:]):
+            mb.beam(a, b, 0.28, 0.28, "bark")
+        for _ in range(9):
+            t = rng.uniform(0.62, 1.0)
+            c = lean * (t * t) * 1.3 + Vector((rng.uniform(-1.4, 1.6), rng.uniform(-1.2, 1.3), 6.5 * t))
+            mb.blob(c, rng.uniform(0.7, 1.2), "foliage", scale=(1.4, 1.2, 0.7), rough=0.3, rng=rng, subdiv=3)
+        return source_object("Proxy_BlackPine", mb, col)
+
+    def proxy_oak():
+        mb = MB()
+        mb.beam((0, 0, 0), (0.3, 0.1, 3.2), 0.4, 0.4, "bark")
+        for d in ((1.6, 0.5, 5.0), (-1.2, 0.8, 4.8), (0.4, -1.3, 5.2)):
+            mb.beam((0.3, 0.1, 3.0), d, 0.2, 0.2, "bark")
+        for _ in range(14):
+            mb.blob((rng.uniform(-2.6, 2.8), rng.uniform(-2.4, 2.6), rng.uniform(4.2, 7.0)),
+                    rng.uniform(1.0, 1.6), "foliage", scale=(1.2, 1.2, 0.9), rough=0.3, rng=rng, subdiv=3)
+        return source_object("Proxy_Oak", mb, col)
+
+    shrubs = PH_MODELS.get("shrub") or [proxy_shrub()]
+    pines = PH_MODELS.get("pine") or [proxy_pine()]
+    trees = PH_MODELS.get("tree") or [proxy_oak()]
+    ferns = PH_MODELS.get("fern") or shrubs
+
+    def clear(x, y):
+        if near_path(x, y, 2.0) or pad_distance(x, y) < 3.0 or terrace_weight(x, y) > 0.2 or in_pond(x, y, 2.0):
+            return False
+        return all(math.hypot(x - cx, y - cy) > 7.0 for cx, cy in pav_centres)
+
+    def plant(srcs, x, y, s_range, tag, k):
+        z = terrain_z(x, y)
+        if z < SEA_LEVEL + 0.8:
+            return
+        place_instance(rng.choice(srcs), (x, y, z - 0.08), rng.uniform(0, 2 * math.pi),
+                       rng.uniform(*s_range), col, f"{tag}_{k:03d}")
+
+    k = 0
+    for _ in range(4000):                                   # dune planting across the site
+        if k >= 90:
+            break
+        x, y = rng.uniform(X0 + 10, X1 - 10), rng.uniform(Y0 + 30, Y1 - 10)
+        if clear(x, y) and terrain_z(x, y) > SEA_LEVEL + 1.5:
+            plant(shrubs, x, y, (0.7, 1.6), "Shrub", k)
+            k += 1
+    for site_i, (cx, cy) in enumerate(pav_centres):          # embed each pavilion in planting
+        rot = math.radians(PAVILIONS[site_i][2])
+        for j in range(26):
+            ang = rng.uniform(0, 2 * math.pi)
+            local = ang - rot
+            if math.sin(local) < -0.55:                       # keep the sea-facing front open
                 continue
-            inst = bpy.data.objects.new(f"{src.name}_{placed:02d}", src.data)
-            inst.location = (x, y, z - 0.1)
-            inst.rotation_euler[2] = rng.uniform(-0.3, 0.3)
-            s = rng.uniform(*scale_range)
-            inst.scale = (s, s, s)
-            col.objects.link(inst)
-            placed += 1
-        src.location = (0, 0, -100)        # keep the source mesh out of shot
-        src.hide_render = True
-
-    def free(x, y):
-        return abs(x - BOARDWALK_X) > 2.5 or y > 0
-
-    scatter(shrub_ob, 55, lambda x, y, z: z > 0.4 and pad_distance(x, y) > 3.0 and free(x, y), (0.7, 1.6))
-    scatter(pine_ob, 14, lambda x, y, z: z > 1.5 and y > PAD[1] and pad_distance(x, y) > 9.0, (0.8, 1.3))
+            r = rng.uniform(7.2, 11.5)
+            x, y = cx + r * math.cos(ang), cy + r * math.sin(ang)
+            if not near_path(x, y, 1.6):
+                plant(ferns if j % 3 == 0 else shrubs, x, y, (0.8, 1.5), f"Garden{site_i}", j)
+        for j in range(4):
+            ang = rot + math.pi / 2 + rng.uniform(-1.1, 1.1)  # trees behind (north of) each pavilion
+            r = rng.uniform(9.0, 14.0)
+            x, y = cx + r * math.cos(ang), cy + r * math.sin(ang)
+            if not near_path(x, y, 2.5):
+                plant(trees if j % 2 else pines, x, y, (0.8, 1.2), f"Tree{site_i}", j)
+    k = 0
+    for _ in range(3000):                                   # pines on the back and side dunes
+        if k >= 22:
+            break
+        x, y = rng.uniform(X0 + 10, X1 - 10), rng.uniform(PAD[1], Y1 - 10)
+        if clear(x, y) and terrain_z(x, y) > 1.5 and pad_distance(x, y) > 9.0:
+            plant(pines if k % 3 else trees, x, y, (0.8, 1.3), "Pine", k)
+            k += 1
 
 
 def build_labels(col, areas):
@@ -1788,8 +2607,10 @@ CAMERAS = [
     ("CAM_02_Mudroom_Threshold", (23.6, 3.2, 1.50), (12.0, 5.2, 1.40), 21, 0.0, EXPOSURE),
     ("CAM_03_Culinary_Hearth", (8.9, 0.9, 1.65), (2.8, 5.2, 1.10), 24, 0.0, EXPOSURE),
     ("CAM_04_Endurance_to_Library", (20.5, 12.25, 1.45), (2.0, 12.25, 1.30), 24, 0.0, EXPOSURE),
-    ("CAM_05_Beach_to_House", (6.0, -31.0, None), (11.0, 0.0, None), 28, 0.2, 0.0),
+    ("CAM_05_Beach_to_House", (8.0, -34.0, None), (11.5, 0.0, None), 28, 0.25, 0.0),
     ("CAM_06_Culinary_Out_To_Sea", (7.0, 8.2, 1.55), (7.0, -20.0, 1.55), 21, 0.0, EXPOSURE - 0.5),
+    ("CAM_07_Veranda_Pond_Panorama", (14.0, -2.6, 1.45), (12.0, -60.0, 1.45), 21, 0.0, 0.3),
+    ("CAM_08_Garden_Pavilion", (-5.5, -7.5, None), (-13.0, 1.0, None), 28, 0.08, 0.3),
 ]
 
 
@@ -1813,6 +2634,7 @@ def build_cameras(col):
     first = None
     for name, loc, target, lens, shift, ev in CAMERAS:
         loc, target = list(loc), list(target)
+        ev = 0.0 if name == "CAM_00_Plan_Ortho" else ev
         if loc[2] is None:
             loc[2] = max(terrain_z(loc[0], loc[1]), SEA_LEVEL) + 1.7
             target[2] = loc[2]          # level: two-point perspective, reframe with shift
@@ -1826,9 +2648,10 @@ def build_cameras(col):
         col.objects.link(ob)
         first = first or ob
     plan = bpy.data.cameras.new("CAM_00_Plan_Ortho")
-    plan.type, plan.ortho_scale, plan.clip_end = "ORTHO", 40.0, 200
+    plan.type, plan.ortho_scale, plan.clip_end = "ORTHO", 66.0, 200
     ob = bpy.data.objects.new("CAM_00_Plan_Ortho", plan)
-    ob.location = (PLATE_X / 2, PLATE_Y / 2 + 0.5, 30.0)
+    ob.location = (13.0, 3.0, 40.0)
+    ob["exposure_ev"] = 0.0
     col.objects.link(ob)
     bpy.context.scene.camera = first
 
@@ -1837,9 +2660,10 @@ def setup_render():
     sc = bpy.context.scene
     sc.render.engine = "CYCLES"
     cy = sc.cycles
-    cy.samples = 512
+    final = QUALITY == "final"
+    cy.samples = 1024 if final else 128
     cy.use_adaptive_sampling = True
-    cy.adaptive_threshold = 0.01
+    cy.adaptive_threshold = 0.005 if final else 0.02
     cy.use_denoising = True
     cy.max_bounces = 16
     cy.diffuse_bounces = 6          # dark oak rooms live on bounce light
@@ -1851,7 +2675,7 @@ def setup_render():
     cy.blur_glossy = 1.0
     cy.sample_clamp_indirect = 10.0
     sc.render.resolution_x, sc.render.resolution_y = 3000, 2000
-    sc.render.resolution_percentage = 50
+    sc.render.resolution_percentage = 100 if final else 50
     vs = sc.view_settings
     for vt in ("AgX", "Filmic"):
         try:
@@ -1894,6 +2718,30 @@ def wipe_collection(col):
     for ps in list(bpy.data.particles):
         if ps.users == 0:
             bpy.data.particles.remove(ps)
+    for ng in list(bpy.data.node_groups):
+        if ng.users == 0 and ng.bl_idname == "GeometryNodeTree":
+            bpy.data.node_groups.remove(ng)
+
+
+BEVEL_SKIP = ("Walls_", "Facade_", "Floor_", "Ground_", "Ceiling_Boards", "Terrain", "Sea_", "Upper_",
+              "Lawn_", "Meadow_", "Bulb_", "Reed_", "Pond_Water", "Proxy_")
+BEVEL_SOFT = {"Props_Lounge": (0.025, 3), "Props_Library": (0.01, 2), "Pavilion_Furnishing": (0.02, 3),
+              "Veranda_Living": (0.012, 2), "Pond_Basin": (0.01, 2)}
+
+
+def soften_edges(objects):
+    """No real edge is perfectly sharp: a small bevel catches a highlight on
+    every timber, stone and brick edge; soft furnishings get rounder."""
+    for ob in objects:
+        if ob.type != "MESH" or ob.name.startswith(BEVEL_SKIP) or ob.data.name.startswith("Proxy_"):
+            continue
+        if any(m.type in ("PARTICLE_SYSTEM", "NODES", "BEVEL") for m in ob.modifiers):
+            continue
+        head, _, tail = ob.name.rpartition("_")
+        base = head if tail.isdigit() else ob.name
+        width, segs = BEVEL_SOFT.get(base, (0.005, 2))
+        m = ob.modifiers.new("Soft_Edges", "BEVEL")
+        m.width, m.segments, m.limit_method, m.use_clamp_overlap = width, segs, "ANGLE", True
 
 
 def main():
@@ -1917,10 +2765,12 @@ def main():
 
     cols = {k: sub(f"VRD_{k}") for k in (
         "01_Structure", "02_Floors", "03_EnSuite", "04_Openings", "05_Joinery",
-        "06_Props", "07_Veranda", "08_Landscape", "09_UpperMassing",
-        "10_Lighting", "11_Cameras", "12_Labels")}
+        "06_Props", "07_Veranda", "08_Garden", "09_Landscape", "10_UpperMassing",
+        "11_Lighting", "12_Cameras", "13_Labels")}
 
+    PLANT_SPOTS.clear()
     build_materials()
+    load_polyhaven()
     build_structure(cols["01_Structure"])
     if BUILD_CEILING:
         build_ceiling_timber(cols["01_Structure"])
@@ -1933,16 +2783,25 @@ def main():
     if BUILD_PROPS:
         build_props(cols["06_Props"])
     build_veranda(cols["07_Veranda"])
+    build_garden(cols["08_Garden"])
+    build_pavilions(cols["08_Garden"], cols["11_Lighting"])
+    build_paths(cols["08_Garden"])
     if BUILD_LANDSCAPE:
-        build_landscape(cols["08_Landscape"])
+        build_landscape(cols["09_Landscape"])
     if BUILD_UPPER:
-        build_upper(cols["09_UpperMassing"])
+        build_upper(cols["10_UpperMassing"])
+    if PH_MODELS.get("potted"):
+        prng = random.Random(3)
+        for k, (x, y, z) in enumerate(PLANT_SPOTS):
+            place_instance(prng.choice(PH_MODELS["potted"]), (x, y, z), prng.uniform(0, 2 * math.pi),
+                           1.0, cols["06_Props"], f"Potted_Plant_{k:02d}")
     sky = build_world()
-    sun = build_lighting(cols["10_Lighting"])
+    sun = build_lighting(cols["11_Lighting"])
     if BUILD_PRACTICALS:
-        build_practicals(cols["10_Lighting"])
-    build_cameras(cols["11_Cameras"])
-    build_labels(cols["12_Labels"], areas)
+        build_practicals(cols["11_Lighting"])
+    build_cameras(cols["12_Cameras"])
+    build_labels(cols["13_Labels"], areas)
+    soften_edges(root_col.all_objects)
     setup_render()
     install_exposure_handler()
 
@@ -1970,7 +2829,14 @@ def main():
         print(f"  {label:<22} {a:6.1f} m2")
     print(f"  {'net total':<22} {total:6.1f} m2   (gross plate {PLATE_X * PLATE_Y:.0f} m2)")
     print(f"  veranda (covered, outdoor) {PLATE_X * VERANDA_DEPTH:6.1f} m2")
-    print(f"  world: {sky}\n")
+    print(f"  world: {sky}")
+    if PH_STATUS["online"]:
+        print("  Poly Haven assets:")
+        for line in PH_STATUS["used"]:
+            print(f"    {line}")
+    else:
+        print("  Poly Haven: offline, procedural stand-ins in use")
+    print()
 
 
 if __name__ == "__main__":
