@@ -19,7 +19,15 @@ create schema auth;
 create schema extensions;
 grant usage on schema public, extensions, auth to anon, authenticated, service_role;
 
-create table auth.users (id uuid primary key default gen_random_uuid(), email text);
+create table auth.users (id uuid primary key default gen_random_uuid(), email text,
+  -- the columns the demo-account seed writes (same names as Supabase Auth)
+  instance_id uuid, aud text, role text, encrypted_password text, email_confirmed_at timestamptz,
+  raw_app_meta_data jsonb, raw_user_meta_data jsonb, created_at timestamptz, updated_at timestamptz,
+  confirmation_token text, email_change text, email_change_token_new text, recovery_token text);
+create table auth.identities (id uuid primary key, user_id uuid not null references auth.users (id) on delete cascade,
+  provider_id text not null, identity_data jsonb not null, provider text not null,
+  last_sign_in_at timestamptz, created_at timestamptz, updated_at timestamptz,
+  email text generated always as (lower(identity_data ->> 'email')) stored);
 
 create function auth.uid() returns uuid
 language sql stable

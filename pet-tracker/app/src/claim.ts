@@ -24,3 +24,11 @@ export function parseClaimQr(text: string): ClaimLabel | null {
   if (!TRACKER_UID_RE.test(deviceUid) || claimCode.length < 10 || claimCode.length > 64) return null;
   return { deviceUid, claimCode };
 }
+
+/** The link a label's QR code holds (same as cloud/provisioning/labels.mjs). */
+export function claimLink(deviceUid: string, claimCode: string): string {
+  return `cattracker://add-cat?device=${encodeURIComponent(deviceUid)}&code=${encodeURIComponent(claimCode)}`;
+}
+
+/** "ABCD-EFGH-JKLM": easier to read from a label. */
+export const prettyClaimCode = (code: string) => code.match(/.{1,4}/g)?.join('-') ?? code;

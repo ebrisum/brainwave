@@ -55,6 +55,29 @@ export interface CatPlace {
   nearestZoneM: number | null;
 }
 
+/** A label made by staff: registered in the backend at once. */
+export interface NewTrackerLabel {
+  deviceUid: string;
+  claimCode: string;
+  model: string | null;
+}
+
+/** One tracker in the staff overview: who has it, since when, who made the label. */
+export interface StaffTracker {
+  deviceUid: string;
+  model: string | null;
+  iccid: string | null;
+  status: string;
+  ownerEmail: string | null;
+  catName: string | null;
+  householdName: string | null;
+  claimedAt: string | null;
+  lastSeenAt: string | null;
+  batteryPct: number | null;
+  registeredAt: string;
+  registeredBy: string | null;
+}
+
 /** What a scanned or typed label says about its tracker, before linking it. */
 export interface ClaimCheck {
   /** ready: free to add; yours: already in your account; taken: someone else's; invalid: wrong id or code. */
@@ -183,6 +206,13 @@ export interface Backend {
   subscribe(handlers: LiveHandlers): () => void;
 
   addPhoneCat(name: string, color: string): Promise<string>;
+  // Staff only (public.staff): making labels and the tracker overview.
+  isStaff(): Promise<boolean>;
+  staffCreateTracker(model: string, iccid?: string, deviceUid?: string): Promise<NewTrackerLabel>;
+  staffListTrackers(search?: string): Promise<StaffTracker[]>;
+  /** A returned tracker: removes the owner and history, returns the new claim code. */
+  staffResetTracker(deviceUid: string): Promise<string>;
+
   /** Checks a label without linking anything. */
   checkClaimCode(deviceUid: string, claimCode: string): Promise<ClaimCheck>;
   claimCollar(deviceUid: string, claimCode: string): Promise<string>;

@@ -17,6 +17,23 @@
 4. From then on the tracker, its SIM and the customer's account are linked:
    `trackers.mjs list` shows who has which tracker.
 
+## In the app (staff)
+
+Accounts listed in `public.staff` see **Settings → Trackers & labels**:
+
+* **New label**: model, optional IMEI and SIM number → the tracker is
+  registered in the database at once (who made it, when) and its QR label
+  appears on screen, to share or print. Without an IMEI it gets a short
+  test id like `CT-7KQ2PX`.
+* **Who has which tracker**: every tracker with its owner, cat, household,
+  when it was made and by whom, when it was claimed and its last check-in;
+  search by id, SIM or e-mail.
+* **Take back (return)**: removes the owner and history and shows a new
+  label; the old one stops working.
+
+Make yourself staff once in the SQL Editor:
+`insert into public.staff (user_id) select id from auth.users where email = '<you>';`
+
 ## Commands (in `cloud/provisioning`, after `npm install`)
 
 Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` first (Supabase →

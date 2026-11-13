@@ -37,6 +37,7 @@ cloud/
   ingest-worker/               Node 22 / TypeScript MQTT subscriber + A-GNSS proxy
   broker/mosquitto/            mTLS + per-device ACL reference broker config
   broker/aws-iot/              least-privilege device policy + topic rule
+  supabase/seed/demo_account.sql  demo login with a household, home zone and two cats (run once)
   db-tests/                    behavioural SQL tests (PostgreSQL + PostGIS)
 docs/06-first-test-with-your-cat.md   step-by-step: deploy, push, Traccar, MT710, first test
 docs/07-selling-trackers.md          labels, scanning, who has which tracker, returns

@@ -5,7 +5,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useApp } from '../src/AppProvider';
@@ -22,6 +22,11 @@ export default function Settings() {
   const { pref, setPref } = useThemePref();
   const { backend, signOut, push, enablePush } = useApp();
   const [newPassword, setNewPassword] = useState('');
+  const [staff, setStaff] = useState(false);
+
+  useEffect(() => {
+    void backend?.isStaff().then(setStaff).catch(() => setStaff(false));
+  }, [backend]);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string; tone: 'error' | 'info' } | null>(null);
 
@@ -71,6 +76,21 @@ export default function Settings() {
       {message?.tone === 'info' && <Text style={{ color: t.live, lineHeight: 20 }}>{message.text}</Text>}
 
       <HouseholdsCard />
+
+      {staff && (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/staff')}
+          style={({ pressed }) => [styles.staffRow, { backgroundColor: t.surface, opacity: pressed ? 0.85 : 1 }]}
+        >
+          <Ionicons name="qr-code-outline" size={22} color={t.text} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: t.text, fontFamily: fonts.bodySemibold }}>Trackers & labels</Text>
+            <Text style={{ color: t.textMuted, fontSize: 13 }}>Staff: make QR labels, see who has which tracker</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={t.textMuted} />
+        </Pressable>
+      )}
 
       <Card style={{ gap: space.md }}>
         <SectionTitle>Appearance</SectionTitle>
@@ -205,5 +225,6 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   onPill: { paddingHorizontal: space.md, paddingVertical: 4, borderRadius: radius.pill },
   account: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  staffRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg, borderRadius: radius.lg },
   accountAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
 });

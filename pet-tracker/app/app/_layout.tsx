@@ -37,6 +37,7 @@ function ThemedStack() {
         <Stack.Screen name="edit-cat/[id]" options={{ title: 'Edit cat', presentation: 'modal' }} />
         <Stack.Screen name="zone/new" options={{ title: 'New zone', presentation: 'modal' }} />
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+        <Stack.Screen name="staff" options={{ title: 'Trackers & labels' }} />
       </Stack>
     </>
   );

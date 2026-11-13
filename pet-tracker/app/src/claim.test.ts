@@ -32,3 +32,9 @@ test('other QR codes are not mistaken for a label', () => {
 test('typed codes may contain dashes and spaces', () => {
   assert.equal(normalizeClaimCode(' ABCD-EFGH JKLM '), 'ABCDEFGHJKLM');
 });
+
+test('a link made in the app reads back as the same label', async () => {
+  const { claimLink, prettyClaimCode } = await import('./claim.ts');
+  assert.deepEqual(parseClaimQr(claimLink('CT-ABCDEF', 'ABCDEFGHJKLM')), { deviceUid: 'CT-ABCDEF', claimCode: 'ABCDEFGHJKLM' });
+  assert.equal(prettyClaimCode('ABCDEFGHJKLM'), 'ABCD-EFGH-JKLM');
+});

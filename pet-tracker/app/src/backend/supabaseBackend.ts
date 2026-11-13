@@ -19,6 +19,8 @@ import type {
   HeatCell,
   CatPlace,
   ClaimCheck,
+  NewTrackerLabel,
+  StaffTracker,
   HomeZone,
   TrackerHealth,
   ZoneTarget,
@@ -226,6 +228,38 @@ export class SupabaseBackend implements Backend {
 
   async addPhoneCat(name: string, color: string): Promise<string> {
     const { data, error } = await this.#db.rpc('create_phone_tracker', { p_name: name, p_color: color });
+    fail(error);
+    return data as string;
+  }
+
+  async isStaff(): Promise<boolean> {
+    const { data, error } = await this.#db.rpc('is_staff');
+    return !error && data === true; // older databases: nobody is staff
+  }
+
+  async staffCreateTracker(model: string, iccid?: string, deviceUid?: string): Promise<NewTrackerLabel> {
+    const { data, error } = await this.#db.rpc('staff_create_tracker', {
+      p_model: model.trim() || null, p_iccid: iccid?.trim() || null, p_device_uid: deviceUid?.trim() || null,
+    });
+    fail(error);
+    const r = data as { device_uid: string; claim_code: string; model: string | null };
+    return { deviceUid: r.device_uid, claimCode: r.claim_code, model: r.model };
+  }
+
+  async staffListTrackers(search?: string): Promise<StaffTracker[]> {
+    const { data, error } = await this.#db.rpc('staff_list_trackers', { p_search: search?.trim() || null });
+    fail(error);
+    return (data as Array<Record<string, string | number | null>>).map((r) => ({
+      deviceUid: r.device_uid as string, model: r.model as string | null, iccid: r.iccid as string | null,
+      status: r.status as string, ownerEmail: r.owner_email as string | null, catName: r.cat_name as string | null,
+      householdName: r.household_name as string | null, claimedAt: r.claimed_at as string | null,
+      lastSeenAt: r.last_seen_at as string | null, batteryPct: r.battery_pct as number | null,
+      registeredAt: r.registered_at as string, registeredBy: r.registered_by as string | null,
+    }));
+  }
+
+  async staffResetTracker(deviceUid: string): Promise<string> {
+    const { data, error } = await this.#db.rpc('staff_reset_tracker', { p_device_uid: deviceUid });
     fail(error);
     return data as string;
   }

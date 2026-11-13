@@ -1,8 +1,9 @@
 /**
  * Password reset with a 6-digit e-mail code (no deep links needed):
  * resetPasswordForEmail -> verifyOtp(type 'recovery') -> updateUser.
- * Requires the Supabase "Reset password" e-mail template to include
- * {{ .Token }} (see app/README.md).
+ * The code needs {{ .Token }} in Supabase's "Reset password" template; with
+ * the standard template (a link only) the person pastes the link instead
+ * (src/recoveryLink.ts).
  */
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -10,6 +11,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { supabase } from '../src/backend/supabaseClient';
+import { parseRecoveryLink } from '../src/recoveryLink';
 import { Button } from '../src/components/ui';
 import { fonts, radius, space, useTheme } from '../src/theme';
 
@@ -21,6 +23,8 @@ export default function ResetPassword() {
   const params = useLocalSearchParams<{ email?: string }>();
   const [email, setEmail] = useState(params.email ?? '');
   const [code, setCode] = useState('');
+  const [link, setLink] = useState('');
+  const recovery = parseRecoveryLink(link);
   const [password, setPassword] = useState('');
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [busy, setBusy] = useState(false);
@@ -36,14 +40,19 @@ export default function ResetPassword() {
     setBusy(false);
     if (error) return setMessage({ text: error.message, tone: 'error' });
     setStep('code');
-    setMessage({ text: `If ${email.trim()} has an account, a 6-digit code is on its way.`, tone: 'info' });
+    setMessage({ text: `If ${email.trim()} has an account, an e-mail is on its way: enter its code, or paste its link below.`, tone: 'info' });
   };
 
   const setNewPassword = async () => {
     if (!supabase) return;
     setBusy(true);
     setMessage(null);
-    const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: 'recovery' });
+    // Signs in for this one purpose: with the code, or with the pasted link.
+    const { error } = recovery?.kind === 'session'
+      ? await supabase.auth.setSession({ access_token: recovery.accessToken, refresh_token: recovery.refreshToken })
+      : recovery
+        ? await supabase.auth.verifyOtp({ token_hash: recovery.tokenHash, type: 'recovery' })
+        : await supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: 'recovery' });
     if (error) {
       setBusy(false);
       return setMessage({ text: error.message, tone: 'error' });
@@ -117,6 +126,26 @@ export default function ResetPassword() {
             />
           </View>
 
+          <Text style={[styles.label, { color: t.textMuted }]}>No code in the e-mail? Paste its link</Text>
+          <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18 }}>
+            Press and hold the reset link or button in the e-mail, choose "Copy link" (don't open it), and paste it here.
+          </Text>
+          <TextInput
+            style={input}
+            placeholder="https://…supabase.co/auth/v1/verify?token=…"
+            placeholderTextColor={t.textMuted}
+            accessibilityLabel="Link from the e-mail"
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={link}
+            onChangeText={setLink}
+          />
+          {link.trim().length > 0 && (
+            <Text style={{ color: recovery ? t.live : t.danger, fontSize: 13 }}>
+              {recovery ? 'Link recognised.' : "That doesn't look like the reset link from the e-mail."}
+            </Text>
+          )}
+
           <Text style={[styles.label, { color: t.textMuted }]}>New password</Text>
           <TextInput
             style={input}
@@ -128,7 +157,7 @@ export default function ResetPassword() {
             value={password}
             onChangeText={setPassword}
           />
-          <Button title="Set new password" onPress={() => void setNewPassword()} busy={busy} disabled={code.trim().length < CODE_LENGTH || password.length < 8} />
+          <Button title="Set new password" onPress={() => void setNewPassword()} busy={busy} disabled={(code.trim().length < CODE_LENGTH && !recovery) || password.length < 8} />
           <View style={styles.links}>
             <Pressable accessibilityRole="link" onPress={() => setStep('email')}>
               <Text style={{ color: t.accent, fontFamily: fonts.bodySemibold }}>Use another e-mail</Text>

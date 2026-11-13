@@ -217,6 +217,20 @@ export class DemoBackend implements Backend {
     return cat.id;
   }
 
+  // Making labels needs the real backend: they must be recorded there.
+  async isStaff(): Promise<boolean> {
+    return false;
+  }
+  async staffCreateTracker(): Promise<never> {
+    throw new Error(NEEDS_ACCOUNT);
+  }
+  async staffListTrackers(): Promise<never> {
+    throw new Error(NEEDS_ACCOUNT);
+  }
+  async staffResetTracker(): Promise<never> {
+    throw new Error(NEEDS_ACCOUNT);
+  }
+
   // One pretend collar, so scanning and adding a collar can be tried in demo mode.
   async checkClaimCode(deviceUid: string, claimCode: string): Promise<ClaimCheck> {
     if (deviceUid.trim() !== DEMO_COLLAR.deviceUid || normalizeClaimCode(claimCode) !== DEMO_COLLAR.claimCode) {
