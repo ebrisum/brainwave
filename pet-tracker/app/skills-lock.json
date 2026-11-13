@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "skills": {
+    "eas-simulator": {
+      "source": "expo/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/expo/skills/eas-simulator/SKILL.md",
+      "computedHash": "f5bb207a5608eab10e266432d984dbe597e730c67b34c832177b129e5388a73d"
+    }
+  }
+}
