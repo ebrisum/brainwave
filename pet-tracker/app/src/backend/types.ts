@@ -55,6 +55,13 @@ export interface CatPlace {
   nearestZoneM: number | null;
 }
 
+/** What a scanned or typed label says about its tracker, before linking it. */
+export interface ClaimCheck {
+  /** ready: free to add; yours: already in your account; taken: someone else's; invalid: wrong id or code. */
+  status: 'ready' | 'yours' | 'taken' | 'invalid';
+  model: string | null;
+}
+
 export interface TrackerHealth {
   lastSeenAt: string | null;
   lastFixAt: string | null;
@@ -174,6 +181,8 @@ export interface Backend {
   subscribe(handlers: LiveHandlers): () => void;
 
   addPhoneCat(name: string, color: string): Promise<string>;
+  /** Checks a label without linking anything. */
+  checkClaimCode(deviceUid: string, claimCode: string): Promise<ClaimCheck>;
   claimCollar(deviceUid: string, claimCode: string): Promise<string>;
   updateCat(id: string, changes: { name?: string; color?: string }): Promise<void>;
   removeCat(id: string): Promise<void>;

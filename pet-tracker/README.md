@@ -37,6 +37,7 @@ cloud/
   broker/aws-iot/              least-privilege device policy + topic rule
   db-tests/                    behavioural SQL tests (PostgreSQL + PostGIS)
 docs/06-first-test-with-your-cat.md   step-by-step: deploy, push, Traccar, MT710, first test
+docs/07-selling-trackers.md          labels, scanning, who has which tracker, returns
 ```
 
 ## What has been verified here
@@ -44,7 +45,7 @@ docs/06-first-test-with-your-cat.md   step-by-step: deploy, push, Traccar, MT710
 | Area | How | Result |
 |---|---|---|
 | Firmware compiles | `west build` for `nrf9160dk/nrf9160/ns` (production + debug) and `thingy91/nrf9160/ns` with NCS v3.4.1 / Zephyr SDK 1.0.1 | ✅ no app warnings; signed + encrypted DFU image produced |
-| Database | `cloud/db-tests/run.sh` on PostgreSQL 16 + PostGIS 3.4 | ✅ 173 checks |
+| Database | `cloud/db-tests/run.sh` on PostgreSQL 16 + PostGIS 3.4 | ✅ 186 checks |
 | Mobile app | `tsc`, unit tests, `expo export` web + Android + iOS, headless-Chromium walkthrough with simulated GPS | ✅ |
 | Worker | `npm test`, `tsc --noEmit` | ✅ 8/8 |
 | End to end | Mosquitto (mTLS + ACL) → worker → Postgres (TLS, least-privilege role) | ✅ including spoofing / no-cert rejection |

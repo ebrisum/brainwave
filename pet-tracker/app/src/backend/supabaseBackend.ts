@@ -7,6 +7,8 @@ import { File } from 'expo-file-system';
 import { Platform } from 'react-native';
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 
+import { normalizeClaimCode } from '../claim';
+
 import type {
   ActivityDay,
   Backend,
@@ -16,6 +18,7 @@ import type {
   CatSitter,
   HeatCell,
   CatPlace,
+  ClaimCheck,
   HomeZone,
   TrackerHealth,
   ZoneTarget,
@@ -226,11 +229,20 @@ export class SupabaseBackend implements Backend {
     return data as string;
   }
 
+  async checkClaimCode(deviceUid: string, claimCode: string): Promise<ClaimCheck> {
+    const { data, error } = await this.#db.rpc('check_claim_code', {
+      p_device_uid: deviceUid.trim(),
+      p_claim_code: normalizeClaimCode(claimCode),
+    });
+    fail(error);
+    const r = data as { status: ClaimCheck['status']; model?: string | null };
+    return { status: r.status, model: r.model ?? null };
+  }
+
   async claimCollar(deviceUid: string, claimCode: string): Promise<string> {
     const { data, error } = await this.#db.rpc('claim_device', {
       p_device_uid: deviceUid.trim(),
-      // Labels print the code in groups ("ABCD-EFGH-JKLM").
-      p_claim_code: claimCode.replace(/[\s-]/g, ''),
+      p_claim_code: normalizeClaimCode(claimCode),
     });
     fail(error);
     return data as string;

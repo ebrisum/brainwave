@@ -25,3 +25,5 @@ psql -q -v ON_ERROR_STOP=1 -d "$DB" -f sharing_test.sql
 psql -q -v ON_ERROR_STOP=1 -d "$DB" -f zones_test.sql
 psql -q -v ON_ERROR_STOP=1 -d "$DB" -f ../supabase/migrations/20261113000700_trackers_status_health.sql
 psql -q -v ON_ERROR_STOP=1 -d "$DB" -f trackers_test.sql
+psql -q -v ON_ERROR_STOP=1 -d "$DB" -f ../supabase/migrations/20261113000800_tracker_sales.sql
+psql -q -v ON_ERROR_STOP=1 -d "$DB" -f sales_test.sql

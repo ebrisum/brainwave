@@ -3,6 +3,7 @@
  * any cat you mark as "tracked by this phone" follows the phone's real GPS.
  * Zone alerts, heatmap and activity use the same rules as the database.
  */
+import { normalizeClaimCode } from '../claim';
 import { binHeatmap, distanceM, estimateActivity, insideZone, offset } from '../geo';
 import {
   DEFAULT_NIGHT,
@@ -11,6 +12,7 @@ import {
   type Cat,
   type CatEvent,
   type HeatCell,
+  type ClaimCheck,
   type HomeZone,
   type TrackerHealth,
   type ZoneTarget,
@@ -29,6 +31,8 @@ const SIM_TICK_MS = 4000;
 const MAX_TRACK = 4000;
 const DEMO_USER = 'demo-user';
 const DEMO_HOUSEHOLD = 'demo-household';
+/** Label of the demo collar (also printed by cloud/provisioning for testing). */
+export const DEMO_COLLAR = { deviceUid: 'DEMO-0001', claimCode: 'DEMOCODE2345' } as const;
 const NEEDS_ACCOUNT = 'Sharing needs an account. Exit the demo and sign in to invite people.';
 
 let nextId = 1;
@@ -55,6 +59,7 @@ export class DemoBackend implements Backend {
   #center = { ...DEFAULT_CENTER };
   #centered = false;
   /** In-memory households, so moving cats around can be tried without an account. */
+  #demoCollarClaimed = false;
   #households = new Map<string, { id: string; name: string }>([[DEMO_HOUSEHOLD, { id: DEMO_HOUSEHOLD, name: 'Demo household' }]]);
 
   constructor() {
@@ -212,8 +217,26 @@ export class DemoBackend implements Backend {
     return cat.id;
   }
 
-  async claimCollar(): Promise<string> {
-    throw new Error('Collars can only be claimed when connected to the real backend.');
+  // One pretend collar, so scanning and adding a collar can be tried in demo mode.
+  async checkClaimCode(deviceUid: string, claimCode: string): Promise<ClaimCheck> {
+    if (deviceUid.trim() !== DEMO_COLLAR.deviceUid || normalizeClaimCode(claimCode) !== DEMO_COLLAR.claimCode) {
+      return { status: 'invalid', model: null };
+    }
+    return { status: this.#demoCollarClaimed ? 'yours' : 'ready', model: 'Demo collar' };
+  }
+
+  async claimCollar(deviceUid: string, claimCode: string): Promise<string> {
+    const check = await this.checkClaimCode(deviceUid, claimCode);
+    if (check.status !== 'ready') {
+      throw new Error(check.status === 'yours' ? 'This collar is already in your list.' : 'In demo mode only the demo collar can be added.');
+    }
+    this.#demoCollarClaimed = true;
+    const cat = this.#newCat('New cat', '#10B981', 'collar');
+    const p = offset(this.#center.lat, this.#center.lng, 60, 120);
+    Object.assign(cat, { lastLat: p.lat, lastLng: p.lng, lastAccuracyM: 10, lastBatteryPct: 100, lastFixAt: new Date().toISOString() });
+    this.#cats.set(cat.id, cat);
+    this.#emitCat(cat);
+    return cat.id;
   }
 
   #cat(id: string): Cat {

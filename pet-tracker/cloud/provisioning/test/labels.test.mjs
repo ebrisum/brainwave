@@ -21,3 +21,12 @@ test('label sheet has a QR code and readable code per tracker', async () => {
   assert.match(html, /<svg/);
   assert.match(html, /ABCD-EFGH-JKLM/);
 });
+
+test('the printed QR code scans back to exactly the claim link', async () => {
+  const { default: jsQR } = await import('jsqr');
+  const { PNG } = await import('pngjs');
+  const { labelPng } = await import('../labels.mjs');
+  const png = PNG.sync.read(await labelPng('861234567890123', 'ABCDEFGHJKLM'));
+  const found = jsQR(new Uint8ClampedArray(png.data), png.width, png.height);
+  assert.equal(found?.data, 'cattracker://add-cat?device=861234567890123&code=ABCDEFGHJKLM');
+});

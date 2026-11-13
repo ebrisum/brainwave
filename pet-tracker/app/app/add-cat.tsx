@@ -1,12 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { useApp } from '../src/AppProvider';
-import { CAT_COLORS, type Household } from '../src/backend/types';
+import { CAT_COLORS, type ClaimCheck, type Household } from '../src/backend/types';
+import { normalizeClaimCode } from '../src/claim';
 import { HouseholdPicker, defaultHousehold } from '../src/components/HouseholdPicker';
 import { Button, ErrorText, SectionTitle, Segmented } from '../src/components/ui';
+import { QrScanner } from '../src/components/QrScanner';
 import { messageOf } from '../src/dialogs';
 import { CatPhotoField } from '../src/photo/CatPhotoField';
 import { fonts, radius, space, useTheme } from '../src/theme';
@@ -33,6 +35,30 @@ export default function AddCat() {
   const [householdId, setHouseholdId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [check, setCheck] = useState<ClaimCheck | 'checking' | null>(null);
+  const canScan = Platform.OS !== 'web';
+
+  // Recognise the label as soon as both parts are there (scanned or typed).
+  const labelReady = source === 'collar' && deviceUid.trim().length >= 3 && normalizeClaimCode(claimCode).length >= 10;
+  useEffect(() => {
+    if (!backend || !labelReady) {
+      setCheck(null);
+      return;
+    }
+    let active = true;
+    setCheck('checking');
+    const timer = setTimeout(() => {
+      backend
+        .checkClaimCode(deviceUid, claimCode)
+        .then((c) => active && setCheck(c))
+        .catch(() => active && setCheck(null)); // older database: just try to add it
+    }, 400);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [backend, labelReady, deviceUid, claimCode]);
 
   useEffect(() => {
     void backend?.listHouseholds().then((h) => {
@@ -46,7 +72,9 @@ export default function AddCat() {
 
   const input = [styles.input, { backgroundColor: t.surfaceAlt, color: t.text, borderColor: t.border }];
   const canSave =
-    source === 'phone' ? name.trim().length > 0 && consent : deviceUid.trim().length > 3 && claimCode.replace(/[\s-]/g, '').length >= 10;
+    source === 'phone'
+      ? name.trim().length > 0 && consent
+      : labelReady && check !== 'checking' && (check === null || check.status === 'ready');
 
   const save = async () => {
     setBusy(true);
@@ -170,25 +198,31 @@ export default function AddCat() {
         </View>
       ) : (
         <View style={[styles.box, { backgroundColor: t.surface, borderColor: t.border, gap: space.sm }]}>
-          <Text style={{ color: t.textMuted, lineHeight: 20 }}>Enter the device ID and claim code printed on the collar's label.</Text>
+          {canScan && <Button title="Scan the QR code" icon="qr-code-outline" onPress={() => setScanning(true)} />}
+          <Text style={{ color: t.textMuted, lineHeight: 20 }}>
+            {canScan ? 'Or type the collar ID and code from the label.' : "Type the collar ID and code from the collar's label."}
+          </Text>
           <TextInput
             style={input}
-            placeholder="Device ID (pt-…)"
+            placeholder="Collar ID (on the label)"
             placeholderTextColor={t.textMuted}
-            accessibilityLabel="Device ID"
+            accessibilityLabel="Collar ID"
             autoCapitalize="none"
+            autoCorrect={false}
             value={deviceUid}
             onChangeText={setDeviceUid}
           />
           <TextInput
             style={input}
-            placeholder="Claim code"
+            placeholder="Code, e.g. ABCD-EFGH-JKLM"
             placeholderTextColor={t.textMuted}
             accessibilityLabel="Claim code"
             autoCapitalize="characters"
+            autoCorrect={false}
             value={claimCode}
             onChangeText={setClaimCode}
           />
+          <LabelCheck check={check} />
         </View>
       )}
 
@@ -207,10 +241,53 @@ export default function AddCat() {
             ? !name.trim()
               ? 'Give your cat a name to continue.'
               : 'Confirm the phone owner agreed to continue.'
-            : 'Enter the device ID and claim code to continue.'}
+            : check !== null && check !== 'checking' && check.status !== 'ready'
+              ? 'This label cannot be added (see above).'
+              : 'Scan the label, or type the collar ID and code, to continue.'}
         </Text>
       )}
+      <QrScanner
+        visible={scanning}
+        onClose={() => setScanning(false)}
+        onScanned={(label) => {
+          setScanning(false);
+          setDeviceUid(label.deviceUid);
+          setClaimCode(label.claimCode);
+        }}
+      />
     </ScrollView>
+  );
+}
+
+/** What the label turned out to be, under the fields. */
+function LabelCheck({ check }: { check: ClaimCheck | 'checking' | null }) {
+  const t = useTheme();
+  if (check === null) return null;
+  if (check === 'checking') {
+    return (
+      <View style={styles.checkRow}>
+        <ActivityIndicator color={t.textMuted} />
+        <Text style={{ color: t.textMuted }}>Checking the label…</Text>
+      </View>
+    );
+  }
+  const look = {
+    ready: { icon: 'checkmark-circle', fg: t.live, bg: t.liveSoft, text: `${check.model ?? 'Collar'} recognised. Ready to add.` },
+    yours: { icon: 'information-circle', fg: t.accent, bg: t.accentSoft, text: 'This collar is already in your account.' },
+    taken: {
+      icon: 'alert-circle', fg: t.danger, bg: t.dangerSoft,
+      text: 'This collar is linked to someone else\'s account. If you just bought it new, please contact us.',
+    },
+    invalid: {
+      icon: 'alert-circle', fg: t.warn, bg: t.surfaceAlt,
+      text: "The collar ID and code don't match. Check the label: codes never use I, O, 0 or 1.",
+    },
+  }[check.status] as { icon: 'checkmark-circle'; fg: string; bg: string; text: string };
+  return (
+    <View style={[styles.labelCheck, { backgroundColor: look.bg }]} accessibilityLiveRegion="polite">
+      <Ionicons name={look.icon} size={20} color={look.fg} />
+      <Text style={{ color: t.text, flex: 1, lineHeight: 20 }}>{look.text}</Text>
+    </View>
   );
 }
 
@@ -222,6 +299,7 @@ const styles = StyleSheet.create({
   swatch: { width: 40, height: 40, borderRadius: 20, borderWidth: 3 },
   box: { borderRadius: radius.lg, padding: space.md, marginTop: space.md, gap: space.md },
   checkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
+  labelCheck: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md, borderRadius: radius.md },
   switchRow: { flexDirection: 'row', alignItems: 'center' },
   modes: { flexDirection: 'row', gap: space.sm },
   mode: { flex: 1, borderWidth: 1.5, borderRadius: radius.lg, padding: space.md },

@@ -9,6 +9,7 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 const LOCATION_TEXT =
   'Cat Tracker uses your location to show it next to your cats, and - if you use this phone as a test tracker - to report its position as the cat.';
+const CAMERA_TEXT = "Scan the QR code on your cat's collar, or take a profile photo of your cat.";
 const BACKGROUND_TEXT =
   'When this phone is used as a cat tracker, Cat Tracker keeps reporting its position in the background so the cat stays visible on the map.';
 
@@ -33,7 +34,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       NSLocationWhenInUseUsageDescription: LOCATION_TEXT,
       NSLocationAlwaysAndWhenInUseUsageDescription: BACKGROUND_TEXT,
       NSPhotoLibraryUsageDescription: 'Choose a profile photo for your cat.',
-      NSCameraUsageDescription: 'Take a profile photo of your cat.',
+      NSCameraUsageDescription: CAMERA_TEXT,
       UIBackgroundModes: ['location', 'remote-notification'],
       ITSAppUsesNonExemptEncryption: false,
     },
@@ -73,10 +74,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'expo-image-picker',
       {
         photosPermission: 'Choose a profile photo for your cat.',
-        cameraPermission: 'Take a profile photo of your cat.',
+        cameraPermission: CAMERA_TEXT,
         microphonePermission: false,
       },
     ],
+    ['expo-camera', { cameraPermission: CAMERA_TEXT, microphonePermission: false, recordAudioAndroid: false }],
     ...(googleIosUrlScheme
       ? ([['@react-native-google-signin/google-signin', { iosUrlScheme: googleIosUrlScheme }]] as ExpoConfig['plugins'] & object)
       : []),
