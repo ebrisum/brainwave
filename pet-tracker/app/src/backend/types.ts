@@ -73,6 +73,8 @@ export interface TrackerHealth {
   reportIntervalS: number;
   /** Collar hasn't checked in for longer than silentAfterS. */
   silent: boolean;
+  /** The collar's last check-in said the cat hasn't moved since lastFixAt (accelerometer). */
+  resting: boolean;
   silentAfterS: number;
 }
 

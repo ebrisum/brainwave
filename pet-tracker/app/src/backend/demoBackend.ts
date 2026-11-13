@@ -326,6 +326,7 @@ export class DemoBackend implements Backend {
       lastSeenAt: cat.lastFixAt, lastFixAt: cat.lastFixAt, batteryPct: cat.lastBatteryPct,
       drainPctPerDay: drain, daysLeft: drain && cat.lastBatteryPct != null ? cat.lastBatteryPct / drain : null,
       fixes24h: track.filter((p) => Date.parse(p.at) > dayAgo).length, reportIntervalS: 300, silent: false, silentAfterS: 10_800,
+      resting: false,
     };
   }
 

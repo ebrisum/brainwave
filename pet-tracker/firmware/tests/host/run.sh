@@ -3,5 +3,5 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 out="$(mktemp -d)"
-gcc -std=c11 -Wall -Wextra -Werror -O1 -o "$out/test_policy" test_policy.c ../../src/policy.c -lm
+gcc -std=c11 -Wall -Wextra -Wdouble-promotion -Werror -O1 -o "$out/test_policy" test_policy.c ../../src/policy.c -lm
 "$out/test_policy"

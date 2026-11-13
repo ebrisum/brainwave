@@ -182,11 +182,12 @@ export class SupabaseBackend implements Backend {
     const r = (data as Array<{
       last_seen_at: string | null; last_fix_at: string | null; battery_pct: number | null; drain_pct_per_day: number | null;
       days_left: number | null; fixes_24h: number; report_interval_s: number; silent: boolean | null; silent_after_s: number;
+      resting?: boolean | null;
     }>)[0]!;
     return {
       lastSeenAt: r.last_seen_at, lastFixAt: r.last_fix_at, batteryPct: r.battery_pct, drainPctPerDay: r.drain_pct_per_day,
       daysLeft: r.days_left, fixes24h: r.fixes_24h, reportIntervalS: r.report_interval_s, silent: r.silent ?? false,
-      silentAfterS: r.silent_after_s,
+      silentAfterS: r.silent_after_s, resting: r.resting ?? false,
     };
   }
 

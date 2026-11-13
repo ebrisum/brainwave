@@ -107,7 +107,9 @@ Deno.serve(async (req) => {
     if (!h.success || h.data.device_id !== topicDeviceId) {
       return json(200, { status: "rejected", reason: "invalid heartbeat" });
     }
-    const { error } = await supabase.rpc("tracker_heartbeat", { p_device_uid: topicDeviceId, p_battery_pct: h.data.batt });
+    const { error } = await supabase.rpc("tracker_heartbeat", {
+      p_device_uid: topicDeviceId, p_battery_pct: h.data.batt, p_note: h.data.gnss ?? null,
+    });
     if (error) return json(503, { error: "storage unavailable" });
     return json(200, { status: "ok" });
   }

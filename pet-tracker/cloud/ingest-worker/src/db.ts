@@ -48,11 +48,14 @@ export class TelemetryStore {
     }
   }
 
-  /** A check-in without a new position (needs EXECUTE on tracker_heartbeat, migration 0900). */
-  async heartbeat(deviceId: string, battPct: number): Promise<string> {
+  /**
+   * A check-in without a new position (EXECUTE on tracker_heartbeat, migrations
+   * 0900/1000). note "still" marks the collar as resting in the app.
+   */
+  async heartbeat(deviceId: string, battPct: number, note: string | null): Promise<string> {
     const res = await this.#pool.query<{ result: { status: string } }>(
-      `select public.tracker_heartbeat($1, $2::smallint) as result`,
-      [deviceId, battPct],
+      `select public.tracker_heartbeat($1, $2::smallint, $3) as result`,
+      [deviceId, battPct, note],
     );
     return res.rows[0]!.result.status;
   }

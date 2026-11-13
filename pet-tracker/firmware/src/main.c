@@ -70,8 +70,12 @@ static uint32_t fix_seq;
 
 /* Power policy state (see policy.h). */
 static struct gnss_backoff gnss_backoff;
+static bool has_accelerometer;
 static bool moved_since_fix = true;  /* nothing known after boot */
 static bool have_fix;
+static struct tracker_fix last_good_fix;
+static int64_t last_good_fix_ms;
+static bool missed_motion;           /* a check fix found the pet elsewhere */
 static enum zone_place last_place = PLACE_UNKNOWN;
 static bool contacted;               /* a session succeeded since boot */
 static int64_t last_contact_ms;
@@ -283,6 +287,17 @@ static enum gnss_result acquire_fix(enum zone_place *place)
 			backlog_push(&fix);
 			(void)location_stop();
 
+			/* A check while "resting" that finds the pet far away:
+			 * the accelerometer missed the movement.
+			 */
+			if (have_fix && !moved_since_fix &&
+			    policy_moved_far(last_good_fix.lat, last_good_fix.lng, last_good_fix.accuracy_m,
+					     fix.lat, fix.lng, fix.accuracy_m)) {
+				LOG_WRN("Moved while marked as resting: switching to moving");
+				missed_motion = true;
+			}
+			last_good_fix = fix;
+			last_good_fix_ms = k_uptime_get();
 			have_fix = true;
 			moved_since_fix = false;
 			*place = policy_zone_place(config.zones, config.zone_count, fix.lat, fix.lng,
@@ -398,7 +413,13 @@ static void report(void)
 	now = k_uptime_get();
 	last_report_ms = now;
 
-	if (policy_should_fix(&gnss_backoff, config.lost_mode, moved_since_fix, have_fix, now)) {
+	/* Without an accelerometer nothing says "hasn't moved": always look. */
+	if (!has_accelerometer) {
+		moved_since_fix = true;
+	}
+
+	if (policy_should_fix(&gnss_backoff, config.lost_mode, moved_since_fix, have_fix,
+			      last_good_fix_ms, (int64_t)CONFIG_TRACKER_STILL_VERIFY_S * MSEC_PER_SEC, now)) {
 		result = acquire_fix(&place);
 		policy_gnss_result(&gnss_backoff, result, k_uptime_get());
 		gnss_note = result == GNSS_RESULT_FIX ? NULL :
@@ -409,9 +430,15 @@ static void report(void)
 	}
 	task_wdt_feed(wdt_channel);
 
+	if (missed_motion && state == STATE_STATIONARY) {
+		state = STATE_MOVING;
+		reschedule();
+	}
+
 	ctx = (struct upload_ctx){
 		.lost_mode = config.lost_mode,
 		.first_contact = !contacted,
+		.missed_motion = missed_motion,
 		.zones_known = config.zone_count > 0,
 		.place = place,
 		.prev_place = last_place,
@@ -434,6 +461,8 @@ static void report(void)
 	if (place != PLACE_UNKNOWN) {
 		last_place = place;
 	}
+
+	missed_motion = false;
 
 	if (reason != UPLOAD_DEFER) {
 		LOG_INF("Uploading (reason %d, %u fix(es))", reason, (unsigned int)backlog_count);
@@ -488,8 +517,9 @@ int main(void)
 	(void)fota_init();
 	(void)cloud_init(device_id, &cloud_handlers);
 
-	if (motion_init(motion_handler) == -ENODEV) {
-		LOG_WRN("No accelerometer: fixed-interval reporting only");
+	has_accelerometer = motion_init(motion_handler) == 0;
+	if (!has_accelerometer) {
+		LOG_WRN("No accelerometer: fixed-interval reporting, a fix every cycle");
 	}
 
 	/* First fix right after boot, then on schedule. */

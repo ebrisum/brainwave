@@ -100,6 +100,17 @@ config TRACKER_CONTACT_MAX_S
 	  (after 3 h) quiet. Lost mode and settings changes therefore reach a
 	  collar resting at home within this time at worst.
 
+config TRACKER_STILL_VERIFY_S
+	int "Check the position of a resting pet every (seconds, 0 = never)"
+	default 28800
+	range 0 86400
+	help
+	  "Resting" comes from the accelerometer. In case it misses movement
+	  (very gentle walking, a smooth car ride, a faulty sensor), a resting
+	  collar still takes a fix this often. If the pet turns out to be far
+	  from its last fix, the collar switches to moving at once and uploads.
+	  Costs ~0.1-0.2 mAh per check.
+
 config TRACKER_COVERAGE_AWARE
 	bool "Hold routine uploads while the modem predicts an expensive session"
 	default y

@@ -50,6 +50,8 @@ export function TrackerHealthCard({ cat }: { cat: Cat }) {
         <SectionTitle>{name}</SectionTitle>
         {silent ? (
           <Pill label="Silent" tone="danger" icon="cloud-offline-outline" />
+        ) : health?.resting ? (
+          <Pill label="Resting" tone="night" icon="moon-outline" />
         ) : lastSeen ? (
           <Pill label="Checking in" tone="live" />
         ) : (
@@ -63,6 +65,16 @@ export function TrackerHealthCard({ cat }: { cat: Cat }) {
           <Text style={{ color: t.text, flex: 1, lineHeight: 20 }}>
             No check-in since {relativeTime(lastSeen)}.{' '}
             {low ? 'The battery was low: charge it and put it back on.' : `It may be out of mobile coverage (a cellar or shed), or switched off.`}
+          </Text>
+        </View>
+      )}
+
+      {health?.resting && !silent && (
+        <View style={[styles.notice, { backgroundColor: t.nightSoft }]}>
+          <Ionicons name="moon-outline" size={20} color={t.night} />
+          <Text style={{ color: t.text, flex: 1, lineHeight: 20 }}>
+            {cat.name} hasn't moved since {health.lastFixAt ? relativeTime(health.lastFixAt) : 'the last position'}, so the collar
+            saves its battery: it checks in every few hours and sends a new position the moment {cat.name} moves.
           </Text>
         </View>
       )}

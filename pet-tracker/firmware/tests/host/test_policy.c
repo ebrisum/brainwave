@@ -31,11 +31,19 @@ static void test_gnss_skip_when_still(void)
 {
 	struct gnss_backoff b = { 0 };
 
-	assert(!policy_should_fix(&b, false, false, true, 0));  /* asleep: keep last fix */
-	assert(policy_should_fix(&b, false, true, true, 0));    /* moved: new fix */
-	assert(policy_should_fix(&b, false, false, false, 0));  /* no fix yet: try */
-	assert(policy_should_fix(&b, true, false, true, 0));    /* lost mode: always */
+	const int64_t verify = 8 * 60 * MIN_MS;
+
+	assert(!policy_should_fix(&b, false, false, true, 0, verify, 60 * MIN_MS)); /* asleep: keep last fix */
+	assert(policy_should_fix(&b, false, true, true, 0, verify, 60 * MIN_MS));   /* moved: new fix */
+	assert(policy_should_fix(&b, false, false, false, 0, verify, 60 * MIN_MS)); /* no fix yet: try */
+	assert(policy_should_fix(&b, true, false, true, 0, verify, 60 * MIN_MS));   /* lost mode: always */
 	puts("ok - no GNSS while the pet hasn't moved");
+
+	/* Trust, but verify: after 8 h "unmoved", check anyway. */
+	assert(!policy_should_fix(&b, false, false, true, 0, verify, verify - 1));
+	assert(policy_should_fix(&b, false, false, true, 0, verify, verify));
+	assert(!policy_should_fix(&b, false, false, true, 0, 0, 100 * verify)); /* verify off */
+	puts("ok - a resting collar still checks its position every 8 h");
 }
 
 static void test_gnss_backoff(void)
@@ -46,7 +54,7 @@ static void test_gnss_backoff(void)
 
 	/* Moving indoors for 4 h at a 15 min interval, no sky at all. */
 	for (int cycle = 0; cycle < 16; cycle++, t += 15 * MIN_MS) {
-		if (policy_should_fix(&b, false, true, true, t)) {
+		if (policy_should_fix(&b, false, true, true, 0, 0, t)) {
 			tries++;
 			policy_gnss_result(&b, GNSS_RESULT_NO_SKY, t);
 		}
@@ -57,12 +65,25 @@ static void test_gnss_backoff(void)
 	/* Never longer than an hour between attempts. */
 	b.skip_left = 200;
 	b.last_try_ms = 0;
-	assert(policy_should_fix(&b, false, true, true, 61 * MIN_MS));
+	assert(policy_should_fix(&b, false, true, true, 0, 0, 61 * MIN_MS));
 
 	/* A fix resets everything. */
 	policy_gnss_result(&b, GNSS_RESULT_FIX, 0);
 	assert(b.streak == 0 && b.skip_left == 0);
 	puts("ok - backoff capped at an hour and reset by a fix");
+}
+
+static void test_moved_far(void)
+{
+	/* A sleeping cat: indoor GPS wanders 40 m with +-30 m: not a move. */
+	assert(!policy_moved_far(52.379, 4.8995, 30, north(40), 4.8995, 30));
+	/* Good fixes 80 m apart: under the 100 m floor (one garden). */
+	assert(!policy_moved_far(52.379, 4.8995, 5, north(80), 4.8995, 5));
+	/* 400 m away: the accelerometer missed it. */
+	assert(policy_moved_far(52.379, 4.8995, 10, north(400), 4.8995, 10));
+	/* Two bad fixes 150 m apart can't prove a move. */
+	assert(!policy_moved_far(52.379, 4.8995, 60, north(150), 4.8995, 60));
+	puts("ok - only a real distance counts as missed movement");
 }
 
 static const struct upload_cfg cfg = {
@@ -115,6 +136,10 @@ static void test_upload(void)
 	c.first_contact = true;
 	assert(policy_upload(&c, &cfg) == UPLOAD_FIRST);
 	c = at_home();
+	c.missed_motion = true;
+	c.coverage_poor = true;
+	assert(policy_upload(&c, &cfg) == UPLOAD_MISSED_MOTION);
+	c = at_home();
 	c.zones_known = false;
 	c.place = PLACE_UNKNOWN;
 	assert(policy_upload(&c, &cfg) == UPLOAD_NO_ZONES);   /* old behaviour */
@@ -142,6 +167,7 @@ int main(void)
 	test_zone_place();
 	test_gnss_skip_when_still();
 	test_gnss_backoff();
+	test_moved_far();
 	test_upload();
 	puts("ALL POLICY TESTS PASSED");
 	return 0;

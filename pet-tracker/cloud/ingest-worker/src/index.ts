@@ -124,7 +124,7 @@ async function handle(topic: string, payload: Buffer): Promise<void> {
       log.warn("heartbeat rejected", { device: parsed.deviceId, reason: v.reason });
       return;
     }
-    const status = await store.heartbeat(parsed.deviceId, v.value.batt);
+    const status = await store.heartbeat(parsed.deviceId, v.value.batt, v.value.gnss ?? null);
     log.info("heartbeat", { device: parsed.deviceId, status, gnss: v.value.gnss });
     return;
   }

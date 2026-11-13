@@ -126,6 +126,37 @@ therefore decides per cycle what is worth the energy
 | **Heartbeat instead of nothing**: without a new fix, a ~60-byte `telemetry/heartbeat` (battery, why no fix) at most every 2 h | keeps "tracker silent" quiet without a GNSS fix |
 | **Coverage-aware**: routine uploads wait while the modem predicts an excessive energy estimate (cellar, cell edge), within the 2 h contact limit | sessions at 2–4× normal cost |
 | **Resting check-in every 4 h** (was 6 h with a GNSS fix, hourly at night) | the night hourly check-in is gone: movement wakes the collar anyway |
+| **Check fix every 8 h while resting** | ~0.1–0.2 mAh, three times a day: the price of never trusting the sensor blindly |
+
+### How the collar knows the cat is resting, and why it can't stay wrong
+
+"Resting" is never a guess from the clock; it comes from the accelerometer
+(ADXL362), which runs on its own at ~0.3 µA:
+
+1. **Moving** is declared the moment acceleration changes by more than
+   **80 mg for 0.4 s** (tuned for cats: a stalking cat moves gently; dog
+   trackers use ~150 mg). The collar wakes instantly, takes a fix and reports
+   every 15 min while moving.
+2. **Resting** is declared only after **5 minutes** below 60 mg. The collar
+   then takes one "resting position" and sends a check-in (`"gnss":"still"`)
+   every 4 h without GNSS.
+3. **Safety nets** in case the sensor misses movement (very gentle walking, a
+   smooth car ride, a faulty sensor):
+   * a resting collar still takes a **check fix every 8 h**
+     (`TRACKER_STILL_VERIFY_S`); if the pet is more than ~100 m (and beyond
+     both GPS uncertainties) from its last fix, the collar switches to
+     moving at once and uploads, whatever the batching or coverage rules say;
+   * **without a working accelerometer** the collar never assumes "unmoved":
+     it takes a fix every cycle, like before;
+   * if check-ins stop altogether, the backend raises **"tracker silent"**
+     after 5 h.
+4. The app shows **Resting** (with "hasn't moved since …") only while the
+   latest check-in said so; any new position clears it. A collar that misses
+   its check-ins shows **Silent**, never Resting.
+
+Tune the thresholds on real cats with the debug overlay: a lower activity
+threshold catches more gentle movement but also wakes on grooming, which
+costs an extra fix (~0.1 mAh) each time.
 
 ### Estimated effect (planning values, same model as 1.2, 300 mAh)
 

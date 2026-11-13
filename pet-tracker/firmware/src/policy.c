@@ -21,7 +21,7 @@ enum zone_place policy_zone_place(const struct policy_zone *zones, size_t n,
 				  double lat, double lng, float accuracy_m)
 {
 	bool near_edge = false;
-	double acc = accuracy_m > 0 ? accuracy_m : 0;
+	double acc = accuracy_m > 0 ? (double)accuracy_m : 0.0;
 
 	if (n == 0) {
 		return PLACE_UNKNOWN;
@@ -68,13 +68,16 @@ void policy_gnss_result(struct gnss_backoff *b, enum gnss_result r, int64_t now_
 }
 
 bool policy_should_fix(struct gnss_backoff *b, bool lost_mode, bool moved_since_fix,
-		       bool have_fix, int64_t now_ms)
+		       bool have_fix, int64_t last_fix_ms, int64_t verify_ms, int64_t now_ms)
 {
 	if (lost_mode) {
 		return true; /* every position counts */
 	}
 	if (have_fix && !moved_since_fix) {
-		return false; /* still where the last fix put it */
+		/* Still where the last fix put it - but don't trust the
+		 * accelerometer blindly: check now and then.
+		 */
+		return verify_ms > 0 && now_ms - last_fix_ms >= verify_ms;
 	}
 	if (b->skip_left > 0 && now_ms - b->last_try_ms < POLICY_GNSS_MAX_GAP_MS) {
 		b->skip_left--;
@@ -90,6 +93,9 @@ enum upload_reason policy_upload(const struct upload_ctx *c, const struct upload
 	}
 	if (c->first_contact) {
 		return UPLOAD_FIRST;
+	}
+	if (c->missed_motion) {
+		return UPLOAD_MISSED_MOTION; /* it wandered off unnoticed: tell now */
 	}
 	if (c->backlog >= c->backlog_max) {
 		return UPLOAD_BACKLOG_FULL; /* or the oldest fix would be lost */
@@ -130,4 +136,11 @@ enum upload_reason policy_upload(const struct upload_ctx *c, const struct upload
 		return UPLOAD_BATCH_AGE;
 	}
 	return UPLOAD_DEFER;
+}
+
+bool policy_moved_far(double lat1, double lng1, float acc1, double lat2, double lng2, float acc2)
+{
+	double limit = (acc1 > 0 ? (double)acc1 : 0.0) + (acc2 > 0 ? (double)acc2 : 0.0) + 50.0;
+
+	return distance_m(lat1, lng1, lat2, lng2) > (limit > 100.0 ? limit : 100.0);
 }

@@ -62,16 +62,27 @@ void policy_gnss_reset(struct gnss_backoff *b);
  * Should this cycle run GNSS?
  *   moved_since_fix: the accelerometer saw motion since the last good fix
  *   have_fix:        there is a last good fix at all
+ *   last_fix_ms:     when that fix was taken
+ *   verify_ms:       even "unmoved", check the position after this long
+ *                    (catches movement the accelerometer missed; 0 = never)
  * Consumes one skip when it says no because of the backoff.
  */
 bool policy_should_fix(struct gnss_backoff *b, bool lost_mode, bool moved_since_fix,
-		       bool have_fix, int64_t now_ms);
+		       bool have_fix, int64_t last_fix_ms, int64_t verify_ms, int64_t now_ms);
+
+/*
+ * Did the pet really move between two fixes? True when they are further
+ * apart than both GPS uncertainties together plus a margin (and at least
+ * 100 m): GPS wander of a sleeping cat never counts.
+ */
+bool policy_moved_far(double lat1, double lng1, float acc1, double lat2, double lng2, float acc2);
 
 /* --- LTE: upload now or keep for the next session ------------------------ */
 
 struct upload_ctx {
 	bool lost_mode;
 	bool first_contact;      /* nothing sent since boot */
+	bool missed_motion;      /* a check fix found the pet far away while "resting" */
 	bool zones_known;
 	enum zone_place place;   /* of this cycle's fix (UNKNOWN without a fix) */
 	enum zone_place prev_place; /* of the last fix before it */
@@ -94,6 +105,7 @@ enum upload_reason {
 	UPLOAD_DEFER = 0,
 	UPLOAD_LOST_MODE,
 	UPLOAD_FIRST,
+	UPLOAD_MISSED_MOTION,
 	UPLOAD_NO_ZONES,
 	UPLOAD_OUTSIDE,
 	UPLOAD_CROSSED,

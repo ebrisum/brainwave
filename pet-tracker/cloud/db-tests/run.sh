@@ -29,3 +29,5 @@ psql -q -v ON_ERROR_STOP=1 -d "$DB" -f ../supabase/migrations/20261113000800_tra
 psql -q -v ON_ERROR_STOP=1 -d "$DB" -f sales_test.sql
 psql -q -v ON_ERROR_STOP=1 -d "$DB" -f ../supabase/migrations/20261113000900_collar_power.sql
 psql -q -v ON_ERROR_STOP=1 -d "$DB" -f power_test.sql
+psql -q -v ON_ERROR_STOP=1 -d "$DB" -f ../supabase/migrations/20261113001000_resting_status.sql
+psql -q -v ON_ERROR_STOP=1 -d "$DB" -f resting_test.sql
