@@ -43,7 +43,7 @@ Per-event cost (planning values, CE level 0 = normal coverage):
 
 1. 14 days at 15-minute moving updates holds for realistic behaviour, and only just holds for continuous movement.
 2. Coverage and antenna efficiency matter most. A poor LTE antenna pushes the modem to higher TX power and coverage-enhancement repetitions, which costs more than any firmware optimisation can recover. Budget for a proper antenna design (for example an antenna booster with a tuned matching network) and over-the-air (OTA) testing.
-3. Recommended firmware addition: stretch the moving interval when `lte_lc_conn_eval_params_get()` reports CE level ≥ 2 or a high energy estimate.
+3. Poor coverage: routine uploads now wait while `lte_lc_conn_eval_params_get()` predicts an excessive energy cost (see 1.6).
 4. Use 400 mAh if the enclosure allows it.
 
 ## 1.3 Zephyr / nRF Connect SDK power configuration
@@ -103,6 +103,55 @@ CONFIG_TFM_LOG_LEVEL_SILENCE=y
 * **Motion gating.** While the animal is still, the only traffic is a heartbeat every 6 h. Motion start triggers an immediate fix (rate-limited to one per 2 min). Five minutes of stillness triggers a final "resting position" fix.
 * **Store and forward.** Fixes taken without coverage go into a 32-entry RAM ring buffer and are flushed in the next session. The backend de-duplicates and orders them by GNSS time.
 * **The watchdog proves liveness.** The main loop wakes at least every 7.5 min to feed the task watchdog. That costs a few µC per wake, against a 900 s watchdog timeout.
+
+## 1.6 Power policy: only spend energy on news
+
+The budget in 1.2 assumes every report pays for a GNSS fix and an LTE
+session. Cats break that assumption: most of the day they sleep, often
+indoors, and much of their wandering is around the house. A GNSS search
+indoors runs the full 90 s timeout at ~45 mA (**~1.1 mAh, eleven normal
+fixes**), and most at-home positions are news to nobody. The firmware
+therefore decides per cycle what is worth the energy
+([`firmware/src/policy.c`](../firmware/src/policy.c), pure C, host-tested in
+`firmware/tests/host`):
+
+| Rule | What it saves |
+|---|---|
+| **No GNSS while the pet hasn't moved** since the last good fix (accelerometer) | the GNSS part of every resting check-in; indoors that was ~1.1 mAh each |
+| **No-sky abort**: if after 15 s fewer than 3 satellites are received at ≥ 25 dB-Hz, stop | an indoor search costs ~0.19 mAh instead of ~1.1 mAh |
+| **Backoff after no sky**: skip 0, 1, 3, 7 cycles after 1–4 misses in a row, never more than 1 h without trying; reset by a fix, a new outing or lost mode | moving around indoors: ~6 attempts per 4 h instead of 16 |
+| **Home zones on the collar** (sent by the backend with its config): positions inside a zone go up in groups of 4, or after 1 h | ~4 LTE sessions per hour at home become 1 |
+| **Always at once**: leaving or entering a zone (also when the fix is near an edge), positions away from home, lost mode, first contact after boot | the owner sees what matters without delay |
+| **Batch messages**: several fixes as compact arrays in one MQTT message (`telemetry/batch`), one PUBACK round trip | radio time and ~60 % of the bytes per fix |
+| **Heartbeat instead of nothing**: without a new fix, a ~60-byte `telemetry/heartbeat` (battery, why no fix) at most every 2 h | keeps "tracker silent" quiet without a GNSS fix |
+| **Coverage-aware**: routine uploads wait while the modem predicts an excessive energy estimate (cellar, cell edge), within the 2 h contact limit | sessions at 2–4× normal cost |
+| **Resting check-in every 4 h** (was 6 h with a GNSS fix, hourly at night) | the night hourly check-in is gone: movement wakes the collar anyway |
+
+### Estimated effect (planning values, same model as 1.2, 300 mAh)
+
+| Scenario (per day) | Before | After | Days on 300 mAh |
+|---|---|---|---|
+| **Indoor cat**: 4 h moving indoors, 10 rest/move changes, home zone set | ~35 mAh (GNSS timeouts) | ~6 mAh | **~7 → ~40** |
+| **Typical outdoor cat**: 6 h moving (half in the garden), 10 changes | ~7.0 mAh | ~5.0 mAh | **~36 → ~50** |
+| **Worst case**: moving 24 h, away from home, good sky | ~17.4 mAh | ~16.5 mAh | ~15 → ~15.5 |
+
+The worst case barely changes: every fix there is news and costs GNSS plus
+LTE. The big gains come from not searching the sky indoors and not
+reporting the obvious. As with 1.2, measure real boards with a PPK2: the
+no-sky threshold (`CONFIG_TRACKER_GNSS_NOSKY_*`) in particular should be
+tuned on the final antenna.
+
+### Settings (Kconfig) and their trade-offs
+
+| Option | Default | Raise it for… | Lower it for… |
+|---|---|---|---|
+| `TRACKER_GNSS_NOSKY_S` | 15 s | weak antennas / dense trees | more savings indoors |
+| `TRACKER_HOME_BATCH` / `TRACKER_HOME_MAX_AGE_S` | 4 / 1 h | battery | fresher at-home positions |
+| `TRACKER_CONTACT_MAX_S` | 2 h | battery | faster settings and lost mode for a resting collar |
+| `TRACKER_STATIONARY_INTERVAL_S` | 4 h | battery (raise the backend's 5 h silent alert too) | quicker "tracker silent" |
+| `TRACKER_COVERAGE_AWARE` | on | — | off if the energy estimate misbehaves on a network |
+
+Lost mode overrides all of it: GNSS every cycle, every fix uploaded.
 
 ## 1.4 A-GNSS: from minutes to seconds
 

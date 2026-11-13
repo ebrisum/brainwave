@@ -5,6 +5,7 @@
 //   node scripts/simulate-device.mjs --url mqtts://localhost:8883 \
 //     --ca ca.crt --cert device.crt --key device.key \
 //     --id pt-351234567890123 [--topic-id <other id>] [--payload '<json>']
+//     [--kind batch|heartbeat]   (pt/v1/<id>/telemetry/<kind>)
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import mqtt from "mqtt";
@@ -18,6 +19,7 @@ const { values: a } = parseArgs({
     id: { type: "string" },
     "topic-id": { type: "string" },
     payload: { type: "string" },
+    kind: { type: "string" },
     lat: { type: "string", default: "52.379012" },
     lng: { type: "string", default: "4.899512" },
     ts: { type: "string" },
@@ -48,8 +50,9 @@ const client = await mqtt.connectAsync(a.url, {
 });
 
 try {
-  await client.publishAsync(`pt/v1/${topicId}/telemetry`, payload, { qos: 1 });
-  console.log(`PUBACK pt/v1/${topicId}/telemetry`);
+  const topic = `pt/v1/${topicId}/telemetry${a.kind ? `/${a.kind}` : ""}`;
+  await client.publishAsync(topic, payload, { qos: 1 });
+  console.log(`PUBACK ${topic}`);
 } finally {
   await client.endAsync();
 }

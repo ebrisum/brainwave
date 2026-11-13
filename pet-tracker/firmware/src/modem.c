@@ -163,3 +163,23 @@ int modem_lost_mode_set(bool enable)
 	LOG_INF("Lost mode %s (%d)", enable ? "on" : "off", err);
 	return err;
 }
+
+bool modem_coverage_poor(void)
+{
+	struct lte_lc_conn_eval_params params = { 0 };
+	int err;
+
+	if (!atomic_get(&registered)) {
+		return false; /* nothing to judge; the session itself will wait */
+	}
+
+	/* Works in RRC idle; any error simply means "no opinion". */
+	err = lte_lc_conn_eval_params_get(&params);
+	if (err) {
+		LOG_DBG("Connection evaluation unavailable: %d", err);
+		return false;
+	}
+
+	LOG_INF("Coverage: energy estimate %d, CE level %d", params.energy_estimate, params.ce_level);
+	return params.energy_estimate <= LTE_LC_ENERGY_CONSUMPTION_EXCESSIVE;
+}

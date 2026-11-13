@@ -6,12 +6,20 @@ import { z } from "zod";
 
 export const DEVICE_ID_RE = /^pt-[0-9]{15}$/;
 
-/** Hard cap before JSON.parse: telemetry is ~150 B, A-GNSS requests ~90 B. */
-export const MAX_UPLINK_BYTES = 512;
+/** Hard cap before JSON.parse: telemetry ~150 B, a batch of 8 ~420 B,
+ *  heartbeats ~60 B, A-GNSS requests ~90 B. */
+export const MAX_UPLINK_BYTES = 1024;
 
-const TOPIC_RE = /^pt\/v1\/(pt-[0-9]{15})\/(telemetry|agnss\/req)$/;
+const TOPIC_RE = /^pt\/v1\/(pt-[0-9]{15})\/(telemetry|telemetry\/batch|telemetry\/heartbeat|agnss\/req)$/;
 
-export type UplinkKind = "telemetry" | "agnss";
+export type UplinkKind = "telemetry" | "batch" | "heartbeat" | "agnss";
+
+const KINDS: Record<string, UplinkKind> = {
+  telemetry: "telemetry",
+  "telemetry/batch": "batch",
+  "telemetry/heartbeat": "heartbeat",
+  "agnss/req": "agnss",
+};
 
 export interface ParsedTopic {
   deviceId: string;
@@ -26,10 +34,7 @@ export interface ParsedTopic {
 export function parseTopic(topic: string): ParsedTopic | null {
   const m = TOPIC_RE.exec(topic);
   if (!m) return null;
-  return {
-    deviceId: m[1]!,
-    kind: m[2] === "telemetry" ? "telemetry" : "agnss",
-  };
+  return { deviceId: m[1]!, kind: KINDS[m[2]!]! };
 }
 
 export const telemetrySchema = z
@@ -49,6 +54,31 @@ export const telemetrySchema = z
   });
 
 export type Telemetry = z.infer<typeof telemetrySchema>;
+
+/**
+ * Several fixes in one message, as compact arrays (firmware cloud_publish_fixes):
+ *   {"device_id":"pt-…","fixes":[[lat,lng,accuracy,batt,ts,seq],…]}
+ */
+export const batchSchema = z
+  .object({
+    device_id: z.string().regex(DEVICE_ID_RE),
+    fixes: z
+      .array(z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()]))
+      .min(1)
+      .max(16),
+  })
+  .strict();
+
+/** "Alive, no new position" (firmware cloud_publish_heartbeat). */
+export const heartbeatSchema = z
+  .object({
+    device_id: z.string().regex(DEVICE_ID_RE),
+    batt: z.number().int().gte(0).lte(100),
+    gnss: z.enum(["still", "no_sky", "timeout", "skipped"]).optional(),
+  })
+  .strict();
+
+export type Heartbeat = z.infer<typeof heartbeatSchema>;
 
 /** nRF Cloud A-GNSS type ids: 1 UTC, 2 ephemerides, 3 almanac, 4 Klobuchar,
  *  5 NeQuick, 6 GPS TOW, 7 GPS system clock, 8 location, 9 integrity. */
@@ -88,6 +118,46 @@ export function validateTelemetry(
   if (!json.ok) return json;
 
   const parsed = telemetrySchema.safeParse(json.value);
+  if (!parsed.success) {
+    return { ok: false, reason: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
+  }
+  if (parsed.data.device_id !== deviceId) {
+    return { ok: false, reason: "device_id does not match authenticated topic identity" };
+  }
+  return { ok: true, value: parsed.data };
+}
+
+/**
+ * A batch is accepted if its shape is right; each fix then passes the same
+ * rules as a single message. Bad fixes are dropped and counted, good ones kept.
+ */
+export function validateBatch(
+  deviceId: string,
+  payload: Buffer,
+): ValidationResult<{ fixes: Telemetry[]; dropped: number }> {
+  const json = parseJson(payload);
+  if (!json.ok) return json;
+
+  const parsed = batchSchema.safeParse(json.value);
+  if (!parsed.success) {
+    return { ok: false, reason: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
+  }
+  if (parsed.data.device_id !== deviceId) {
+    return { ok: false, reason: "device_id does not match authenticated topic identity" };
+  }
+  const fixes: Telemetry[] = [];
+  for (const [lat, lng, accuracy, batt, ts, seq] of parsed.data.fixes) {
+    const one = telemetrySchema.safeParse({ device_id: deviceId, lat, lng, accuracy, batt, ts, seq });
+    if (one.success) fixes.push(one.data);
+  }
+  return { ok: true, value: { fixes, dropped: parsed.data.fixes.length - fixes.length } };
+}
+
+export function validateHeartbeat(deviceId: string, payload: Buffer): ValidationResult<Heartbeat> {
+  const json = parseJson(payload);
+  if (!json.ok) return json;
+
+  const parsed = heartbeatSchema.safeParse(json.value);
   if (!parsed.success) {
     return { ok: false, reason: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
   }

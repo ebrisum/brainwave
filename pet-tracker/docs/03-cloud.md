@@ -2,7 +2,7 @@
 
 ```
  Tracker ──MQTTS (mTLS, TLS 1.2 ECDHE-ECDSA)──► Broker (EU region)
-   ▲  pt/v1/<id>/telemetry, agnss/req              │  per-device ACL: CN = client id = topic id
+   ▲  pt/v1/<id>/telemetry(/batch|/heartbeat), agnss/req │  per-device ACL: CN = client id = topic id
    │  pt/v1/<id>/down/{config,fota,agnss}          │
    │                                               ├─► Ingest worker (Node 22, ≥2 replicas,
    │                                               │     $share/ingest/… shared subscription)

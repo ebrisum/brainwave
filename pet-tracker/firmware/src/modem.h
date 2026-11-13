@@ -25,6 +25,12 @@ int modem_imei_get(char *buf, size_t len);
 int modem_cell_info_get(struct modem_cell_info *info);
 
 /*
+ * True when the modem predicts that a data session would be much more
+ * expensive than usual (deep indoor, cell edge: coverage enhancement).
+ */
+bool modem_coverage_poor(void);
+
+/*
  * Lost mode trades battery for reachability: PSM off, eDRX on, so cloud
  * commands arrive within one eDRX cycle instead of at the next report.
  */

@@ -21,6 +21,8 @@ A reference implementation of a subscription-free LTE-M/NB-IoT pet tracker for t
 ```
 firmware/                      Zephyr application (nRF Connect SDK v3.4.1)
   src/main.c                   state machine: GNSS in PSM → MQTT/TLS session → RAI → PSM
+  src/policy.c                 power policy: skip / stop GNSS, batch at home, coverage-aware (host-tested)
+  tests/host/                  power-policy tests that run on a PC (gcc)
   src/{modem,location,cloud,motion,battery,fota}.c
   prj.conf                     production config (PSM 12 h / 6 s, RAI, 1NCE APN, no UART)
   overlay-debug.conf           logs + short intervals for the bench
@@ -47,7 +49,9 @@ docs/07-selling-trackers.md          labels, scanning, who has which tracker, re
 | Firmware compiles | `west build` for `nrf9160dk/nrf9160/ns` (production + debug) and `thingy91/nrf9160/ns` with NCS v3.4.1 / Zephyr SDK 1.0.1 | ✅ no app warnings; signed + encrypted DFU image produced |
 | Database | `cloud/db-tests/run.sh` on PostgreSQL 16 + PostGIS 3.4 | ✅ 189 checks |
 | Mobile app | `tsc`, unit tests, `expo export` web + Android + iOS, headless-Chromium walkthrough with simulated GPS | ✅ |
-| Worker | `npm test`, `tsc --noEmit` | ✅ 8/8 |
+| Worker | `npm test`, `tsc --noEmit` | ✅ 13/13 |
+| Power policy | `firmware/tests/host/run.sh` (gcc, `-Werror`) | ✅ |
+| End to end (power) | simulated collar → Mosquitto (mTLS + ACL) → worker → Postgres: config with home zones, batch of 3, heartbeat, spoofed batch | ✅ zones delivered, 3 fixes + "left home" alert stored, heartbeat updates battery/last seen, spoof dropped by the ACL |
 | End to end | Mosquitto (mTLS + ACL) → worker → Postgres (TLS, least-privilege role) | ✅ including spoofing / no-cert rejection |
 | Edge functions | `deno check`, unit tests for the Traccar mapping, local HTTP smoke tests (AWS IoT and Traccar ingest) | ✅ |
 | Tracker bridge | Traccar + MT710 on a live network | ⏳ not yet: see docs/06 |

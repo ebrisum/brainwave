@@ -20,11 +20,32 @@ LOG_MODULE_REGISTER(location, CONFIG_TRACKER_LOG_LEVEL);
 #define EVT_FIX     BIT(0)
 #define EVT_TIMEOUT BIT(1)
 #define EVT_AGNSS   BIT(2)
+#define EVT_NO_SKY  BIT(3)
 
 static K_EVENT_DEFINE(gnss_events);
 
 static struct nrf_modem_gnss_pvt_data_frame last_fix;
 static struct nrf_modem_gnss_agnss_data_frame agnss_need;
+
+/* No-sky detection: start of the current search (reset after A-GNSS is
+ * injected, since satellites only show up once the modem knows where to
+ * look) and the best number of usable satellites seen in it.
+ */
+static int64_t search_start_ms;
+static bool no_sky_posted;
+
+/* Satellites received well enough to contribute to a fix. */
+static uint8_t usable_satellites(const struct nrf_modem_gnss_pvt_data_frame *pvt)
+{
+	uint8_t n = 0;
+
+	for (size_t i = 0; i < NRF_MODEM_GNSS_MAX_SATELLITES; i++) {
+		if (pvt->sv[i].sv != 0 && pvt->sv[i].cn0 >= CONFIG_TRACKER_GNSS_NOSKY_CN0 * 10) {
+			n++;
+		}
+	}
+	return n;
+}
 
 static void gnss_event_handler(int event)
 {
@@ -33,10 +54,18 @@ static void gnss_event_handler(int event)
 
 	switch (event) {
 	case NRF_MODEM_GNSS_EVT_PVT:
-		if (nrf_modem_gnss_read(&pvt, sizeof(pvt), NRF_MODEM_GNSS_DATA_PVT) == 0 &&
-		    (pvt.flags & NRF_MODEM_GNSS_PVT_FLAG_FIX_VALID)) {
+		if (nrf_modem_gnss_read(&pvt, sizeof(pvt), NRF_MODEM_GNSS_DATA_PVT) != 0) {
+			break;
+		}
+		if (pvt.flags & NRF_MODEM_GNSS_PVT_FLAG_FIX_VALID) {
 			last_fix = pvt;
 			k_event_post(&gnss_events, EVT_FIX);
+		} else if (CONFIG_TRACKER_GNSS_NOSKY_S > 0 && !no_sky_posted &&
+			   k_uptime_get() - search_start_ms >= CONFIG_TRACKER_GNSS_NOSKY_S * MSEC_PER_SEC &&
+			   usable_satellites(&pvt) < 3) {
+			/* Indoors or covered: searching on only burns ~45 mA. */
+			no_sky_posted = true;
+			k_event_post(&gnss_events, EVT_NO_SKY);
 		}
 		break;
 	case NRF_MODEM_GNSS_EVT_SLEEP_AFTER_TIMEOUT:
@@ -68,7 +97,9 @@ int location_fix_start(uint16_t timeout_s)
 {
 	int err;
 
-	k_event_clear(&gnss_events, EVT_FIX | EVT_TIMEOUT | EVT_AGNSS);
+	k_event_clear(&gnss_events, EVT_FIX | EVT_TIMEOUT | EVT_AGNSS | EVT_NO_SKY);
+	search_start_ms = k_uptime_get();
+	no_sky_posted = false;
 
 	/* fix_interval 0 == single fix; the receiver sleeps after the fix or
 	 * after fix_retry seconds, whichever comes first.
@@ -91,6 +122,11 @@ int location_fix_start(uint16_t timeout_s)
 	return err;
 }
 
+void location_assistance_injected(void)
+{
+	search_start_ms = k_uptime_get();
+}
+
 int location_stop(void)
 {
 	return nrf_modem_gnss_stop();
@@ -98,7 +134,7 @@ int location_stop(void)
 
 enum location_evt location_wait(k_timeout_t timeout)
 {
-	uint32_t evts = k_event_wait(&gnss_events, EVT_FIX | EVT_TIMEOUT | EVT_AGNSS,
+	uint32_t evts = k_event_wait(&gnss_events, EVT_FIX | EVT_TIMEOUT | EVT_AGNSS | EVT_NO_SKY,
 				     false, timeout);
 
 	/* Consume one event per call, highest priority first. */
@@ -109,6 +145,10 @@ enum location_evt location_wait(k_timeout_t timeout)
 	if (evts & EVT_AGNSS) {
 		k_event_clear(&gnss_events, EVT_AGNSS);
 		return LOCATION_EVT_AGNSS_NEEDED;
+	}
+	if (evts & EVT_NO_SKY) {
+		k_event_clear(&gnss_events, EVT_NO_SKY);
+		return LOCATION_EVT_NO_SKY;
 	}
 	if (evts & EVT_TIMEOUT) {
 		k_event_clear(&gnss_events, EVT_TIMEOUT);

@@ -1,11 +1,15 @@
 # Backend ingest service (certificate CN = pt-ingest)
 user pt-ingest
 topic read  pt/v1/+/telemetry
+topic read  pt/v1/+/telemetry/batch
+topic read  pt/v1/+/telemetry/heartbeat
 topic read  pt/v1/+/agnss/req
 topic write pt/v1/+/down/#
 
 # Every other identity is a tracker: it may only touch its OWN topics.
 # %u = certificate CN = device id, so pt-A can never publish as pt-B.
 pattern write pt/v1/%u/telemetry
+pattern write pt/v1/%u/telemetry/batch
+pattern write pt/v1/%u/telemetry/heartbeat
 pattern write pt/v1/%u/agnss/req
 pattern read  pt/v1/%u/down/#

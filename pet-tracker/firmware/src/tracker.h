@@ -7,6 +7,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "policy.h"
+
 /* "pt-" + 15-digit IMEI. Equals MQTT client id and certificate CN. */
 #define TRACKER_DEVICE_ID_LEN sizeof("pt-123456789012345")
 
@@ -30,6 +32,11 @@ struct tracker_config {
 	uint16_t night_start_utc_min; /* 0..1439 */
 	uint16_t night_end_utc_min;   /* 0..1439, may be < start (wraps midnight) */
 	uint32_t night_interval_s;
+	/* Home zones (household first). With none, every fix is uploaded at
+	 * once, as before; with zones, positions at home are batched.
+	 */
+	struct policy_zone zones[POLICY_MAX_ZONES];
+	uint8_t zone_count;
 };
 
 #endif /* TRACKER_H_ */

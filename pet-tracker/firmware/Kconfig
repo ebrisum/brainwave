@@ -43,8 +43,12 @@ config TRACKER_MOVING_INTERVAL_S
 
 config TRACKER_STATIONARY_INTERVAL_S
 	int "Heartbeat interval while stationary (seconds)"
-	default 21600
+	default 14400
 	range 900 86400
+	help
+	  A resting pet costs no GNSS (the accelerometer says it hasn't moved),
+	  so this is a ~0.04 mAh check-in. Keep it below the backend's
+	  "tracker silent" alert for our collars (5 h, devices.silent_after_s).
 
 config TRACKER_GNSS_TIMEOUT_S
 	int "GNSS fix timeout (seconds)"
@@ -58,6 +62,51 @@ config TRACKER_GNSS_TIMEOUT_S
 config TRACKER_AGNSS_WAIT_S
 	int "Max wait for A-GNSS assistance data (seconds)"
 	default 20
+
+config TRACKER_GNSS_NOSKY_S
+	int "Give up GNSS early without sky (seconds, 0 = never)"
+	default 15
+	range 0 120
+	help
+	  If after this many seconds of searching fewer than 3 satellites are
+	  received at TRACKER_GNSS_NOSKY_CN0 or better, the pet is indoors (or
+	  under a car): stop instead of burning the whole GNSS timeout. Outdoors
+	  with A-GNSS a fix usually comes in 2-15 s, so a real fix is not lost.
+
+config TRACKER_GNSS_NOSKY_CN0
+	int "Weakest satellite signal that still counts (dB-Hz)"
+	default 25
+	range 15 40
+
+config TRACKER_HOME_BATCH
+	int "At home, upload positions in groups of"
+	default 4
+	range 1 8
+	help
+	  With home zones from the backend, positions inside a zone wait and go
+	  up together. Leaving or entering a zone, positions outside, lost mode
+	  and the first contact after boot are always uploaded at once.
+
+config TRACKER_HOME_MAX_AGE_S
+	int "At home, upload at least every (seconds)"
+	default 3600
+
+config TRACKER_CONTACT_MAX_S
+	int "Contact the backend at least every (seconds)"
+	default 7200
+	help
+	  Even with nothing new: a heartbeat with the battery level, a chance to
+	  receive settings, and it keeps the backend's "tracker silent" alert
+	  (after 3 h) quiet. Lost mode and settings changes therefore reach a
+	  collar resting at home within this time at worst.
+
+config TRACKER_COVERAGE_AWARE
+	bool "Hold routine uploads while the modem predicts an expensive session"
+	default y
+	help
+	  Uses the modem's connection evaluation (energy estimate). In very poor
+	  coverage a session can cost several times the normal energy; routine
+	  positions then wait for better coverage, within TRACKER_CONTACT_MAX_S.
 
 config TRACKER_BACKLOG_SIZE
 	int "Number of fixes buffered while out of coverage"

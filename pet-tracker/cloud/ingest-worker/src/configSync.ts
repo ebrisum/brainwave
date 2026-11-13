@@ -22,6 +22,19 @@ export const collarConfigSchema = z
     night_start_utc_min: z.number().int().gte(0).lte(1439),
     night_end_utc_min: z.number().int().gte(0).lte(1439),
     night_interval_s: z.number().int().gte(60).lte(3600),
+    /** Home zones: centre in micro-degrees, radius in m (firmware batches at home). */
+    zones: z
+      .array(
+        z
+          .object({
+            la: z.number().int().gte(-90_000_000).lte(90_000_000),
+            lo: z.number().int().gte(-180_000_000).lte(180_000_000),
+            r: z.number().int().gte(10).lte(5000),
+          })
+          .strict(),
+      )
+      .max(4)
+      .optional(),
   })
   .strict();
 

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { AgnssClient, RateLimiter } from "../src/agnss.ts";
-import { parseTopic, splitAgnssTypes, validateAgnssRequest, validateTelemetry } from "../src/schema.ts";
+import {
+  parseTopic, splitAgnssTypes, validateAgnssRequest, validateBatch, validateHeartbeat, validateTelemetry,
+} from "../src/schema.ts";
 
 const ID = "pt-351234567890123";
 const good = { device_id: ID, lat: 52.379012, lng: 4.899512, batt: 87, accuracy: 6.2, ts: 1_760_620_000, seq: 42 };
@@ -14,6 +16,8 @@ test("topics: identity comes from the topic", () => {
   assert.equal(parseTopic(`pt/v1/${ID}/down/config`), null);
   assert.equal(parseTopic("pt/v1/pt-1/telemetry"), null);
   assert.equal(parseTopic(`pt/v1/${ID}/telemetry/extra`), null);
+  assert.deepEqual(parseTopic(`pt/v1/${ID}/telemetry/batch`), { deviceId: ID, kind: "batch" });
+  assert.deepEqual(parseTopic(`pt/v1/${ID}/telemetry/heartbeat`), { deviceId: ID, kind: "heartbeat" });
 });
 
 test("telemetry: the firmware payload is accepted", () => {
@@ -105,4 +109,41 @@ test("collar config: database notification becomes a retained downlink", () => {
   assert.equal(toDownlink(JSON.stringify({ device_uid: ID, config: { ...cfg, interval_s: 5 } })), null, "out of range");
   assert.equal(toDownlink("{"), null, "invalid JSON");
   assert.equal(toDownlink(undefined), null);
+});
+
+test("batch: the firmware's compact batch is accepted, fix by fix", () => {
+  // Exactly what firmware/src/cloud.c cloud_publish_fixes() emits.
+  const raw = `{"device_id":"${ID}","fixes":[[52.379012,4.899512,6.2,87,1760620000,42],[52.379100,4.899600,8.0,87,1760620900,43]]}`;
+  const v = validateBatch(ID, buf(raw));
+  assert.ok(v.ok, v.ok ? "" : v.reason);
+  assert.equal(v.value.fixes.length, 2);
+  assert.deepEqual(v.value.fixes[1], { device_id: ID, lat: 52.3791, lng: 4.8996, accuracy: 8, batt: 87, ts: 1760620900, seq: 43 });
+});
+
+test("batch: bad fixes are dropped, bad shape or identity rejects the whole message", () => {
+  const v = validateBatch(ID, buf({ device_id: ID, fixes: [[52.3, 4.9, 6, 80, 1760620000, 1], [0, 0, 6, 80, 1760620000, 2], [91, 4.9, 6, 80, 1760620000, 3]] }));
+  assert.ok(v.ok);
+  assert.equal(v.value.fixes.length, 1);
+  assert.equal(v.value.dropped, 2);
+  assert.equal(validateBatch(ID, buf({ device_id: "pt-999999999999999", fixes: [[52.3, 4.9, 6, 80, 1760620000, 1]] })).ok, false);
+  assert.equal(validateBatch(ID, buf({ device_id: ID, fixes: [] })).ok, false);
+  assert.equal(validateBatch(ID, buf({ device_id: ID, fixes: [[52.3, 4.9]] })).ok, false);
+  assert.equal(validateBatch(ID, buf({ device_id: ID, fixes: Array(17).fill([52.3, 4.9, 6, 80, 1760620000, 1]) })).ok, false);
+});
+
+test("heartbeat: battery and the reason there is no fix", () => {
+  const raw = `{"device_id":"${ID}","batt":64,"gnss":"no_sky"}`;
+  const v = validateHeartbeat(ID, buf(raw));
+  assert.ok(v.ok, v.ok ? "" : v.reason);
+  assert.equal(validateHeartbeat(ID, buf({ device_id: ID, batt: 64, gnss: "napping" })).ok, false);
+  assert.equal(validateHeartbeat(ID, buf({ device_id: "pt-999999999999999", batt: 64 })).ok, false);
+});
+
+test("collar config: home zones are passed on to the collar", () => {
+  const cfg = {
+    interval_s: 900, lost_mode: false, night_mode: false, night_start_utc_min: 1140, night_end_utc_min: 300,
+    night_interval_s: 300, zones: [{ la: 52379000, lo: 4899500, r: 40 }],
+  };
+  assert.deepEqual(toDownlink(JSON.stringify({ device_uid: ID, config: cfg })), { topic: `pt/v1/${ID}/down/config`, payload: JSON.stringify(cfg) });
+  assert.equal(toDownlink(JSON.stringify({ device_uid: ID, config: { ...cfg, zones: [{ la: 52379000, lo: 4899500, r: 5 }] } })), null, "zone too small");
 });

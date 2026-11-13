@@ -11,6 +11,7 @@ enum location_evt {
 	LOCATION_EVT_FIX,           /* valid fix available: location_fix_get() */
 	LOCATION_EVT_TIMEOUT,       /* GNSS gave up after the configured retry time */
 	LOCATION_EVT_AGNSS_NEEDED,  /* modem asks for assistance: location_agnss_request() */
+	LOCATION_EVT_NO_SKY,        /* searched TRACKER_GNSS_NOSKY_S without usable satellites */
 };
 
 int location_init(void);
@@ -19,6 +20,9 @@ int location_init(void);
 int location_fix_start(uint16_t timeout_s);
 
 int location_stop(void);
+
+/* A-GNSS was just injected: restart the no-sky clock for this search. */
+void location_assistance_injected(void);
 
 /* Wait for the next GNSS event of interest. */
 enum location_evt location_wait(k_timeout_t timeout);

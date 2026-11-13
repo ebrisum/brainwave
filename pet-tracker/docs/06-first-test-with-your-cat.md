@@ -134,6 +134,8 @@ To test the "tracker silent" alert quickly: stop Traccar Client and run
    | APN | `iot.1nce.net` | *from the manual* |
    | Server | `<server ip or domain>`, port `5030`, TCP | *from the manual* |
    | Interval | 300 s | *from the manual* |
+   | Report only while moving / sleep when still | on (biggest battery saver) | *from the manual* |
+   | Heartbeat while still | every 2–3 h (below the 3 h "tracker silent" alert) | *from the manual* |
 
 3. Register it with its IMEI (on the box/label) and the SIM's ICCID:
    `861234567890123,MT710,8988…` in `trackers.csv`, run `provision.mjs`, claim it in the app.

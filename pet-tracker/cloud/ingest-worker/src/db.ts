@@ -26,8 +26,8 @@ export class TelemetryStore {
   }
 
   /**
-   * The role behind DATABASE_URL can do exactly one thing: EXECUTE
-   * public.ingest_telemetry. Ownership, geofencing and de-duplication are
+   * The role behind DATABASE_URL can only EXECUTE public.ingest_telemetry
+   * and public.tracker_heartbeat. Ownership, geofencing and de-duplication are
    * enforced inside that function.
    */
   async ingest(deviceId: string, t: Telemetry): Promise<IngestResult> {
@@ -46,6 +46,15 @@ export class TelemetryStore {
         await new Promise((r) => setTimeout(r, 200 * 2 ** attempt));
       }
     }
+  }
+
+  /** A check-in without a new position (needs EXECUTE on tracker_heartbeat, migration 0900). */
+  async heartbeat(deviceId: string, battPct: number): Promise<string> {
+    const res = await this.#pool.query<{ result: { status: string } }>(
+      `select public.tracker_heartbeat($1, $2::smallint) as result`,
+      [deviceId, battPct],
+    );
+    return res.rows[0]!.result.status;
   }
 
   async healthy(): Promise<boolean> {

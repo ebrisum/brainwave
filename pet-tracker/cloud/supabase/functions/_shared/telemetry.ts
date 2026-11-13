@@ -36,3 +36,40 @@ export function validateTelemetry(
   }
   return { ok: true, value: parsed.data };
 }
+
+/** Several fixes as compact arrays: {"device_id","fixes":[[lat,lng,accuracy,batt,ts,seq],…]}. */
+export const batchSchema = z
+  .object({
+    device_id: z.string().regex(DEVICE_ID_RE),
+    fixes: z.array(z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()])).min(1).max(16),
+  })
+  .strict();
+
+export function validateBatch(
+  deviceId: string,
+  payload: unknown,
+): { ok: true; value: Telemetry[]; dropped: number } | { ok: false; reason: string } {
+  if (!DEVICE_ID_RE.test(deviceId)) return { ok: false, reason: "invalid topic device id" };
+  const parsed = batchSchema.safeParse(payload);
+  if (!parsed.success) {
+    return { ok: false, reason: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
+  }
+  if (parsed.data.device_id !== deviceId) {
+    return { ok: false, reason: "device_id does not match authenticated topic identity" };
+  }
+  const value: Telemetry[] = [];
+  for (const [lat, lng, accuracy, batt, ts, seq] of parsed.data.fixes) {
+    const one = telemetrySchema.safeParse({ device_id: deviceId, lat, lng, accuracy, batt, ts, seq });
+    if (one.success) value.push(one.data);
+  }
+  return { ok: true, value, dropped: parsed.data.fixes.length - value.length };
+}
+
+/** "Alive, no new position". */
+export const heartbeatSchema = z
+  .object({
+    device_id: z.string().regex(DEVICE_ID_RE),
+    batt: z.number().int().gte(0).lte(100),
+    gnss: z.enum(["still", "no_sky", "timeout", "skipped"]).optional(),
+  })
+  .strict();

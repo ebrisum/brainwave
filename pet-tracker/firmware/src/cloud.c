@@ -47,6 +47,8 @@ static uint8_t payload_buf[DOWNLINK_MAX_LEN + 1];
 
 static char client_id[TRACKER_DEVICE_ID_LEN];
 static char topic_telemetry[TOPIC_LEN];
+static char topic_batch[TOPIC_LEN];
+static char topic_heartbeat[TOPIC_LEN];
 static char topic_agnss_req[TOPIC_LEN];
 static char topic_down_filter[TOPIC_LEN];
 static char topic_down_agnss[TOPIC_LEN];
@@ -89,6 +91,21 @@ static uint16_t message_id_next(void)
 /* Downlink handling                                                         */
 /* ------------------------------------------------------------------------- */
 
+/* Home zone: centre in micro-degrees, radius in metres (short keys keep
+ * the retained config small).
+ */
+struct zone_msg {
+	int32_t la;
+	int32_t lo;
+	int32_t r;
+};
+
+static const struct json_obj_descr zone_descr[] = {
+	JSON_OBJ_DESCR_PRIM(struct zone_msg, la, JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct zone_msg, lo, JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct zone_msg, r, JSON_TOK_NUMBER),
+};
+
 struct config_msg {
 	int32_t interval_s;
 	bool lost_mode;
@@ -96,6 +113,8 @@ struct config_msg {
 	int32_t night_start_utc_min;
 	int32_t night_end_utc_min;
 	int32_t night_interval_s;
+	struct zone_msg zones[POLICY_MAX_ZONES];
+	size_t zones_len;
 };
 
 static const struct json_obj_descr config_descr[] = {
@@ -105,6 +124,8 @@ static const struct json_obj_descr config_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct config_msg, night_start_utc_min, JSON_TOK_NUMBER),
 	JSON_OBJ_DESCR_PRIM(struct config_msg, night_end_utc_min, JSON_TOK_NUMBER),
 	JSON_OBJ_DESCR_PRIM(struct config_msg, night_interval_s, JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_OBJ_ARRAY(struct config_msg, zones, POLICY_MAX_ZONES, zones_len,
+				 zone_descr, ARRAY_SIZE(zone_descr)),
 };
 
 struct fota_msg {
@@ -145,6 +166,21 @@ static void on_config(char *json, size_t len)
 		cfg.night_start_utc_min = (uint16_t)msg.night_start_utc_min;
 		cfg.night_end_utc_min = (uint16_t)msg.night_end_utc_min;
 		cfg.night_interval_s = (uint32_t)msg.night_interval_s;
+	}
+
+	/* Home zones are optional; a malformed one is skipped, not fatal. */
+	if (fields & BIT(6)) {
+		for (size_t i = 0; i < msg.zones_len && i < POLICY_MAX_ZONES; i++) {
+			const struct zone_msg *z = &msg.zones[i];
+
+			if (z->la < -90000000 || z->la > 90000000 || z->lo < -180000000 ||
+			    z->lo > 180000000 || z->r < 10 || z->r > 5000) {
+				continue;
+			}
+			cfg.zones[cfg.zone_count++] = (struct policy_zone){
+				.lat_e6 = z->la, .lng_e6 = z->lo, .radius_m = (uint16_t)z->r,
+			};
+		}
 	}
 
 	if (app_handlers && app_handlers->config) {
@@ -397,6 +433,8 @@ int cloud_init(const char *device_id, const struct cloud_handlers *handlers)
 
 	snprintf(client_id, sizeof(client_id), "%s", device_id);
 	snprintf(topic_telemetry, TOPIC_LEN, TOPIC_PREFIX "%s/telemetry", device_id);
+	snprintf(topic_batch, TOPIC_LEN, TOPIC_PREFIX "%s/telemetry/batch", device_id);
+	snprintf(topic_heartbeat, TOPIC_LEN, TOPIC_PREFIX "%s/telemetry/heartbeat", device_id);
 	snprintf(topic_agnss_req, TOPIC_LEN, TOPIC_PREFIX "%s/agnss/req", device_id);
 	snprintf(topic_down_filter, TOPIC_LEN, TOPIC_PREFIX "%s/down/+", device_id);
 	snprintf(topic_down_agnss, TOPIC_LEN, TOPIC_PREFIX "%s/down/agnss", device_id);
@@ -452,37 +490,26 @@ int cloud_connect(void)
 	return 0;
 }
 
-int cloud_publish_fix(const struct tracker_fix *fix)
+/* QoS 1 publish; returns after the PUBACK. */
+static int publish_qos1(const char *topic, const char *data, size_t len)
 {
-	char json[192];
-	int len;
-	int err;
-
-	len = snprintf(json, sizeof(json),
-		       "{\"device_id\":\"%s\",\"lat\":%.6f,\"lng\":%.6f,\"batt\":%u,"
-		       "\"accuracy\":%.1f,\"ts\":%lld,\"seq\":%u}",
-		       client_id, fix->lat, fix->lng, fix->batt_pct,
-		       (double)fix->accuracy_m, (long long)fix->ts, fix->seq);
-	if (len < 0 || len >= (int)sizeof(json)) {
-		return -ENOMEM;
-	}
-
 	const struct mqtt_publish_param param = {
 		.message = {
 			.topic = {
 				.topic = {
-					.utf8 = (const uint8_t *)topic_telemetry,
-					.size = strlen(topic_telemetry),
+					.utf8 = (const uint8_t *)topic,
+					.size = strlen(topic),
 				},
 				.qos = MQTT_QOS_1_AT_LEAST_ONCE,
 			},
 			.payload = {
-				.data = (uint8_t *)json,
+				.data = (uint8_t *)data,
 				.len = len,
 			},
 		},
 		.message_id = message_id_next(),
 	};
+	int err;
 
 	puback_received = false;
 	puback_expected_id = param.message_id;
@@ -493,6 +520,66 @@ int cloud_publish_fix(const struct tracker_fix *fix)
 	}
 
 	return process_until(&puback_received, 15 * MSEC_PER_SEC);
+}
+
+int cloud_publish_fix(const struct tracker_fix *fix)
+{
+	char json[192];
+	int len;
+
+	len = snprintf(json, sizeof(json),
+		       "{\"device_id\":\"%s\",\"lat\":%.6f,\"lng\":%.6f,\"batt\":%u,"
+		       "\"accuracy\":%.1f,\"ts\":%lld,\"seq\":%u}",
+		       client_id, fix->lat, fix->lng, fix->batt_pct,
+		       (double)fix->accuracy_m, (long long)fix->ts, fix->seq);
+	if (len < 0 || len >= (int)sizeof(json)) {
+		return -ENOMEM;
+	}
+
+	return publish_qos1(topic_telemetry, json, len);
+}
+
+int cloud_publish_fixes(const struct tracker_fix *fixes, size_t n)
+{
+	/* ~45 bytes per fix as a compact array instead of ~110 as an object:
+	 * one message and one PUBACK round trip for the whole group.
+	 */
+	char json[64 + CLOUD_BATCH_MAX * 64];
+	int len;
+
+	if (n == 0 || n > CLOUD_BATCH_MAX) {
+		return -EINVAL;
+	}
+
+	len = snprintf(json, sizeof(json), "{\"device_id\":\"%s\",\"fixes\":[", client_id);
+	for (size_t i = 0; i < n && len > 0 && len < (int)sizeof(json); i++) {
+		const struct tracker_fix *f = &fixes[i];
+
+		len += snprintf(json + len, sizeof(json) - len, "%s[%.6f,%.6f,%.1f,%u,%lld,%u]",
+				i ? "," : "", f->lat, f->lng, (double)f->accuracy_m, f->batt_pct,
+				(long long)f->ts, f->seq);
+	}
+	if (len > 0 && len < (int)sizeof(json)) {
+		len += snprintf(json + len, sizeof(json) - len, "]}");
+	}
+	if (len < 0 || len >= (int)sizeof(json)) {
+		return -ENOMEM;
+	}
+
+	return publish_qos1(topic_batch, json, len);
+}
+
+int cloud_publish_heartbeat(uint8_t batt_pct, const char *gnss)
+{
+	char json[96];
+	int len = snprintf(json, sizeof(json), "{\"device_id\":\"%s\",\"batt\":%u,\"gnss\":\"%s\"}",
+			   client_id, batt_pct, gnss);
+
+	if (len < 0 || len >= (int)sizeof(json)) {
+		return -ENOMEM;
+	}
+
+	return publish_qos1(topic_heartbeat, json, len);
 }
 
 int cloud_agnss_fetch(const struct nrf_modem_gnss_agnss_data_frame *need,

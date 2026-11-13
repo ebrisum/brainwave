@@ -14,4 +14,5 @@ target_sources(app PRIVATE
   src/battery.c
   src/motion.c
   src/fota.c
+  src/policy.c
 )

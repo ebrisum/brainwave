@@ -14,6 +14,8 @@
       "Action": "iot:Publish",
       "Resource": [
         "arn:aws:iot:eu-central-1:ACCOUNT_ID:topic/pt/v1/${iot:Connection.Thing.ThingName}/telemetry",
+        "arn:aws:iot:eu-central-1:ACCOUNT_ID:topic/pt/v1/${iot:Connection.Thing.ThingName}/telemetry/batch",
+        "arn:aws:iot:eu-central-1:ACCOUNT_ID:topic/pt/v1/${iot:Connection.Thing.ThingName}/telemetry/heartbeat",
         "arn:aws:iot:eu-central-1:ACCOUNT_ID:topic/pt/v1/${iot:Connection.Thing.ThingName}/agnss/req"
       ]
     },

@@ -7,7 +7,9 @@
  * Edge functions are request-scoped, so they cannot hold an MQTT subscription.
  * AWS IoT Core therefore PUSHES each message here via a Topic Rule:
  *
- *   SELECT *, topic(3) AS mqtt_device_id FROM 'pt/v1/+/telemetry'
+ *   SELECT *, topic(3) AS mqtt_device_id, topic(5) AS mqtt_kind FROM 'pt/v1/+/telemetry/#'
+ *
+ * mqtt_kind is empty for a single fix, "batch" or "heartbeat" otherwise.
  *
  * `topic(3)` is the device id from the topic, which the IoT policy binds to the
  * device certificate (${iot:Connection.Thing.ThingName}); the JSON body is never
@@ -20,7 +22,7 @@
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
-import { validateTelemetry } from "../_shared/telemetry.ts";
+import { heartbeatSchema, validateBatch, validateTelemetry } from "../_shared/telemetry.ts";
 
 const SECRET = Deno.env.get("INGEST_SHARED_SECRET") ?? "";
 const supabase = createClient(
@@ -74,9 +76,40 @@ Deno.serve(async (req) => {
     return json(200, { status: "confirmation logged" });
   }
 
-  const { mqtt_device_id: topicDeviceId, ...payload } = body;
+  const { mqtt_device_id: topicDeviceId, mqtt_kind: kind, ...payload } = body;
   if (typeof topicDeviceId !== "string") {
     return json(400, { error: "missing mqtt_device_id (check the IoT Rule SQL)" });
+  }
+
+  // pt/v1/<id>/telemetry/batch: several fixes in one message.
+  if (kind === "batch") {
+    const b = validateBatch(topicDeviceId, payload);
+    if (!b.ok) {
+      console.warn(JSON.stringify({ msg: "batch rejected", device: topicDeviceId, reason: b.reason }));
+      return json(200, { status: "rejected", reason: b.reason });
+    }
+    for (const t of b.value) {
+      const { error } = await supabase.rpc("ingest_telemetry", {
+        p_device_uid: topicDeviceId, p_lat: t.lat, p_lng: t.lng, p_accuracy_m: t.accuracy, p_battery_pct: t.batt,
+        p_seq: t.seq ?? null, p_recorded_at: t.ts !== undefined ? new Date(t.ts * 1000).toISOString() : null,
+      });
+      if (error) {
+        console.error(JSON.stringify({ msg: "ingest failed", device: topicDeviceId, error: error.message }));
+        return json(503, { error: "storage unavailable" });
+      }
+    }
+    return json(200, { status: "ok", fixes: b.value.length, dropped: b.dropped });
+  }
+
+  // pt/v1/<id>/telemetry/heartbeat: alive, no new position.
+  if (kind === "heartbeat") {
+    const h = heartbeatSchema.safeParse(payload);
+    if (!h.success || h.data.device_id !== topicDeviceId) {
+      return json(200, { status: "rejected", reason: "invalid heartbeat" });
+    }
+    const { error } = await supabase.rpc("tracker_heartbeat", { p_device_uid: topicDeviceId, p_battery_pct: h.data.batt });
+    if (error) return json(503, { error: "storage unavailable" });
+    return json(200, { status: "ok" });
   }
 
   const v = validateTelemetry(topicDeviceId, payload);

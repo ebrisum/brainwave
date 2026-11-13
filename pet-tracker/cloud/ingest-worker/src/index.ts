@@ -21,7 +21,7 @@ import { loadConfig } from "./config.ts";
 import { ConfigSync } from "./configSync.ts";
 import { TelemetryStore } from "./db.ts";
 import { log, setLogLevel } from "./log.ts";
-import { parseTopic, validateAgnssRequest, validateTelemetry } from "./schema.ts";
+import { parseTopic, validateAgnssRequest, validateBatch, validateHeartbeat, validateTelemetry } from "./schema.ts";
 
 const cfg = loadConfig();
 setLogLevel(cfg.LOG_LEVEL);
@@ -37,6 +37,8 @@ const counters = { ok: 0, duplicate: 0, rejected: 0, failed: 0, agnss: 0 };
 
 const SUBSCRIPTIONS = [
   `$share/${cfg.MQTT_SHARE_GROUP}/pt/v1/+/telemetry`,
+  `$share/${cfg.MQTT_SHARE_GROUP}/pt/v1/+/telemetry/batch`,
+  `$share/${cfg.MQTT_SHARE_GROUP}/pt/v1/+/telemetry/heartbeat`,
   `$share/${cfg.MQTT_SHARE_GROUP}/pt/v1/+/agnss/req`,
 ];
 
@@ -91,6 +93,39 @@ async function handle(topic: string, payload: Buffer): Promise<void> {
     // Geofence notifications: rows land in public.geofence_events, which the
     // apps receive via Supabase Realtime; push (APNs/FCM) is fanned out by a
     // Database Webhook on that table - nothing to do here.
+    return;
+  }
+
+  if (parsed.kind === "batch") {
+    const v = validateBatch(parsed.deviceId, payload);
+    if (!v.ok) {
+      counters.rejected++;
+      log.warn("batch rejected", { device: parsed.deviceId, reason: v.reason });
+      return;
+    }
+    // In order, so "last location" and zone transitions follow the walk.
+    const statuses: string[] = [];
+    for (const fix of v.value.fixes) {
+      const result = await store.ingest(parsed.deviceId, fix);
+      statuses.push(result.status);
+      if (result.status === "ok") counters.ok++;
+      else if (result.status === "duplicate") counters.duplicate++;
+      else counters.rejected++;
+    }
+    counters.rejected += v.value.dropped;
+    log.info("telemetry batch", { device: parsed.deviceId, fixes: v.value.fixes.length, dropped: v.value.dropped, statuses });
+    return;
+  }
+
+  if (parsed.kind === "heartbeat") {
+    const v = validateHeartbeat(parsed.deviceId, payload);
+    if (!v.ok) {
+      counters.rejected++;
+      log.warn("heartbeat rejected", { device: parsed.deviceId, reason: v.reason });
+      return;
+    }
+    const status = await store.heartbeat(parsed.deviceId, v.value.batt);
+    log.info("heartbeat", { device: parsed.deviceId, status, gnss: v.value.gnss });
     return;
   }
 

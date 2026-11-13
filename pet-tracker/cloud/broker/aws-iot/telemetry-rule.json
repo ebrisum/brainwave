@@ -1,7 +1,7 @@
 {
-  "sql": "SELECT *, topic(3) AS mqtt_device_id FROM 'pt/v1/+/telemetry'",
+  "sql": "SELECT *, topic(3) AS mqtt_device_id, topic(5) AS mqtt_kind FROM 'pt/v1/+/telemetry/#'",
   "awsIotSqlVersion": "2016-03-23",
-  "description": "Push tracker telemetry to the Supabase Edge Function (EU).",
+  "description": "Push tracker telemetry (single, batch, heartbeat) to the Supabase Edge Function (EU).",
   "ruleDisabled": false,
   "actions": [
     {
