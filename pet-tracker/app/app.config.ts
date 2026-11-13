@@ -13,6 +13,11 @@ const CAMERA_TEXT = "Scan the QR code on your cat's collar, or take a profile ph
 const BACKGROUND_TEXT =
   'When this phone is used as a cat tracker, Cat Tracker keeps reporting its position in the background so the cat stays visible on the map.';
 
+// The Expo project (expo.dev/accounts/ebrisum/projects/cat-tracker). Not secret;
+// set in code so `eas update` finds it even when .env isn't loaded.
+const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID ?? '67188625-f671-424e-bdb0-8b5938797859';
+const EXPO_OWNER = process.env.EXPO_OWNER ?? 'ebrisum';
+
 const googleIosUrlScheme = process.env.GOOGLE_IOS_URL_SCHEME; // com.googleusercontent.apps.<id>
 const googleServicesFile =
   process.env.GOOGLE_SERVICES_JSON ?? (existsSync('./google-services.json') ? './google-services.json' : undefined);
@@ -25,7 +30,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   version: '0.2.0',
   orientation: 'portrait',
   userInterfaceStyle: 'automatic',
-  ...(process.env.EXPO_OWNER ? { owner: process.env.EXPO_OWNER } : {}),
+  owner: EXPO_OWNER,
   ios: {
     bundleIdentifier: process.env.IOS_BUNDLE_ID ?? 'eu.example.cattracker',
     supportsTablet: false,
@@ -85,14 +90,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ],
   // Over-the-air updates: `eas update` publishes the JS bundle to this URL,
   // and Expo Go (or a dev build) opens it from a link or QR code.
-  ...(process.env.EAS_PROJECT_ID
-    ? {
-        updates: { url: `https://u.expo.dev/${process.env.EAS_PROJECT_ID}` },
-        // Expo Go only loads updates built for its own SDK runtime.
-        runtimeVersion: { policy: 'sdkVersion' } as const,
-      }
-    : {}),
+  updates: { url: `https://u.expo.dev/${EAS_PROJECT_ID}` },
+  // Expo Go only loads updates built for its own SDK runtime.
+  runtimeVersion: { policy: 'sdkVersion' },
   extra: {
-    eas: process.env.EAS_PROJECT_ID ? { projectId: process.env.EAS_PROJECT_ID } : undefined,
+    eas: { projectId: EAS_PROJECT_ID },
   },
 });
