@@ -45,7 +45,7 @@ docs/07-selling-trackers.md          labels, scanning, who has which tracker, re
 | Area | How | Result |
 |---|---|---|
 | Firmware compiles | `west build` for `nrf9160dk/nrf9160/ns` (production + debug) and `thingy91/nrf9160/ns` with NCS v3.4.1 / Zephyr SDK 1.0.1 | ✅ no app warnings; signed + encrypted DFU image produced |
-| Database | `cloud/db-tests/run.sh` on PostgreSQL 16 + PostGIS 3.4 | ✅ 186 checks |
+| Database | `cloud/db-tests/run.sh` on PostgreSQL 16 + PostGIS 3.4 | ✅ 189 checks |
 | Mobile app | `tsc`, unit tests, `expo export` web + Android + iOS, headless-Chromium walkthrough with simulated GPS | ✅ |
 | Worker | `npm test`, `tsc --noEmit` | ✅ 8/8 |
 | End to end | Mosquitto (mTLS + ACL) → worker → Postgres (TLS, least-privilege role) | ✅ including spoofing / no-cert rejection |
