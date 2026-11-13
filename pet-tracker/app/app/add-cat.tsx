@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
@@ -19,13 +19,15 @@ export default function AddCat() {
   const { backend, refresh, setTrackedCatId } = useApp();
   const [name, setName] = useState('');
   const [color, setColor] = useState<string>(CAT_COLORS[0]);
-  const [source, setSource] = useState<Source>('phone');
+  // Scanning the QR code on a collar's label opens this screen with it filled in.
+  const fromLabel = useLocalSearchParams<{ device?: string; code?: string }>();
+  const [source, setSource] = useState<Source>(fromLabel.device ? 'collar' : 'phone');
   // Off by default: starting GPS is a choice, not a side effect of adding a cat.
   const [trackNow, setTrackNow] = useState(false);
   // A phone may only be used as a tracker with its owner's agreement.
   const [consent, setConsent] = useState(false);
-  const [deviceUid, setDeviceUid] = useState('');
-  const [claimCode, setClaimCode] = useState('');
+  const [deviceUid, setDeviceUid] = useState(fromLabel.device ?? '');
+  const [claimCode, setClaimCode] = useState(fromLabel.code ?? '');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [households, setHouseholds] = useState<Household[]>([]);
   const [householdId, setHouseholdId] = useState<string | null>(null);
@@ -44,7 +46,7 @@ export default function AddCat() {
 
   const input = [styles.input, { backgroundColor: t.surfaceAlt, color: t.text, borderColor: t.border }];
   const canSave =
-    source === 'phone' ? name.trim().length > 0 && consent : deviceUid.trim().length > 3 && claimCode.trim().length >= 10;
+    source === 'phone' ? name.trim().length > 0 && consent : deviceUid.trim().length > 3 && claimCode.replace(/[\s-]/g, '').length >= 10;
 
   const save = async () => {
     setBusy(true);

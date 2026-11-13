@@ -18,11 +18,14 @@ import { CatMap } from '../../src/components/CatMap';
 import type { MapLayer } from '../../src/components/CatMap.types';
 import { HEAT_LEGEND } from '../../src/components/heat';
 import { Scrubber } from '../../src/components/Scrubber';
+import { TodayCard } from '../../src/components/TodayCard';
 import { TrackerBanner } from '../../src/components/TrackerBanner';
+import { TrackerHealthCard } from '../../src/components/TrackerHealthCard';
 import { Button, Card, CatAvatar, ErrorText, IconButton, Pill, SectionTitle, Segmented } from '../../src/components/ui';
 import { usePhotoUrl } from '../../src/components/usePhotoUrl';
 import { ask, messageOf } from '../../src/dialogs';
 import { distanceM, formatDistance, inNightWindow, isLive, relativeTime } from '../../src/geo';
+import { placeLine } from '../../src/place';
 import { fmtDuration, shortDate } from '../../src/time';
 import { fonts, radius, space, useTheme } from '../../src/theme';
 
@@ -147,6 +150,7 @@ export default function CatScreen() {
   }
 
   const owner = isOwner(cat, backend);
+  const place = placeLine(cat);
   const isTracked = trackedCatId === cat.id;
   const live = isLive(cat.lastFixAt, isTracked || cat.lostMode ? 5 * 60 : 20 * 60);
   const lowBattery = cat.lastBatteryPct !== null && cat.lastBatteryPct > 0 && cat.lastBatteryPct < 20;
@@ -378,7 +382,16 @@ export default function CatScreen() {
               <CatAvatar name={cat.name} color={cat.color} size={72} photoUrl={photoUrl} ring={cat.lostMode ? t.danger : undefined} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.heroName, { color: t.text }]} numberOfLines={1}>{cat.name}</Text>
-                <Text style={[styles.big, { color: t.text }]}>{cat.lastFixAt ? relativeTime(cat.lastFixAt) : 'No location yet'}</Text>
+                {place ? (
+                  <>
+                    <Text style={[styles.big, { color: place.inside ? t.live : t.text }]} numberOfLines={1}>{place.title}</Text>
+                    <Text style={{ color: t.textMuted }} numberOfLines={1}>
+                      {[place.detail, cat.lastFixAt ? `seen ${relativeTime(cat.lastFixAt)}` : null].filter(Boolean).join(' · ')}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={[styles.big, { color: t.text }]}>{cat.lastFixAt ? relativeTime(cat.lastFixAt) : 'No location yet'}</Text>
+                )}
               </View>
               {owner && (
                 <Button
@@ -464,6 +477,9 @@ export default function CatScreen() {
               <ErrorText>{errors.tracker}</ErrorText>
             </Card>
           )}
+
+          <TodayCard cat={cat} events={events} activity={activity} hasZones={zones.length > 0} />
+          <TrackerHealthCard cat={cat} />
 
           <Segmented<Tab> options={TABS.map((x) => (x.value === 'alerts' && events.length ? { value: x.value, label: `Alerts (${events.length})` } : x))} value={tab} onChange={setTab} />
 

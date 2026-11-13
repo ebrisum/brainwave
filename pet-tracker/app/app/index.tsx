@@ -18,6 +18,7 @@ import { TrackerBanner } from '../src/components/TrackerBanner';
 import { Button, CatAvatar, Pill } from '../src/components/ui';
 import { catBadge, usePhotoUrl } from '../src/components/usePhotoUrl';
 import { isLive, relativeTime } from '../src/geo';
+import { placeLine } from '../src/place';
 import { fonts, radius, space, useTheme } from '../src/theme';
 
 /** Zone alerts fade out after this long; they stay in the cat's alert list. */
@@ -210,7 +211,7 @@ function SelectedCat({ cat, now, onOpen, onClose }: { cat: Cat; now: number; onO
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={[styles.selectedName, { color: t.text }]} numberOfLines={1}>{cat.name}</Text>
           <Text style={{ color: live ? t.live : t.textMuted, fontFamily: fonts.bodyMedium }} numberOfLines={1}>
-            {cat.lostMode ? 'Lost mode · ' : ''}{live ? 'Live' : 'Last seen'} · {relativeTime(cat.lastFixAt, now)}
+            {cat.lostMode ? 'Lost mode · ' : ''}{placeLine(cat)?.line ?? (live ? 'Live' : 'Last seen')} · {relativeTime(cat.lastFixAt, now)}
             {cat.lastBatteryPct ? ` · ${cat.lastBatteryPct}%` : ''}
           </Text>
           <View style={{ flexDirection: 'row' }}>

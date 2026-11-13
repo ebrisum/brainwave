@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Cat } from '../backend/types';
 import { isLive, relativeTime } from '../geo';
+import { placeLine } from '../place';
 import { fonts, space, useTheme } from '../theme';
 import { AccessPill } from './AccessPill';
 import { CatAvatar, Pill } from './ui';
@@ -14,7 +15,9 @@ export function CatRow({ cat, trackedByPhone, onPress }: { cat: Cat; trackedByPh
   const live = isLive(cat.lastFixAt, trackedByPhone || cat.lostMode ? 5 * 60 : 20 * 60);
   const hasBattery = cat.lastBatteryPct !== null && cat.lastBatteryPct > 0;
   const lowBattery = hasBattery && cat.lastBatteryPct! < 20;
-  const status = cat.lastFixAt ? `${live ? 'Live' : 'Last seen'} · ${relativeTime(cat.lastFixAt)}` : 'Waiting for first location';
+  const place = placeLine(cat);
+  const seen = cat.lastFixAt ? `${live ? 'Live' : 'Last seen'} · ${relativeTime(cat.lastFixAt)}` : 'Waiting for first location';
+  const status = place && cat.lastFixAt ? `${place.line} · ${relativeTime(cat.lastFixAt)}` : seen;
 
   return (
     <Pressable

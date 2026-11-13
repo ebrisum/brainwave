@@ -1,0 +1,28 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE properties SYSTEM 'http://java.sun.com/dtd/properties.dtd'>
+<!-- Template: configure.sh fills in the placeholders and writes traccar.local.xml (not committed). -->
+<properties>
+    <!-- Traccar's own small database (devices, its copy of positions). Ours is Supabase. -->
+    <entry key='database.driver'>org.h2.Driver</entry>
+    <entry key='database.url'>jdbc:h2:./data/database</entry>
+    <entry key='database.user'>sa</entry>
+    <entry key='database.password'></entry>
+
+    <!-- Only the protocols we use: Mictrack trackers and the Traccar Client app. -->
+    <entry key='protocols.enable'>mictrack,osmand</entry>
+    <entry key='mictrack.port'>5030</entry>
+    <entry key='osmand.port'>5055</entry>
+
+    <!-- New trackers appear by themselves; Supabase only stores registered, claimed ones. -->
+    <entry key='database.registerUnknown'>true</entry>
+
+    <!-- Forward every position to Supabase. -->
+    <entry key='forward.enable'>true</entry>
+    <entry key='forward.json'>true</entry>
+    <entry key='forward.url'>__SUPABASE_URL__/functions/v1/traccar-ingest</entry>
+    <entry key='forward.header'>x-pt-ingest-secret: __TRACCAR_FORWARD_SECRET__</entry>
+    <entry key='forward.retry.enable'>true</entry>
+
+    <!-- Keep Traccar's own history short; Supabase is the record. -->
+    <entry key='database.historyDays'>30</entry>
+</properties>

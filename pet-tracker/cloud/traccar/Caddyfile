@@ -1,0 +1,4 @@
+{$TRACCAR_DOMAIN} {
+	encode gzip
+	reverse_proxy traccar:8082
+}

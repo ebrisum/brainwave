@@ -41,6 +41,32 @@ export interface Cat {
   access: CatAccess;
   /** For a cat sitter: when access ends (null: until the owner stops it). */
   sitterUntil: string | null;
+  /** Last check-in of the tracker, with or without a position. */
+  lastSeenAt: string | null;
+  /** In one of its zones, or how far from the nearest (null: no zones or no position yet). */
+  place: CatPlace | null;
+}
+
+export interface CatPlace {
+  /** The zone the cat is in, as decided for alerts (null: outside all zones). */
+  zoneName: string | null;
+  nearestZoneName: string | null;
+  /** Distance to the edge of the nearest zone. */
+  nearestZoneM: number | null;
+}
+
+export interface TrackerHealth {
+  lastSeenAt: string | null;
+  lastFixAt: string | null;
+  batteryPct: number | null;
+  /** Battery use per day since the last charge (null: not enough data yet). */
+  drainPctPerDay: number | null;
+  daysLeft: number | null;
+  fixes24h: number;
+  reportIntervalS: number;
+  /** Collar hasn't checked in for longer than silentAfterS. */
+  silent: boolean;
+  silentAfterS: number;
 }
 
 export interface TrackPoint {
@@ -168,6 +194,7 @@ export interface Backend {
   getHeatmap(catId: string, sinceIso: string): Promise<HeatCell[]>;
   getActivity(catId: string, days: number): Promise<ActivityDay[]>;
 
+  getTrackerHealth(catId: string): Promise<TrackerHealth>;
   getZones(catId: string): Promise<HomeZone[]>;
   getHouseholdZones(householdId: string): Promise<HomeZone[]>;
   addZone(target: ZoneTarget, name: string, lat: number, lng: number, radiusM: number): Promise<void>;

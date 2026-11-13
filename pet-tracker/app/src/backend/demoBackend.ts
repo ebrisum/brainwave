@@ -3,7 +3,7 @@
  * any cat you mark as "tracked by this phone" follows the phone's real GPS.
  * Zone alerts, heatmap and activity use the same rules as the database.
  */
-import { binHeatmap, estimateActivity, insideZone, offset } from '../geo';
+import { binHeatmap, distanceM, estimateActivity, insideZone, offset } from '../geo';
 import {
   DEFAULT_NIGHT,
   type ActivityDay,
@@ -12,6 +12,7 @@ import {
   type CatEvent,
   type HeatCell,
   type HomeZone,
+  type TrackerHealth,
   type ZoneTarget,
   type CatSitter,
   type Household,
@@ -68,6 +69,7 @@ export class DemoBackend implements Backend {
       lastLat: null, lastLng: null, lastAccuracyM: null, lastBatteryPct: null, lastFixAt: null,
       lostMode: false, lostModeSince: null, night: { ...DEFAULT_NIGHT }, photoPath: null,
       householdId: DEMO_HOUSEHOLD, householdName: 'Demo household', access: 'owner', sitterUntil: null,
+      lastSeenAt: null, place: null,
     };
   }
 
@@ -115,7 +117,21 @@ export class DemoBackend implements Backend {
   }
 
   #emitCat(cat: Cat) {
-    for (const l of this.#listeners) l.onCat({ ...cat, night: { ...cat.night } });
+    for (const l of this.#listeners) l.onCat(this.#view(cat));
+  }
+
+  /** A copy with its place relative to its zones (same rule as get_cat_status). */
+  #view(cat: Cat): Cat {
+    const zones = this.#zonesFor(cat.id);
+    let place: Cat['place'] = null;
+    if (zones.length && cat.lastLat != null && cat.lastLng != null) {
+      const inside = zones.find((z) => this.#zoneState.get(`${cat.id}:${z.id}`));
+      const nearest = zones
+        .map((z) => ({ z, m: Math.max(0, distanceM(z.lat, z.lng, cat.lastLat!, cat.lastLng!) - z.radiusM) }))
+        .sort((a, b) => a.m - b.m)[0]!;
+      place = { zoneName: inside?.name ?? null, nearestZoneName: nearest.z.name, nearestZoneM: nearest.m };
+    }
+    return { ...cat, night: { ...cat.night }, lastSeenAt: cat.lastFixAt, place };
   }
 
   #zonesFor(catId: string): HomeZone[] {
@@ -172,7 +188,7 @@ export class DemoBackend implements Backend {
   };
 
   async listCats(): Promise<Cat[]> {
-    return [...this.#cats.values()].map((c) => ({ ...c, night: { ...c.night } }));
+    return [...this.#cats.values()].map((c) => this.#view(c));
   }
 
   subscribe(handlers: LiveHandlers): () => void {
@@ -275,6 +291,19 @@ export class DemoBackend implements Backend {
     const track = await this.getTrack(catId, new Date(Date.now() - days * 86_400_000).toISOString());
     const home = this.#zonesFor(catId)[0] ?? null;
     return estimateActivity(track, { nightStartMin: cat.night.startMin, nightEndMin: cat.night.endMin, home });
+  }
+
+  async getTrackerHealth(catId: string): Promise<TrackerHealth> {
+    const cat = this.#cat(catId);
+    const track = this.#tracks.get(catId) ?? [];
+    const dayAgo = Date.now() - 86_400_000;
+    // The simulation drains slowly; show a plausible collar estimate.
+    const drain = cat.kind === 'collar' ? 9 : null;
+    return {
+      lastSeenAt: cat.lastFixAt, lastFixAt: cat.lastFixAt, batteryPct: cat.lastBatteryPct,
+      drainPctPerDay: drain, daysLeft: drain && cat.lastBatteryPct != null ? cat.lastBatteryPct / drain : null,
+      fixes24h: track.filter((p) => Date.parse(p.at) > dayAgo).length, reportIntervalS: 300, silent: false, silentAfterS: 10_800,
+    };
   }
 
   async getZones(catId: string): Promise<HomeZone[]> {

@@ -1,0 +1,5 @@
+.env
+traccar.local.xml
+data/
+logs/
+caddy-data/

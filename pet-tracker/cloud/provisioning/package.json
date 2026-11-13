@@ -1,0 +1,16 @@
+{
+  "name": "pet-tracker-provisioning",
+  "private": true,
+  "type": "module",
+  "description": "Register ready-made trackers in Supabase and print claim-code labels.",
+  "scripts": {
+    "provision": "node provision.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  }
+}

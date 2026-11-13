@@ -15,7 +15,9 @@ import type {
   CatEvent,
   CatSitter,
   HeatCell,
+  CatPlace,
   HomeZone,
+  TrackerHealth,
   ZoneTarget,
   Household,
   HouseholdRole,
@@ -46,6 +48,7 @@ interface DeviceRow {
   night_interval_s: number;
   photo_path: string | null;
   household_id: string | null;
+  last_seen_at: string | null;
 }
 
 /** How the signed-in person sees a cat (from my_cat_access). */
@@ -57,7 +60,7 @@ interface AccessInfo {
 
 const DEVICE_COLUMNS =
   'id, display_name, color, kind, owner_id, last_lat, last_lng, last_accuracy_m, last_battery_pct, last_fix_at, ' +
-  'lost_mode, lost_mode_since, night_mode, night_start_min, night_end_min, night_interval_s, photo_path, household_id';
+  'lost_mode, lost_mode_since, night_mode, night_start_min, night_end_min, night_interval_s, photo_path, household_id, last_seen_at';
 
 const PHOTO_BUCKET = 'cat-photos';
 
@@ -88,7 +91,7 @@ const toZone = (r: ZoneRow): HomeZone => ({
   householdId: r.household_id ?? null, householdName: r.household_name ?? null,
 });
 
-function toCat(r: DeviceRow, info: AccessInfo): Cat {
+function toCat(r: DeviceRow, info: AccessInfo, place: CatPlace | null): Cat {
   return {
     id: r.id,
     name: r.display_name ?? 'Unnamed cat',
@@ -113,6 +116,8 @@ function toCat(r: DeviceRow, info: AccessInfo): Cat {
     householdName: info.householdName,
     access: info.access,
     sitterUntil: info.sitterUntil,
+    lastSeenAt: r.last_seen_at ?? null,
+    place,
   };
 }
 
@@ -128,6 +133,8 @@ export class SupabaseBackend implements Backend {
   readonly #photoUrls = new Map<string, { url: string; expires: number }>();
   /** Latest my_cat_access result, reused for Realtime updates between refreshes. */
   readonly #access = new Map<string, AccessInfo>();
+  /** Latest get_cat_status result: where each cat is relative to its zones. */
+  readonly #places = new Map<string, CatPlace>();
 
   constructor(db: SupabaseClient, userId: string, email: string | undefined) {
     this.#db = db;
@@ -136,9 +143,10 @@ export class SupabaseBackend implements Backend {
   }
 
   async listCats(): Promise<Cat[]> {
-    const [devices, access] = await Promise.all([
+    const [devices, access, status] = await Promise.all([
       this.#db.from('devices').select(DEVICE_COLUMNS).order('created_at', { ascending: true }),
       this.#db.rpc('my_cat_access'),
+      this.#db.rpc('get_cat_status'),
     ]);
     fail(devices.error);
     fail(access.error);
@@ -146,12 +154,37 @@ export class SupabaseBackend implements Backend {
     for (const a of access.data as Array<{ device_id: string; access: CatAccess; household_name: string | null; sitter_until: string | null }>) {
       this.#access.set(a.device_id, { access: a.access, householdName: a.household_name, sitterUntil: a.sitter_until });
     }
+    // Older databases without get_cat_status just show no place.
+    this.#places.clear();
+    for (const p of (status.error ? [] : status.data) as Array<{ device_id: string; zone_name: string | null; nearest_zone_name: string | null; nearest_zone_m: number | null }>) {
+      if (p.zone_name !== null || p.nearest_zone_name !== null) {
+        this.#places.set(p.device_id, { zoneName: p.zone_name, nearestZoneName: p.nearest_zone_name, nearestZoneM: p.nearest_zone_m });
+      }
+    }
     return (devices.data as unknown as DeviceRow[]).map((r) => this.#toCat(r));
   }
 
   #toCat(r: DeviceRow): Cat {
     const known = this.#access.get(r.id);
-    return toCat(r, known ?? { access: r.owner_id === this.userId ? 'owner' : 'household', householdName: null, sitterUntil: null });
+    return toCat(
+      r,
+      known ?? { access: r.owner_id === this.userId ? 'owner' : 'household', householdName: null, sitterUntil: null },
+      this.#places.get(r.id) ?? null,
+    );
+  }
+
+  async getTrackerHealth(catId: string): Promise<TrackerHealth> {
+    const { data, error } = await this.#db.rpc('get_tracker_health', { p_device_id: catId });
+    fail(error);
+    const r = (data as Array<{
+      last_seen_at: string | null; last_fix_at: string | null; battery_pct: number | null; drain_pct_per_day: number | null;
+      days_left: number | null; fixes_24h: number; report_interval_s: number; silent: boolean | null; silent_after_s: number;
+    }>)[0]!;
+    return {
+      lastSeenAt: r.last_seen_at, lastFixAt: r.last_fix_at, batteryPct: r.battery_pct, drainPctPerDay: r.drain_pct_per_day,
+      daysLeft: r.days_left, fixes24h: r.fixes_24h, reportIntervalS: r.report_interval_s, silent: r.silent ?? false,
+      silentAfterS: r.silent_after_s,
+    };
   }
 
   subscribe(handlers: LiveHandlers): () => void {
@@ -196,7 +229,8 @@ export class SupabaseBackend implements Backend {
   async claimCollar(deviceUid: string, claimCode: string): Promise<string> {
     const { data, error } = await this.#db.rpc('claim_device', {
       p_device_uid: deviceUid.trim(),
-      p_claim_code: claimCode.trim(),
+      // Labels print the code in groups ("ABCD-EFGH-JKLM").
+      p_claim_code: claimCode.replace(/[\s-]/g, ''),
     });
     fail(error);
     return data as string;

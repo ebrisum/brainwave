@@ -1,0 +1,30 @@
+# Traccar for ready-made trackers (e.g. Mictrack MT710), behind Caddy for HTTPS.
+# Setup: see README.md in this folder. Run on a small VPS:
+#   cp .env.example .env   # fill in, then:
+#   ./configure.sh && docker compose up -d
+services:
+  traccar:
+    image: traccar/traccar:6.5 # check hub.docker.com/r/traccar/traccar for the newest 6.x
+    restart: unless-stopped
+    volumes:
+      - ./traccar.local.xml:/opt/traccar/conf/traccar.xml:ro
+      - ./data:/opt/traccar/data
+      - ./logs:/opt/traccar/logs
+    ports:
+      - "5030:5030/tcp" # Mictrack
+      - "5030:5030/udp"
+      - "5055:5055/tcp" # Traccar Client app (stand-in tracker for testing)
+    # The web UI/API (8082) is only reachable through Caddy (HTTPS).
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on: [traccar]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      TRACCAR_DOMAIN: ${TRACCAR_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy-data:/data

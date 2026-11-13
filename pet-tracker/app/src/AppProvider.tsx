@@ -178,7 +178,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const unsubscribe = backend.subscribe({
       onCat: upsertCat,
       onCatRemoved: removeCatLocal,
-      onEvent: (ev) => setAlert(ev),
+      onEvent: (ev) => {
+        setAlert(ev);
+        // A zone change: fetch the cats again so "At Home" / "Out" follows straight away.
+        void sync();
+      },
     });
     return () => {
       active = false;

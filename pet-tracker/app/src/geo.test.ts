@@ -176,3 +176,32 @@ test('photo crop: the circle maps to the right square of the photo', async () =>
   // Zoom 2 in the middle: a 1500 square around the centre.
   assert.deepEqual(g.rect(2, 0, 0), { originX: 1250, originY: 750, width: 1500, height: 1500 });
 });
+
+test('place line: inside a zone, or out with the distance', async () => {
+  const { placeLine } = await import('./place.ts');
+  assert.equal(placeLine({ place: { zoneName: 'Home', nearestZoneName: 'Home', nearestZoneM: 0 } })!.line, 'At Home');
+  const out = placeLine({ place: { zoneName: null, nearestZoneName: 'Home', nearestZoneM: 230 } })!;
+  assert.equal(out.line, 'Out · 230 m from Home');
+  assert.equal(out.title, 'Out');
+  assert.equal(placeLine({ place: null }), null);
+});
+
+test('today story: away time between leaving and coming back, or until now', async () => {
+  const { todayStory } = await import('./place.ts');
+  const day = new Date();
+  day.setHours(14, 0, 0, 0);
+  const at = (h: number, m: number) => new Date(new Date(day).setHours(h, m)).toISOString();
+  const now = new Date(new Date(day).setHours(18, 0)).getTime();
+  const story = todayStory(
+    [
+      { id: '1', catId: 'c', transition: 'exit', zoneName: 'Home', at: at(14, 2) },
+      { id: '2', catId: 'c', transition: 'enter', zoneName: 'Home', at: at(15, 30) },
+      { id: '3', catId: 'c', transition: 'exit', zoneName: 'Home', at: at(17, 0) },
+      { id: '0', catId: 'c', transition: 'exit', zoneName: 'Home', at: new Date(now - 2 * 86_400_000).toISOString() },
+    ],
+    now,
+  );
+  assert.deepEqual(story.map((s) => s.kind), ['event', 'away', 'event', 'event', 'away']);
+  assert.deepEqual(story[1], { kind: 'away', id: '1-away', zoneName: 'Home', minutes: 88, ongoing: false });
+  assert.deepEqual(story[4], { kind: 'away', id: '3-away', zoneName: 'Home', minutes: 60, ongoing: true });
+});

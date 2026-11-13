@@ -25,7 +25,7 @@ interface OutboxRow {
   id: number;
   owner_id: string;
   device_id: string | null;
-  kind: "zone_exit" | "zone_enter" | "low_battery" | "lost_mode";
+  kind: "zone_exit" | "zone_enter" | "low_battery" | "lost_mode" | "tracker_silent";
   title: string;
   body: string;
   attempts: number;
