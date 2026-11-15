@@ -45,6 +45,76 @@ export interface Cat {
   lastSeenAt: string | null;
   /** In one of its zones, or how far from the nearest (null: no zones or no position yet). */
   place: CatPlace | null;
+  /** Collars: how often it reports (battery saver / normal / live). */
+  powerMode: PowerMode;
+  /** Tracker model and firmware, for the collar page (null: unknown). */
+  model: string | null;
+  fwVersion: string | null;
+  profile: CatProfile;
+}
+
+export type PowerMode = 'saver' | 'normal' | 'live';
+export type Lifestyle = 'indoor' | 'outdoor' | 'both';
+
+/** What the owner tells about the cat (all optional). */
+export interface CatProfile {
+  birthDate: string | null; // YYYY-MM-DD
+  breed: string | null;
+  weightKg: number | null;
+  microchip: string | null;
+  vetName: string | null;
+  vetPhone: string | null;
+  lifestyle: Lifestyle | null;
+  notes: string | null;
+}
+
+export const EMPTY_PROFILE: CatProfile = {
+  birthDate: null, breed: null, weightKg: null, microchip: null, vetName: null, vetPhone: null, lifestyle: null, notes: null,
+};
+
+export type AlertKind = 'zone_exit' | 'zone_enter' | 'low_battery' | 'lost_mode' | 'tracker_silent' | 'found';
+
+/** One entry in the alerts inbox. title/body are the server's English text; the app words it from kind + meta. */
+export interface AlertItem {
+  id: string;
+  catId: string | null;
+  kind: AlertKind;
+  title: string;
+  body: string;
+  meta: { zone?: string | null; battery?: number | null; lastSeenAt?: string | null };
+  at: string; // ISO
+  unread: boolean;
+}
+
+export type AlertToggle = 'zone_exit' | 'zone_enter' | 'low_battery' | 'tracker_silent' | 'found';
+export type HistoryDays = 30 | 90 | 180 | 365;
+export type Lang = 'en' | 'nl';
+
+/** The signed-in person's settings (stored on the server, so pushes follow them too). */
+export interface UserSettings {
+  lang: Lang;
+  notify: Record<AlertToggle, boolean>;
+  quietEnabled: boolean;
+  quietStartMin: number;
+  quietEndMin: number;
+  timezone: string;
+  historyDays: HistoryDays;
+}
+
+export const DEFAULT_SETTINGS: UserSettings = {
+  lang: 'en',
+  notify: { zone_exit: true, zone_enter: true, low_battery: true, tracker_silent: true, found: true },
+  quietEnabled: false,
+  quietStartMin: 23 * 60,
+  quietEndMin: 7 * 60,
+  timezone: 'Europe/Amsterdam',
+  historyDays: 180,
+};
+
+/** A link anyone can open to follow a (lost) cat until it expires. */
+export interface ShareLink {
+  token: string;
+  expiresAt: string;
 }
 
 export interface CatPlace {
@@ -262,6 +332,28 @@ export interface Backend {
 
   /** Accepts a household or a cat-sitter code. */
   acceptInvite(code: string): Promise<InviteResult>;
+
+  // Collar and profile
+  setPowerMode(catId: string, mode: PowerMode): Promise<void>;
+  updateProfile(catId: string, changes: Partial<CatProfile>): Promise<void>;
+  /** Moves the cat (profile, zones, sitters, history) onto a new collar; returns the cat's new id. */
+  replaceCollar(catId: string, deviceUid: string, claimCode: string): Promise<string>;
+  getTrackRange(catId: string, fromIso: string, toIso: string): Promise<TrackPoint[]>;
+
+  // Alerts inbox and settings
+  listAlerts(limit?: number, beforeIso?: string): Promise<AlertItem[]>;
+  unreadAlertCount(): Promise<number>;
+  markAlertsRead(): Promise<void>;
+  getSettings(): Promise<UserSettings>;
+  updateSettings(changes: Partial<Omit<UserSettings, 'notify'>> & { notify?: Partial<UserSettings['notify']> }): Promise<UserSettings>;
+
+  // Live share links (lost cat)
+  createShareLink(catId: string, hours: number): Promise<ShareLink>;
+  getShareLink(catId: string): Promise<ShareLink | null>;
+  revokeShareLinks(catId: string): Promise<void>;
+
+  /** Everything stored about you and your cats (GDPR), as JSON. */
+  exportMyData(): Promise<unknown>;
 
   // Notifications + account
   registerPushToken(token: string, platform: 'ios' | 'android' | 'web'): Promise<void>;

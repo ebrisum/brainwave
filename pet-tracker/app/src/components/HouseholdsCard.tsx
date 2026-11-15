@@ -12,6 +12,9 @@ import { useApp } from '../AppProvider';
 import type { HomeZone, Household, HouseholdMember } from '../backend/types';
 import { ask, messageOf } from '../dialogs';
 import { formatDistance } from '../geo';
+import { t as tr, tn } from '../i18n';
+import { inviteUrl } from '../links';
+import { QrCode } from './QrCode';
 import { fonts, radius, space, useTheme } from '../theme';
 import { Button, Card, ErrorText, Pill, SectionTitle } from './ui';
 
@@ -70,22 +73,22 @@ export function HouseholdsCard() {
     });
 
   const removeMember = async (h: Household, m: HouseholdMember) => {
-    if (!(await ask(`Remove ${m.email}?`, `They will no longer see the cats in ${h.name}. Their own cats leave the household with them.`, 'Remove', true))) return;
+    if (!(await ask(tr('Remove {email}?', { email: m.email }), tr('They will no longer see the cats in {household}. Their own cats leave the household with them.', { household: h.name }), tr('Remove'), true))) return;
     await run(`rm-${h.id}-${m.userId}`, () => backend.removeMember(h.id, m.userId));
   };
 
   const removeZone = async (h: Household, z: HomeZone) => {
-    if (!(await ask(`Delete ${z.name}?`, `Alerts for ${z.name} stop for every cat in ${h.name}.`, 'Delete zone', true))) return;
+    if (!(await ask(tr('Delete {zone}?', { zone: z.name }), tr('Alerts for {zone} stop for every cat in {household}.', { zone: z.name, household: h.name }), tr('Delete zone'), true))) return;
     await run(`zone-${z.id}`, () => backend.removeZone(z.id));
   };
 
   const leave = async (h: Household) => {
-    if (!(await ask(`Leave ${h.name}?`, 'Its cats disappear from your list. Your own cats in it become private.', 'Leave', true))) return;
+    if (!(await ask(tr('Leave {household}?', { household: h.name }), tr('Its cats disappear from your list. Your own cats in it become private.'), tr('Leave'), true))) return;
     await run(`leave-${h.id}`, () => backend.leaveHousehold(h.id));
   };
 
   const remove = async (h: Household) => {
-    if (!(await ask(`Delete ${h.name}?`, 'Everyone loses access to its cats. The cats stay with their owners as private cats.', 'Delete', true))) return;
+    if (!(await ask(tr('Delete {household}?', { household: h.name }), tr('Everyone loses access to its cats. The cats stay with their owners as private cats.'), tr('Delete'), true))) return;
     await run(`del-${h.id}`, () => backend.deleteHousehold(h.id));
   };
 
@@ -94,16 +97,15 @@ export function HouseholdsCard() {
       const result = await backend.acceptInvite(joinCode);
       setJoinCode('');
       return result.kind === 'household'
-        ? `You joined ${result.name}. Its cats are now in your list.`
-        : `You're now looking after ${result.name}.`;
+        ? tr('You joined {household}. Its cats are now in your list.', { household: result.name })
+        : tr("You're now looking after {name}.", { name: result.name });
     });
 
   return (
     <Card style={{ gap: space.md }}>
-      <SectionTitle>Households</SectionTitle>
+      <SectionTitle>{tr('Households')}</SectionTitle>
       <Text style={{ color: t.textMuted, lineHeight: 20 }}>
-        Everyone in a household sees its cats, gets their alerts and can switch lost mode on. Only a cat's owner edits it.
-        You can be in more than one household, and choose per cat which household it is in.
+        {tr("Everyone in a household sees its cats, gets their alerts and can switch lost mode on. Only a cat's owner edits it. You can be in more than one household, and choose per cat which household it is in.")}
       </Text>
       {message && (message.tone === 'error' ? <ErrorText>{message.text}</ErrorText> : <Text style={{ color: t.live, lineHeight: 20 }}>{message.text}</Text>)}
 
@@ -120,10 +122,10 @@ export function HouseholdsCard() {
                   onChangeText={(name) => setRenaming({ id: h.id, name })}
                   maxLength={64}
                   autoFocus
-                  accessibilityLabel="Household name"
+                  accessibilityLabel={tr('Household name')}
                 />
                 <Button
-                  title="Save"
+                  title={tr('Save')}
                   busy={busy === `ren-${h.id}`}
                   disabled={!renaming.name.trim()}
                   onPress={() => void run(`ren-${h.id}`, async () => {
@@ -136,30 +138,30 @@ export function HouseholdsCard() {
               <View style={styles.row}>
                 <Ionicons name="home-outline" size={20} color={t.text} />
                 <Text style={[styles.name, { color: t.text }]} numberOfLines={1}>{h.name}</Text>
-                <Pill label={admin ? 'Admin' : 'Member'} tone={admin ? 'accent' : 'neutral'} />
+                <Pill label={admin ? tr('Admin') : tr('Member')} tone={admin ? 'accent' : 'neutral'} />
               </View>
             )}
             <Text style={{ color: t.textMuted, fontSize: 13 }}>
-              {h.catCount === 1 ? '1 cat' : `${h.catCount} cats`} · {h.members.length === 1 ? '1 person' : `${h.members.length} people`}
+              {tn(h.catCount, '{n} cat', '{n} cats')} · {tn(h.members.length, '{n} person', '{n} people')}
             </Text>
 
             {h.members.map((m) => (
               <View key={m.userId} style={styles.row}>
                 <Ionicons name="person-circle-outline" size={22} color={t.textMuted} />
                 <Text style={[styles.email, { color: t.text }]} numberOfLines={1}>
-                  {m.userId === backend.userId ? `${m.email} (you)` : m.email}
+                  {m.userId === backend.userId ? tr('{email} (you)', { email: m.email }) : m.email}
                 </Text>
-                {m.role === 'admin' && <Pill label="Admin" />}
+                {m.role === 'admin' && <Pill label={tr('Admin')} />}
                 {admin && m.userId !== backend.userId && (
-                  <Button title="Remove" variant="ghost" busy={busy === `rm-${h.id}-${m.userId}`} onPress={() => void removeMember(h, m)} />
+                  <Button title={tr('Remove')} variant="ghost" busy={busy === `rm-${h.id}-${m.userId}`} onPress={() => void removeMember(h, m)} />
                 )}
               </View>
             ))}
 
-            <Text style={[styles.label, { color: t.textMuted }]}>Home zones</Text>
+            <Text style={[styles.label, { color: t.textMuted }]}>{tr('Home zones')}</Text>
             {(zones[h.id] ?? []).length === 0 && (
               <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18 }}>
-                No zones yet. Set where home is once, and every cat in {h.name} gets "left home" and "back home" alerts.
+                {tr('No zones yet. Set where home is once, and every cat in {household} gets "left home" and "back home" alerts.', { household: h.name })}
               </Text>
             )}
             {(zones[h.id] ?? []).map((z) => (
@@ -167,13 +169,13 @@ export function HouseholdsCard() {
                 <Ionicons name="location-outline" size={20} color={t.live} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: t.text, fontFamily: fonts.bodySemibold }} numberOfLines={1}>{z.name}</Text>
-                  <Text style={{ color: t.textMuted, fontSize: 13 }}>{formatDistance(z.radiusM)} radius · all cats</Text>
+                  <Text style={{ color: t.textMuted, fontSize: 13 }}>{tr('{distance} radius', { distance: formatDistance(z.radiusM) })} · {tr('all cats')}</Text>
                 </View>
-                <Button title="Delete" variant="ghost" busy={busy === `zone-${z.id}`} onPress={() => void removeZone(h, z)} />
+                <Button title={tr('Delete')} variant="ghost" busy={busy === `zone-${z.id}`} onPress={() => void removeZone(h, z)} />
               </View>
             ))}
             <Button
-              title={(zones[h.id] ?? []).length ? 'Add a zone' : 'Set home'}
+              title={(zones[h.id] ?? []).length ? tr('Add a zone') : tr('Set home')}
               icon="home-outline"
               variant="secondary"
               onPress={() => router.push({ pathname: '/zone/new', params: { householdId: h.id } })}
@@ -181,14 +183,20 @@ export function HouseholdsCard() {
 
             {code && (
               <View style={[styles.codeBox, { backgroundColor: t.surface }]}>
-                <Text style={{ color: t.textMuted, fontSize: 13 }}>Invite code for {h.name} · valid 7 days, single use</Text>
+                <Text style={{ color: t.textMuted, fontSize: 13, textAlign: 'center' }}>
+                  {tr('Invite for {household} · valid 7 days, for one person', { household: h.name })}
+                </Text>
+                <QrCode value={inviteUrl(code)} size={170} />
+                <Text style={{ color: t.textMuted, fontSize: 13, textAlign: 'center' }}>{tr('Let them scan this, or share the link or code.')}</Text>
                 <Text selectable style={[styles.code, { color: t.text }]}>{prettyCode(code)}</Text>
                 <Button
-                  title="Share code"
+                  title={tr('Share invite')}
                   icon="share-outline"
                   onPress={() =>
                     void Share.share({
-                      message: `Join "${h.name}" on Cat Tracker: open Settings → Households → "Join with a code" and enter ${prettyCode(code)}`,
+                      message: tr('Join "{household}" on Cat Tracker: {link} (or enter code {code} under Me → Households & sharing).', {
+                        household: h.name, link: inviteUrl(code), code: prettyCode(code),
+                      }),
                     })
                   }
                 />
@@ -197,60 +205,60 @@ export function HouseholdsCard() {
 
             <View style={styles.actions}>
               {admin && !code && (
-                <Button title="Invite" icon="person-add-outline" variant="secondary" style={styles.action} busy={busy === `invite-${h.id}`} onPress={() => void invite(h)} />
+                <Button title={tr('Invite')} icon="person-add-outline" variant="secondary" style={styles.action} busy={busy === `invite-${h.id}`} onPress={() => void invite(h)} />
               )}
               {admin && renaming?.id !== h.id && (
-                <Button title="Rename" variant="ghost" style={styles.action} onPress={() => setRenaming({ id: h.id, name: h.name })} />
+                <Button title={tr('Rename')} variant="ghost" style={styles.action} onPress={() => setRenaming({ id: h.id, name: h.name })} />
               )}
-              <Button title="Leave" variant="ghost" style={styles.action} busy={busy === `leave-${h.id}`} onPress={() => void leave(h)} />
+              <Button title={tr('Leave')} variant="ghost" style={styles.action} busy={busy === `leave-${h.id}`} onPress={() => void leave(h)} />
               {admin && (
-                <Button title="Delete" variant="ghost" textColor={t.danger} style={styles.action} busy={busy === `del-${h.id}`} onPress={() => void remove(h)} />
+                <Button title={tr('Delete')} variant="ghost" textColor={t.danger} style={styles.action} busy={busy === `del-${h.id}`} onPress={() => void remove(h)} />
               )}
             </View>
           </View>
         );
       })}
 
-      <Text style={[styles.label, { color: t.textMuted }]}>New household</Text>
+      <Text style={[styles.label, { color: t.textMuted }]}>{tr('New household')}</Text>
       <View style={styles.row}>
         <TextInput
           style={[...input, { flex: 1 }]}
-          placeholder={households.length ? 'e.g. Holiday home' : 'e.g. Home'}
+          placeholder={households.length ? tr('e.g. Holiday home') : tr('e.g. Home')}
           placeholderTextColor={t.textMuted}
           value={newName}
           onChangeText={setNewName}
           maxLength={64}
-          accessibilityLabel="New household name"
+          accessibilityLabel={tr('New household name')}
         />
         <Button
-          title="Create"
+          title={tr('Create')}
           busy={busy === 'create'}
           disabled={!newName.trim()}
           onPress={() => void run('create', async () => {
             await backend.createHousehold(newName);
             setNewName('');
-          }, `${newName.trim()} created. Invite people, and choose per cat (Edit cat) whether it is in this household.`)}
+          }, tr('{household} created. Invite people, and choose per cat (Edit cat) whether it is in this household.', { household: newName.trim() }))}
         />
       </View>
 
-      <Text style={[styles.label, { color: t.textMuted }]}>Join with a code</Text>
+      <Text style={[styles.label, { color: t.textMuted }]}>{tr('Join with a code')}</Text>
       <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18 }}>
-        A household code adds you to that household. A cat-sitter code lets you follow one cat.
+        {tr('A household code adds you to that household. A cat-sitter code lets you follow one cat.')}
       </Text>
       <View style={styles.row}>
         <TextInput
           style={[...input, { flex: 1 }]}
           placeholder="ABCD-2345"
           placeholderTextColor={t.textMuted}
-          accessibilityLabel="Invite code"
+          accessibilityLabel={tr('Invite code')}
           autoCapitalize="characters"
           value={joinCode}
           onChangeText={setJoinCode}
           maxLength={9}
         />
-        <Button title="Join" busy={busy === 'join'} disabled={joinCode.replace(/[^A-Za-z0-9]/g, '').length !== 8} onPress={() => void join()} />
+        <Button title={tr('Join')} busy={busy === 'join'} disabled={joinCode.replace(/[^A-Za-z0-9]/g, '').length !== 8} onPress={() => void join()} />
       </View>
-      {demo && <Text style={{ color: t.textMuted, fontSize: 13 }}>In demo mode you can try households, but invites need an account.</Text>}
+      {demo && <Text style={{ color: t.textMuted, fontSize: 13 }}>{tr('In demo mode you can try households, but invites need an account.')}</Text>}
     </Card>
   );
 }

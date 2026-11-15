@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Cat } from '../backend/types';
 import { isLive, relativeTime } from '../geo';
+import { t as tr } from '../i18n';
 import { placeLine } from '../place';
 import { fonts, space, useTheme } from '../theme';
 import { AccessPill } from './AccessPill';
@@ -16,13 +17,13 @@ export function CatRow({ cat, trackedByPhone, onPress }: { cat: Cat; trackedByPh
   const hasBattery = cat.lastBatteryPct !== null && cat.lastBatteryPct > 0;
   const lowBattery = hasBattery && cat.lastBatteryPct! < 20;
   const place = placeLine(cat);
-  const seen = cat.lastFixAt ? `${live ? 'Live' : 'Last seen'} · ${relativeTime(cat.lastFixAt)}` : 'Waiting for first location';
+  const seen = cat.lastFixAt ? `${live ? tr('Live') : tr('Last seen')} · ${relativeTime(cat.lastFixAt)}` : tr('Waiting for first location');
   const status = place && cat.lastFixAt ? `${place.line} · ${relativeTime(cat.lastFixAt)}` : seen;
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${cat.name}, ${cat.lostMode ? 'lost mode on, ' : ''}${live ? 'live' : `last seen ${relativeTime(cat.lastFixAt)}`}`}
+      accessibilityLabel={`${cat.name}, ${cat.lostMode ? `${tr('Lost mode')}, ` : ''}${live ? tr('Live') : `${tr('Last seen')} ${relativeTime(cat.lastFixAt)}`}`}
       onPress={onPress}
       style={({ pressed }) => [styles.row, { backgroundColor: pressed ? t.surfaceAlt : cat.lostMode ? t.dangerSoft : 'transparent' }]}
     >
@@ -32,16 +33,16 @@ export function CatRow({ cat, trackedByPhone, onPress }: { cat: Cat; trackedByPh
           <Text style={[styles.name, { color: t.text }]} numberOfLines={1}>
             {cat.name}
           </Text>
-          {cat.lostMode && <Pill label="Lost" tone="danger" icon="alert-circle" />}
-          {trackedByPhone && <Pill label="This phone" tone="accent" icon="phone-portrait-outline" />}
+          {cat.lostMode && <Pill label={tr('Lost')} tone="danger" icon="alert-circle" />}
+          {trackedByPhone && <Pill label={tr('This phone')} tone="accent" icon="phone-portrait-outline" />}
           <AccessPill cat={cat} />
-          {cat.night.enabled && <Pill label="Night watch" tone="night" icon="moon-outline" />}
+          {cat.night.enabled && <Pill label={tr('Night watch')} tone="night" icon="moon-outline" />}
         </View>
         <Text style={{ color: t.textMuted, marginTop: 2 }}>
           {status}
           {hasBattery && (
             <Text style={{ color: lowBattery ? t.warn : t.textMuted, fontFamily: lowBattery ? fonts.bodySemibold : fonts.body }}>
-              {`  ·  ${lowBattery ? 'Battery low' : 'Battery'} ${cat.lastBatteryPct}%`}
+              {`  ·  ${lowBattery ? tr('Battery low') : tr('Battery')} ${cat.lastBatteryPct}%`}
             </Text>
           )}
         </Text>

@@ -25,5 +25,11 @@ export interface CatMapProps {
   draftZone?: { lat: number; lng: number; radiusM: number } | null;
   /** Pixels at the bottom of the map hidden behind a sheet: framing keeps the cats above it. */
   coverBottom?: number;
+  /** Satellite photos instead of the street map (native maps only). */
+  satellite?: boolean;
+  /** Change this number to frame everything again (the "show all" button). */
+  refitKey?: number;
+  /** Change this number to centre on this phone (the "me" button). */
+  locateKey?: number;
   style?: StyleProp<ViewStyle>;
 }

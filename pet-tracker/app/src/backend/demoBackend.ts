@@ -7,6 +7,14 @@ import { normalizeClaimCode } from '../claim';
 import { binHeatmap, distanceM, estimateActivity, insideZone, offset } from '../geo';
 import {
   DEFAULT_NIGHT,
+  DEFAULT_SETTINGS,
+  EMPTY_PROFILE,
+  type AlertItem,
+  type AlertKind,
+  type CatProfile,
+  type PowerMode,
+  type ShareLink,
+  type UserSettings,
   type ActivityDay,
   type Backend,
   type Cat,
@@ -33,6 +41,7 @@ const DEMO_USER = 'demo-user';
 const DEMO_HOUSEHOLD = 'demo-household';
 /** Label of the demo collar (also printed by cloud/provisioning for testing). */
 export const DEMO_COLLAR = { deviceUid: 'DEMO-0001', claimCode: 'DEMOCODE2345' } as const;
+const NEEDS_ACCOUNT_COLLAR = 'A new collar needs an account. Exit the demo and sign in.';
 const NEEDS_ACCOUNT = 'Sharing needs an account. Exit the demo and sign in to invite people.';
 
 let nextId = 1;
@@ -60,6 +69,10 @@ export class DemoBackend implements Backend {
   #centered = false;
   /** In-memory households, so moving cats around can be tried without an account. */
   #demoCollarClaimed = false;
+  #alerts: AlertItem[] = [];
+  #readUntil = 0;
+  #settings: UserSettings = { ...DEFAULT_SETTINGS, notify: { ...DEFAULT_SETTINGS.notify } };
+  #shares = new Map<string, ShareLink>();
   #households = new Map<string, { id: string; name: string }>([[DEMO_HOUSEHOLD, { id: DEMO_HOUSEHOLD, name: 'Demo household' }]]);
 
   constructor() {
@@ -74,7 +87,8 @@ export class DemoBackend implements Backend {
       lastLat: null, lastLng: null, lastAccuracyM: null, lastBatteryPct: null, lastFixAt: null,
       lostMode: false, lostModeSince: null, night: { ...DEFAULT_NIGHT }, photoPath: null,
       householdId: DEMO_HOUSEHOLD, householdName: 'Demo household', access: 'owner', sitterUntil: null,
-      lastSeenAt: null, place: null,
+      lastSeenAt: null, place: null, powerMode: 'normal', model: kind === 'collar' ? 'Demo collar' : null, fwVersion: null,
+      profile: { ...EMPTY_PROFILE },
     };
   }
 
@@ -164,6 +178,7 @@ export class DemoBackend implements Backend {
       if (was !== null && was !== now) {
         const ev: CatEvent = { id: newId('ev'), catId: cat.id, transition: now ? 'enter' : 'exit', zoneName: zone.name, at: point.at };
         this.#events.unshift(ev);
+        this.#alert(cat, now ? 'zone_enter' : 'zone_exit', { zone: zone.name });
         for (const l of this.#listeners) l.onEvent?.(ev);
       }
     }
@@ -191,6 +206,19 @@ export class DemoBackend implements Backend {
       });
     }
   };
+
+  #alert(cat: Cat, kind: AlertKind, meta: AlertItem['meta'] = {}) {
+    const titles: Record<AlertKind, string> = {
+      zone_exit: `${cat.name} left ${meta.zone ?? 'a zone'}`,
+      zone_enter: `${cat.name} is back in ${meta.zone ?? 'a zone'}`,
+      low_battery: `${cat.name}'s tracker battery is low`,
+      lost_mode: `Lost mode on for ${cat.name}`,
+      tracker_silent: `${cat.name}'s tracker is silent`,
+      found: `${cat.name} is found`,
+    };
+    this.#alerts.unshift({ id: newId('al'), catId: cat.id, kind, title: titles[kind], body: '', meta, at: new Date().toISOString(), unread: true });
+    this.#alerts.splice(200);
+  }
 
   async listCats(): Promise<Cat[]> {
     return [...this.#cats.values()].map((c) => this.#view(c));
@@ -292,6 +320,7 @@ export class DemoBackend implements Backend {
 
   async setLostMode(catId: string, on: boolean): Promise<void> {
     const cat = this.#cat(catId);
+    if (cat.lostMode !== on) this.#alert(cat, on ? 'lost_mode' : 'found');
     cat.lostMode = on;
     cat.lostModeSince = on ? new Date().toISOString() : null;
     this.#emitCat(cat);
@@ -436,6 +465,82 @@ export class DemoBackend implements Backend {
   async acceptInvite(): Promise<InviteResult> {
     throw new Error(NEEDS_ACCOUNT);
   }
+  async setPowerMode(catId: string, mode: PowerMode): Promise<void> {
+    const cat = this.#cat(catId);
+    cat.powerMode = mode;
+    this.#emitCat(cat);
+  }
+
+  async updateProfile(catId: string, changes: Partial<CatProfile>): Promise<void> {
+    const cat = this.#cat(catId);
+    const clean = Object.fromEntries(Object.entries(changes).map(([k, v]) => [k, typeof v === 'string' ? v.trim() || null : v]));
+    cat.profile = { ...cat.profile, ...clean };
+    this.#emitCat(cat);
+  }
+
+  async replaceCollar(): Promise<string> {
+    throw new Error(NEEDS_ACCOUNT_COLLAR);
+  }
+
+  async getTrackRange(catId: string, fromIso: string, toIso: string): Promise<TrackPoint[]> {
+    const from = Date.parse(fromIso);
+    const to = Date.parse(toIso);
+    return (this.#tracks.get(catId) ?? []).filter((p) => Date.parse(p.at) >= from && Date.parse(p.at) < to);
+  }
+
+  async listAlerts(limit = 50, beforeIso?: string): Promise<AlertItem[]> {
+    const before = beforeIso ? Date.parse(beforeIso) : Infinity;
+    return this.#alerts
+      .filter((a) => Date.parse(a.at) < before)
+      .slice(0, limit)
+      .map((a) => ({ ...a, unread: Date.parse(a.at) > this.#readUntil }));
+  }
+
+  async unreadAlertCount(): Promise<number> {
+    return this.#alerts.filter((a) => Date.parse(a.at) > this.#readUntil).length;
+  }
+
+  async markAlertsRead(): Promise<void> {
+    this.#readUntil = Date.now();
+  }
+
+  async getSettings(): Promise<UserSettings> {
+    return { ...this.#settings, notify: { ...this.#settings.notify } };
+  }
+
+  async updateSettings(
+    changes: Partial<Omit<UserSettings, 'notify'>> & { notify?: Partial<UserSettings['notify']> },
+  ): Promise<UserSettings> {
+    this.#settings = { ...this.#settings, ...changes, notify: { ...this.#settings.notify, ...changes.notify } };
+    return this.getSettings();
+  }
+
+  async createShareLink(catId: string, hours: number): Promise<ShareLink> {
+    this.#cat(catId);
+    const link = { token: `demo-${newId('share')}`, expiresAt: new Date(Date.now() + hours * 3600_000).toISOString() };
+    this.#shares.set(catId, link);
+    return link;
+  }
+
+  async getShareLink(catId: string): Promise<ShareLink | null> {
+    const link = this.#shares.get(catId);
+    return link && Date.parse(link.expiresAt) > Date.now() ? link : null;
+  }
+
+  async revokeShareLinks(catId: string): Promise<void> {
+    this.#shares.delete(catId);
+  }
+
+  async exportMyData(): Promise<unknown> {
+    return {
+      exported_at: new Date().toISOString(),
+      account: { email: 'demo' },
+      settings: this.#settings,
+      cats: [...this.#cats.values()].map((c) => ({ ...c, positions: this.#tracks.get(c.id) ?? [] })),
+      alerts: this.#alerts,
+    };
+  }
+
   async registerPushToken(): Promise<void> {}
   async unregisterPushToken(): Promise<void> {}
   async deleteAccount(): Promise<void> {

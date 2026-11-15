@@ -4,6 +4,8 @@ const EARTH_RADIUS_M = 6_371_008.8;
 const toRad = (d: number) => (d * Math.PI) / 180;
 const toDeg = (r: number) => (r * 180) / Math.PI;
 
+import { getLang, t } from './i18n/core.ts';
+
 export function distanceM(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const dLat = toRad(lat2 - lat1);
   const dLng = toRad(lng2 - lng1);
@@ -39,15 +41,25 @@ export function insideZone(
 }
 
 export function relativeTime(iso: string | null, now: number = Date.now()): string {
-  if (!iso) return 'never';
+  if (!iso) return t('never');
   const s = Math.round((now - Date.parse(iso)) / 1000);
-  if (s < 10) return 'just now';
-  if (s < 60) return `${s} s ago`;
+  if (s < 10) return t('just now');
+  if (s < 60) return t('{n} s ago', { n: s });
   const m = Math.round(s / 60);
-  if (m < 60) return `${m} min ago`;
+  if (m < 60) return t('{n} min ago', { n: m });
   const h = Math.round(m / 60);
-  if (h < 48) return `${h} h ago`;
-  return `${Math.round(h / 24)} days ago`;
+  if (h < 48) return t('{n} h ago', { n: h });
+  return t('{n} days ago', { n: Math.round(h / 24) });
+}
+
+/** Compass bearing from the first point to the second, 0-360 degrees (0 = north). */
+export function bearingDeg(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = Math.PI / 180;
+  const y = Math.sin((lng2 - lng1) * toRad) * Math.cos(lat2 * toRad);
+  const x =
+    Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) -
+    Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos((lng2 - lng1) * toRad);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
 /** A cat counts as "live" if its last fix is recent enough for the reporting mode. */
@@ -56,7 +68,9 @@ export function isLive(iso: string | null, windowS = 20 * 60, now: number = Date
 }
 
 export function formatDistance(m: number): string {
-  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10_000 ? 1 : 0)} km`;
+  if (m < 1000) return `${Math.round(m)} m`;
+  const km = (m / 1000).toFixed(m < 10_000 ? 1 : 0);
+  return `${getLang() === 'nl' ? km.replace('.', ',') : km} km`;
 }
 
 // ---------------------------------------------------------------------------

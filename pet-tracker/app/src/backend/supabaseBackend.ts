@@ -9,8 +9,17 @@ import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 
 import { normalizeClaimCode } from '../claim';
 
+import { DEFAULT_SETTINGS } from './types';
 import type {
   ActivityDay,
+  AlertItem,
+  AlertKind,
+  CatProfile,
+  HistoryDays,
+  Lifestyle,
+  PowerMode,
+  ShareLink,
+  UserSettings,
   Backend,
   Cat,
   CatAccess,
@@ -54,6 +63,18 @@ interface DeviceRow {
   photo_path: string | null;
   household_id: string | null;
   last_seen_at: string | null;
+  // Added in migration 1200 (absent on older databases).
+  power_mode?: PowerMode | null;
+  model?: string | null;
+  fw_version?: string | null;
+  birth_date?: string | null;
+  breed?: string | null;
+  weight_kg?: number | string | null;
+  microchip?: string | null;
+  vet_name?: string | null;
+  vet_phone?: string | null;
+  lifestyle?: Lifestyle | null;
+  notes?: string | null;
 }
 
 /** How the signed-in person sees a cat (from my_cat_access). */
@@ -63,9 +84,39 @@ interface AccessInfo {
   sitterUntil: string | null;
 }
 
-const DEVICE_COLUMNS =
+const BASE_COLUMNS =
   'id, display_name, color, kind, owner_id, last_lat, last_lng, last_accuracy_m, last_battery_pct, last_fix_at, ' +
   'lost_mode, lost_mode_since, night_mode, night_start_min, night_end_min, night_interval_s, photo_path, household_id, last_seen_at';
+const DEVICE_COLUMNS =
+  BASE_COLUMNS + ', power_mode, model, fw_version, birth_date, breed, weight_kg, microchip, vet_name, vet_phone, lifestyle, notes';
+
+const PROFILE_COLUMNS: Record<keyof CatProfile, string> = {
+  birthDate: 'birth_date', breed: 'breed', weightKg: 'weight_kg', microchip: 'microchip',
+  vetName: 'vet_name', vetPhone: 'vet_phone', lifestyle: 'lifestyle', notes: 'notes',
+};
+
+const SETTINGS_KEYS: Record<string, string> = {
+  lang: 'lang', quietEnabled: 'quiet_enabled', quietStartMin: 'quiet_start_min', quietEndMin: 'quiet_end_min',
+  timezone: 'timezone', historyDays: 'history_days',
+};
+
+function toSettings(r: Record<string, unknown>): UserSettings {
+  return {
+    lang: r.lang === 'nl' ? 'nl' : 'en',
+    notify: {
+      zone_exit: r.notify_zone_exit !== false,
+      zone_enter: r.notify_zone_enter !== false,
+      low_battery: r.notify_low_battery !== false,
+      tracker_silent: r.notify_tracker_silent !== false,
+      found: r.notify_found !== false,
+    },
+    quietEnabled: r.quiet_enabled === true,
+    quietStartMin: Number(r.quiet_start_min ?? DEFAULT_SETTINGS.quietStartMin),
+    quietEndMin: Number(r.quiet_end_min ?? DEFAULT_SETTINGS.quietEndMin),
+    timezone: String(r.timezone ?? DEFAULT_SETTINGS.timezone),
+    historyDays: ([30, 90, 180, 365].includes(Number(r.history_days)) ? Number(r.history_days) : 180) as HistoryDays,
+  };
+}
 
 const PHOTO_BUCKET = 'cat-photos';
 
@@ -123,6 +174,19 @@ function toCat(r: DeviceRow, info: AccessInfo, place: CatPlace | null): Cat {
     sitterUntil: info.sitterUntil,
     lastSeenAt: r.last_seen_at ?? null,
     place,
+    powerMode: r.power_mode ?? 'normal',
+    model: r.model ?? null,
+    fwVersion: r.fw_version ?? null,
+    profile: {
+      birthDate: r.birth_date ?? null,
+      breed: r.breed ?? null,
+      weightKg: r.weight_kg === null || r.weight_kg === undefined ? null : Number(r.weight_kg),
+      microchip: r.microchip ?? null,
+      vetName: r.vet_name ?? null,
+      vetPhone: r.vet_phone ?? null,
+      lifestyle: r.lifestyle ?? null,
+      notes: r.notes ?? null,
+    },
   };
 }
 
@@ -149,7 +213,7 @@ export class SupabaseBackend implements Backend {
 
   async listCats(): Promise<Cat[]> {
     const [devices, access, status] = await Promise.all([
-      this.#db.from('devices').select(DEVICE_COLUMNS).order('created_at', { ascending: true }),
+      this.#selectDevices(),
       this.#db.rpc('my_cat_access'),
       this.#db.rpc('get_cat_status'),
     ]);
@@ -167,6 +231,17 @@ export class SupabaseBackend implements Backend {
       }
     }
     return (devices.data as unknown as DeviceRow[]).map((r) => this.#toCat(r));
+  }
+
+  /** Before migration 1200 the extra columns don't exist yet: fall back to the old set. */
+  #fullColumns = true;
+  async #selectDevices() {
+    if (this.#fullColumns) {
+      const res = await this.#db.from('devices').select(DEVICE_COLUMNS).order('created_at', { ascending: true });
+      if (!res.error || !/column/i.test(res.error.message)) return res;
+      this.#fullColumns = false;
+    }
+    return this.#db.from('devices').select(BASE_COLUMNS).order('created_at', { ascending: true });
   }
 
   #toCat(r: DeviceRow): Cat {
@@ -509,6 +584,109 @@ export class SupabaseBackend implements Backend {
     fail(error);
     const r = data as { kind: 'household' | 'sitter'; name: string };
     return { kind: r.kind, name: r.name };
+  }
+
+  async setPowerMode(catId: string, mode: PowerMode): Promise<void> {
+    const { error } = await this.#db.from('devices').update({ power_mode: mode }).eq('id', catId);
+    fail(error);
+  }
+
+  async updateProfile(catId: string, changes: Partial<CatProfile>): Promise<void> {
+    const patch: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(changes) as Array<[keyof CatProfile, unknown]>) {
+      patch[PROFILE_COLUMNS[k]] = typeof v === 'string' ? v.trim() || null : v;
+    }
+    const { error } = await this.#db.from('devices').update(patch).eq('id', catId);
+    fail(error);
+  }
+
+  async replaceCollar(catId: string, deviceUid: string, claimCode: string): Promise<string> {
+    const { data, error } = await this.#db.rpc('replace_collar', {
+      p_old_device_id: catId, p_device_uid: deviceUid.trim(), p_claim_code: normalizeClaimCode(claimCode),
+    });
+    fail(error);
+    return data as string;
+  }
+
+  async getTrackRange(catId: string, fromIso: string, toIso: string): Promise<TrackPoint[]> {
+    const { data, error } = await this.#db.rpc('get_pet_track_range', { p_device_id: catId, p_from: fromIso, p_to: toIso });
+    fail(error);
+    return (data as Array<{ recorded_at: string; lat: number; lng: number; accuracy_m: number; battery_pct: number }>).map(
+      (r) => ({ at: r.recorded_at, lat: r.lat, lng: r.lng, accuracyM: r.accuracy_m, batteryPct: r.battery_pct }),
+    );
+  }
+
+  async listAlerts(limit = 50, beforeIso?: string): Promise<AlertItem[]> {
+    const { data, error } = await this.#db.rpc('list_alerts', { p_limit: limit, p_before: beforeIso ?? null });
+    fail(error);
+    return (data as Array<{ id: number; device_id: string | null; kind: AlertKind; title: string; body: string; meta: Record<string, unknown> | null; created_at: string; unread: boolean }>).map(
+      (r) => ({
+        id: String(r.id), catId: r.device_id, kind: r.kind, title: r.title, body: r.body,
+        meta: {
+          zone: (r.meta?.zone as string | null | undefined) ?? null,
+          battery: typeof r.meta?.battery === 'number' ? r.meta.battery : null,
+          lastSeenAt: (r.meta?.last_seen_at as string | null | undefined) ?? null,
+        },
+        at: r.created_at, unread: r.unread,
+      }),
+    );
+  }
+
+  async unreadAlertCount(): Promise<number> {
+    const { data, error } = await this.#db.rpc('unread_alert_count');
+    return error ? 0 : Number(data ?? 0); // older databases: no inbox yet
+  }
+
+  async markAlertsRead(): Promise<void> {
+    const { error } = await this.#db.rpc('mark_alerts_read');
+    fail(error);
+  }
+
+  async getSettings(): Promise<UserSettings> {
+    const { data, error } = await this.#db.rpc('get_my_settings');
+    if (error) return { ...DEFAULT_SETTINGS, notify: { ...DEFAULT_SETTINGS.notify } };
+    return toSettings(data as Record<string, unknown>);
+  }
+
+  async updateSettings(
+    changes: Partial<Omit<UserSettings, 'notify'>> & { notify?: Partial<UserSettings['notify']> },
+  ): Promise<UserSettings> {
+    const patch: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(changes)) {
+      if (k === 'notify') {
+        for (const [kind, on] of Object.entries(v as Record<string, boolean>)) patch[`notify_${kind}`] = on;
+      } else if (SETTINGS_KEYS[k]) {
+        patch[SETTINGS_KEYS[k]!] = v;
+      }
+    }
+    const { data, error } = await this.#db.rpc('set_my_settings', { p_changes: patch });
+    fail(error);
+    return toSettings(data as Record<string, unknown>);
+  }
+
+  async createShareLink(catId: string, hours: number): Promise<ShareLink> {
+    const { data, error } = await this.#db.rpc('create_share_link', { p_device_id: catId, p_hours: hours });
+    fail(error);
+    const r = data as { token: string; expires_at: string };
+    return { token: r.token, expiresAt: r.expires_at };
+  }
+
+  async getShareLink(catId: string): Promise<ShareLink | null> {
+    const { data, error } = await this.#db.rpc('get_share_link', { p_device_id: catId });
+    if (error || !data) return null;
+    const r = data as { token: string; expires_at: string };
+    return { token: r.token, expiresAt: r.expires_at };
+  }
+
+  async revokeShareLinks(catId: string): Promise<void> {
+    const { error } = await this.#db.rpc('revoke_share_links', { p_device_id: catId });
+    fail(error);
+  }
+
+  async exportMyData(): Promise<unknown> {
+    const { data, error } = await this.#db.rpc('export_my_data');
+    fail(error);
+    return data;
   }
 
   async registerPushToken(token: string, platform: 'ios' | 'android' | 'web'): Promise<void> {

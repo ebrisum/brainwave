@@ -9,15 +9,16 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { DemoBackend } from './backend/demoBackend';
 import { SupabaseBackend } from './backend/supabaseBackend';
 import { supabase } from './backend/supabaseClient';
-import type { Backend, Cat, CatEvent } from './backend/types';
+import type { Backend, Cat, CatEvent, UserSettings } from './backend/types';
+import { getLang, tk } from './i18n';
 import { inNightWindow } from './geo';
 import { onNotificationOpened, registerForPush, type PushStatus } from './notifications/push';
 import { usePhoneTracker, type TrackerStatus } from './tracking/usePhoneTracker';
 
 export const REPORT_INTERVALS = [
-  { seconds: 15, label: '15 s', hint: 'quick testing' },
-  { seconds: 60, label: '1 min', hint: 'walk test' },
-  { seconds: 900, label: '15 min', hint: 'like the collar' },
+  { seconds: 15, label: '15 s', hint: tk('quick testing') },
+  { seconds: 60, label: '1 min', hint: tk('walk test') },
+  { seconds: 900, label: '15 min', hint: tk('like the collar') },
 ] as const;
 
 export const LOST_MODE_INTERVAL_S = 15;
@@ -51,6 +52,12 @@ interface AppState {
   /** Cat to open after tapping a notification (consumed by the home screen). */
   openCatRequest: string | null;
   clearOpenCatRequest: () => void;
+  /** Alerts not seen in the inbox yet (badge on the Alerts tab). */
+  unread: number;
+  refreshUnread: () => Promise<void>;
+  /** Server-side settings (alerts, quiet hours, history); null until loaded. */
+  settings: UserSettings | null;
+  saveSettings: Backend['updateSettings'];
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -72,6 +79,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const [syncFailed, setSyncFailed] = useState(false);
   const [clock, setClock] = useState(minuteOfDay());
+  const [unread, setUnread] = useState(0);
+  const [settings, setSettings] = useState<UserSettings | null>(null);
 
   // Re-evaluate the night window every minute.
   useEffect(() => {
@@ -133,6 +142,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setPush({ status: r.status, error: r.error });
   }, [backend]);
 
+  const refreshUnread = useCallback(async () => {
+    if (backend) setUnread(await backend.unreadAlertCount().catch(() => 0));
+  }, [backend]);
+
+  // Settings live on the server so pushes follow them; the push language
+  // follows the language chosen in the app.
+  useEffect(() => {
+    setSettings(null);
+    if (!backend) return;
+    let active = true;
+    void backend.getSettings().then(async (s) => {
+      if (!active) return;
+      const lang = getLang();
+      if (backend.mode === 'supabase' && s.lang !== lang) s = await backend.updateSettings({ lang }).catch(() => s);
+      if (active) setSettings(s);
+    });
+    return () => {
+      active = false;
+    };
+  }, [backend]);
+
+  const saveSettings = useCallback<Backend['updateSettings']>(
+    async (changes) => {
+      if (!backend) throw new Error('Not signed in');
+      const next = await backend.updateSettings(changes);
+      setSettings(next);
+      return next;
+    },
+    [backend],
+  );
+
   const upsertCat = useCallback((cat: Cat) => {
     setCats((prev) => {
       const i = prev.findIndex((c) => c.id === cat.id);
@@ -171,6 +211,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setCats(list);
           setLastSyncAt(Date.now());
           setSyncFailed(false);
+          void backend.unreadAlertCount().then((n) => active && setUnread(n)).catch(() => undefined);
         })
         .catch(() => active && setSyncFailed(true));
     void sync();
@@ -251,8 +292,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       enablePush,
       openCatRequest,
       clearOpenCatRequest: () => setOpenCatRequest(null),
+      unread,
+      refreshUnread,
+      settings,
+      saveSettings,
     }),
-    [ready, backend, cats, lastSyncAt, syncFailed, alert, dismissAlert, refresh, upsertCat, removeCatLocal, tracker, trackedCatId, setTrackedCatId, intervalS, setIntervalS, effectiveIntervalS, push, enablePush, openCatRequest],
+    [ready, backend, cats, lastSyncAt, syncFailed, alert, dismissAlert, refresh, upsertCat, removeCatLocal, tracker, trackedCatId, setTrackedCatId, intervalS, setIntervalS, effectiveIntervalS, push, enablePush, openCatRequest, unread, refreshUnread, settings, saveSettings],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

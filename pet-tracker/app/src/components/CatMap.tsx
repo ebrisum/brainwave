@@ -12,7 +12,7 @@ import { Platform, StyleSheet, Text, View } from 'react-native';
 import MapView, { Circle, Heatmap, Marker, type Region } from 'react-native-maps';
 
 import type { Cat } from '../backend/types';
-import { distanceM, regionFor, resamplePath, smoothTrack, type LatLng } from '../geo';
+import { CLOSE_DELTA, distanceM, regionFor, resamplePath, smoothTrack, type LatLng } from '../geo';
 import { useTheme } from '../theme';
 import type { CatMapProps } from './CatMap.types';
 import { HEAT_GRADIENT, heatBlobs, heatPoints } from './heat';
@@ -81,7 +81,7 @@ function CatMarker({ cat, onPress }: { cat: Cat; onPress?: () => void }) {
 }
 
 export function CatMap({
-  cats, focusId, track, trackColor, cursor, zones, heat, onSelectCat, onLongPress, onPressMap, draftZone, coverBottom = 0, style,
+  cats, focusId, track, trackColor, cursor, zones, heat, onSelectCat, onLongPress, onPressMap, draftZone, coverBottom = 0, satellite, refitKey = 0, locateKey = 0, style,
 }: CatMapProps) {
   const t = useTheme();
   const ref = useRef<MapView>(null);
@@ -132,7 +132,24 @@ export function CatMap({
     heat?.length ?? 0,
     draftZone ? `${draftZone.lat},${draftZone.lng},${draftZone.radiusM}` : '',
     coverBottom ? `${coverBottom}/${heightPx}` : '',
+    refitKey,
   ].join('|');
+
+  // "Me" button: centre on this phone (asks for location only when pressed).
+  useEffect(() => {
+    if (!ready || !locateKey) return;
+    void (async () => {
+      try {
+        const perm = await Location.requestForegroundPermissionsAsync();
+        if (!perm.granted) return;
+        const pos = (await Location.getLastKnownPositionAsync()) ?? (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+        if (pos) ref.current?.animateToRegion(regionFor([{ lat: pos.coords.latitude, lng: pos.coords.longitude }], CLOSE_DELTA)!, 450);
+      } catch {
+        // stay where we are
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locateKey]);
 
   useEffect(() => {
     if (!ready) return;
@@ -196,6 +213,7 @@ export function CatMap({
         onLayout={(e) => setHeightPx(e.nativeEvent.layout.height)}
         showsCompass={false}
         toolbarEnabled={false}
+        mapType={satellite ? 'hybrid' : 'standard'}
         showsUserLocation
         showsMyLocationButton={false}
         userInterfaceStyle={t.isDark ? 'dark' : 'light'}

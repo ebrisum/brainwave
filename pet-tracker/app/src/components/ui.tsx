@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { ReactNode } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Switch, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { fonts, radius, space, useTheme } from '../theme';
 
@@ -188,7 +188,85 @@ export function Segmented<T extends string | number>({
   );
 }
 
+/** A row in a settings-style list: icon, title, optional subtitle, chevron or custom right side. */
+export function ListRow({
+  icon, title, subtitle, onPress, right, danger, last,
+}: {
+  icon?: IconName;
+  title: string;
+  subtitle?: string | null;
+  onPress?: () => void;
+  right?: ReactNode;
+  danger?: boolean;
+  /** No divider below the last row of a card. */
+  last?: boolean;
+}) {
+  const t = useTheme();
+  const color = danger ? t.danger : t.text;
+  const body = (
+    <View style={[styles.listRow, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border }]}>
+      {icon && (
+        <View style={[styles.listIcon, { backgroundColor: danger ? t.dangerSoft : t.surfaceAlt }]}>
+          <Ionicons name={icon} size={18} color={color} />
+        </View>
+      )}
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={{ color, fontFamily: fonts.bodySemibold, fontSize: 15 }}>{title}</Text>
+        {subtitle ? <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18 }}>{subtitle}</Text> : null}
+      </View>
+      {right ?? (onPress ? <Ionicons name="chevron-forward" size={18} color={t.textMuted} /> : null)}
+    </View>
+  );
+  if (!onPress) return body;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+      {body}
+    </Pressable>
+  );
+}
+
+/** On/off switch with a label, for settings. */
+export function Toggle({ label, hint, value, onChange, disabled }: { label: string; hint?: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  const t = useTheme();
+  return (
+    <View style={styles.toggle}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={{ color: t.text, fontFamily: fonts.bodySemibold, fontSize: 15 }}>{label}</Text>
+        {hint ? <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18 }}>{hint}</Text> : null}
+      </View>
+      <Switch
+        accessibilityLabel={label}
+        value={value}
+        onValueChange={onChange}
+        disabled={disabled}
+        trackColor={{ true: t.live, false: t.border }}
+        thumbColor="#FFFFFF"
+      />
+    </View>
+  );
+}
+
+/** Centered message for an empty list. */
+export function EmptyState({ icon, title, body, children }: { icon: IconName; title: string; body?: string; children?: ReactNode }) {
+  const t = useTheme();
+  return (
+    <View style={styles.empty}>
+      <View style={[styles.emptyIcon, { backgroundColor: t.surfaceAlt }]}>
+        <Ionicons name={icon} size={28} color={t.textMuted} />
+      </View>
+      <Text style={{ color: t.text, fontFamily: fonts.display, fontSize: 20, textAlign: 'center' }}>{title}</Text>
+      {body ? <Text style={{ color: t.textMuted, textAlign: 'center', lineHeight: 20, maxWidth: 320 }}>{body}</Text> : null}
+      {children}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  listRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 12 },
+  listIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  toggle: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 6 },
+  empty: { alignItems: 'center', gap: space.md, paddingVertical: space.xl * 1.5, paddingHorizontal: space.lg },
+  emptyIcon: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
   badge: {
     position: 'absolute', right: -2, bottom: -2, alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: '#fff',

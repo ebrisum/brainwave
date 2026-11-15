@@ -1,27 +1,28 @@
 /**
- * Home: map with every cat + the cat list (Traccar's MainPage: DeviceList +
- * MainMap), with lost-mode and zone alerts, a sync status line and a short
- * first-run guide.
+ * Map tab: every cat on the map with the cat list below, lost-mode and zone
+ * alerts, a sync status line, map controls (show all, me, satellite) and a
+ * short first-run guide.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { Redirect, Stack, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, FlatList, Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
-import { useApp } from '../src/AppProvider';
-import type { Cat } from '../src/backend/types';
-import { AccessPill } from '../src/components/AccessPill';
-import { CatMap } from '../src/components/CatMap';
-import { CatRow } from '../src/components/CatRow';
-import { TrackerBanner } from '../src/components/TrackerBanner';
-import { Button, CatAvatar, Pill } from '../src/components/ui';
-import { catBadge, usePhotoUrl } from '../src/components/usePhotoUrl';
-import { isLive, relativeTime } from '../src/geo';
-import { placeLine } from '../src/place';
-import { fonts, radius, space, useTheme } from '../src/theme';
+import { useApp } from '../../src/AppProvider';
+import type { Cat } from '../../src/backend/types';
+import { AccessPill } from '../../src/components/AccessPill';
+import { CatMap } from '../../src/components/CatMap';
+import { CatRow } from '../../src/components/CatRow';
+import { TrackerBanner } from '../../src/components/TrackerBanner';
+import { Button, CatAvatar, Pill } from '../../src/components/ui';
+import { catBadge, usePhotoUrl } from '../../src/components/usePhotoUrl';
+import { isLive, relativeTime } from '../../src/geo';
+import { t as tr, tn } from '../../src/i18n';
+import { directionsUrl } from '../../src/links';
+import { placeLine } from '../../src/place';
+import { fonts, radius, space, useTheme } from '../../src/theme';
 
-/** Zone alerts fade out after this long; they stay in the cat's alert list. */
+/** Zone alerts fade out after this long; they stay in the Alerts tab. */
 const ALERT_TTL_MS = 30_000;
 
 function useNow(intervalMs: number): number {
@@ -33,15 +34,17 @@ function useNow(intervalMs: number): number {
   return now;
 }
 
-export default function Home() {
+export default function MapTab() {
   const t = useTheme();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const now = useNow(15_000);
   const { ready, backend, cats, alert, dismissAlert, trackedCatId, tracker, openCatRequest, clearOpenCatRequest, lastSyncAt, syncFailed } = useApp();
   // Cat tapped on the map: zoom to it and show its card.
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [satellite, setSatellite] = useState(false);
+  const [refitKey, setRefitKey] = useState(0);
+  const [locateKey, setLocateKey] = useState(0);
 
   // Tapped a push notification -> open that cat.
   useEffect(() => {
@@ -57,14 +60,13 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [alert, dismissAlert]);
 
-  if (!ready) {
+  if (!ready || !backend) {
     return (
       <View style={[styles.center, { backgroundColor: t.bg }]}>
         <ActivityIndicator color={t.accent} />
       </View>
     );
   }
-  if (!backend) return <Redirect href="/login" />;
 
   const alertCat = alert ? cats.find((c) => c.id === alert.catId) : undefined;
   const lost = cats.filter((c) => c.lostMode);
@@ -74,26 +76,23 @@ export default function Home() {
 
   const syncLine =
     backend.mode === 'demo'
-      ? 'Demo · simulated positions'
+      ? tr('Demo · simulated positions')
       : syncFailed
-        ? 'Cannot reach the server · showing the last positions we have'
+        ? tr('Cannot reach the server · showing the last positions we have')
         : lastSyncAt
-          ? `Updated ${relativeTime(new Date(lastSyncAt).toISOString(), now)}`
-          : 'Connecting…';
+          ? tr('Updated {when}', { when: relativeTime(new Date(lastSyncAt).toISOString(), now) })
+          : tr('Connecting…');
+
+  const mapButtons: Array<{ icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; on?: boolean }> = [
+    { icon: 'scan-outline', label: tr('Show all cats'), onPress: () => { setSelectedId(null); setRefitKey((k) => k + 1); } },
+    ...(Platform.OS === 'web' ? [] : [
+      { icon: 'navigate-outline' as const, label: tr('Show me'), onPress: () => setLocateKey((k) => k + 1) },
+      { icon: 'earth-outline' as const, label: tr('Satellite'), onPress: () => setSatellite((v) => !v), on: satellite },
+    ]),
+  ];
 
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
-      <Stack.Screen
-        options={{
-          headerRight: () => (
-            <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={() => router.push('/settings')} hitSlop={12}>
-              <Ionicons name="settings-outline" size={24} color={t.text} />
-            </Pressable>
-          ),
-          headerLeft: () => (backend.mode === 'demo' ? <Pill label="Demo" tone="accent" /> : null),
-        }}
-      />
-
       <View style={styles.map}>
         <CatMap
           cats={cats}
@@ -102,7 +101,26 @@ export default function Home() {
           onSelectCat={(catId) => setSelectedId((cur) => (cur === catId ? null : catId))}
           onPressMap={() => setSelectedId(null)}
           coverBottom={selected ? SELECTED_CARD_PX : 0}
+          satellite={satellite}
+          refitKey={refitKey}
+          locateKey={locateKey}
         />
+        {cats.length > 0 && (
+          <View style={styles.mapButtons}>
+            {mapButtons.map((b) => (
+              <Pressable
+                key={b.label}
+                accessibilityRole="button"
+                accessibilityLabel={b.label}
+                accessibilityState={b.on !== undefined ? { selected: b.on } : undefined}
+                onPress={b.onPress}
+                style={({ pressed }) => [styles.mapBtn, { backgroundColor: b.on ? t.primary : t.surface, opacity: pressed ? 0.8 : 1 }]}
+              >
+                <Ionicons name={b.icon} size={20} color={b.on ? t.primaryText : t.text} />
+              </Pressable>
+            ))}
+          </View>
+        )}
         {selected && (
           <SelectedCat cat={selected} now={now} onOpen={() => open(selected.id)} onClose={() => setSelectedId(null)} />
         )}
@@ -113,18 +131,24 @@ export default function Home() {
           <View style={[styles.statusPill, { backgroundColor: t.surface }]}>
             <View style={[styles.dot, { backgroundColor: liveCount ? t.liveDot : t.border }]} />
             <Text style={{ color: t.text, fontFamily: fonts.bodySemibold, fontSize: 13 }}>
-              {cats.length} {cats.length === 1 ? 'cat' : 'cats'} · {liveCount} live
+              {tn(cats.length, '{n} cat', '{n} cats')} · {tr('{n} live', { n: liveCount })}
             </Text>
           </View>
         )}
         {lost.map((c) => (
-          <Pressable key={c.id} accessibilityRole="button" onPress={() => open(c.id)} style={[styles.banner, styles.stacked, { backgroundColor: t.danger }]}>
+          <Pressable
+            key={c.id}
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: '/lost/[id]', params: { id: c.id } })}
+            style={[styles.banner, styles.stacked, { backgroundColor: t.danger }]}
+          >
             <View style={styles.bannerRow}>
               <Ionicons name="alert-circle" size={20} color="#fff" />
-              <Text style={styles.bannerText}>{c.name} is in lost mode</Text>
+              <Text style={styles.bannerText}>{tr('{name} is in lost mode', { name: c.name })}</Text>
             </View>
             <Text style={styles.bannerSub}>
-              {c.lostModeSince ? `Since ${relativeTime(c.lostModeSince, now)} · ` : ''}Tap to follow
+              {c.lostModeSince ? `${tr('Since {when}', { when: relativeTime(c.lostModeSince, now) })} · ` : ''}
+              {tr('Tap to search')}
             </Text>
           </Pressable>
         ))}
@@ -141,23 +165,25 @@ export default function Home() {
               <View style={styles.bannerRow}>
                 <Ionicons name={alert.transition === 'exit' ? 'exit-outline' : 'home-outline'} size={20} color="#fff" />
                 <Text style={styles.bannerText}>
-                  {alertCat?.name ?? 'A cat'} {alert.transition === 'exit' ? 'left' : 'is back in'} {alert.zoneName}
+                  {alert.transition === 'exit'
+                    ? tr('{name} left {zone}', { name: alertCat?.name ?? tr('A cat'), zone: alert.zoneName })
+                    : tr('{name} is back in {zone}', { name: alertCat?.name ?? tr('A cat'), zone: alert.zoneName })}
                 </Text>
               </View>
-              <Text style={styles.bannerSub}>{relativeTime(alert.at, now)} · Tap to view</Text>
+              <Text style={styles.bannerSub}>{relativeTime(alert.at, now)} · {tr('Tap to view')}</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Dismiss alert" onPress={dismissAlert} hitSlop={12}>
+            <Pressable accessibilityRole="button" accessibilityLabel={tr('Dismiss alert')} onPress={dismissAlert} hitSlop={12}>
               <Ionicons name="close" size={20} color="#fff" />
             </Pressable>
           </View>
         )}
       </View>
 
-      <View style={[styles.sheet, { backgroundColor: t.surface, paddingBottom: insets.bottom + space.md }]}>
+      <View style={[styles.sheet, { backgroundColor: t.surface }]}>
         <View style={[styles.grabber, { backgroundColor: t.border }]} />
         <View style={styles.sheetHeader}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.sheetTitle, { color: t.text }]}>My cats</Text>
+            <Text style={[styles.sheetTitle, { color: t.text }]}>{tr('My cats')}</Text>
             <View style={styles.syncRow} accessibilityLiveRegion="polite">
               <Ionicons
                 name={syncFailed ? 'cloud-offline-outline' : 'checkmark-circle-outline'}
@@ -167,9 +193,10 @@ export default function Home() {
               <Text style={{ color: syncFailed ? t.danger : t.textMuted, fontSize: 13, flex: 1 }}>{syncLine}</Text>
             </View>
           </View>
+          {backend.mode === 'demo' && <Pill label={tr('Demo')} tone="accent" />}
           <Pressable accessibilityRole="button" onPress={() => router.push('/add-cat')} style={[styles.addPill, { backgroundColor: t.primary }]}>
             <Ionicons name="add" size={18} color={t.primaryText} />
-            <Text style={{ color: t.primaryText, fontFamily: fonts.bodySemibold }}>Add cat</Text>
+            <Text style={{ color: t.primaryText, fontFamily: fonts.bodySemibold }}>{tr('Add cat')}</Text>
           </Pressable>
         </View>
         {tracker.state !== 'off' && (
@@ -180,16 +207,10 @@ export default function Home() {
         <FlatList
           data={cats}
           keyExtractor={(c) => c.id}
-          renderItem={({ item }) => (
-            <CatRow
-              cat={item}
-              trackedByPhone={item.id === trackedCatId}
-              onPress={() => open(item.id)}
-            />
-          )}
+          renderItem={({ item }) => <CatRow cat={item} trackedByPhone={item.id === trackedCatId} onPress={() => open(item.id)} />}
           ItemSeparatorComponent={() => <View style={[styles.sep, { backgroundColor: t.border }]} />}
-          ListEmptyComponent={<FirstRun onAdd={() => router.push('/add-cat')} onJoin={() => router.push('/settings')} />}
-          style={{ flexGrow: 0, maxHeight: Math.round(height * 0.4) }}
+          ListEmptyComponent={<FirstRun onAdd={() => router.push('/add-cat')} onJoin={() => router.push('/join')} />}
+          style={{ flexGrow: 0, maxHeight: Math.round(height * 0.34) }}
         />
       </View>
     </View>
@@ -199,30 +220,41 @@ export default function Home() {
 /** Height the selected-cat card takes from the bottom of the map. */
 const SELECTED_CARD_PX = 120;
 
-/** Card for the cat tapped on the map: photo, name and status; tap to open. */
+/** Card for the cat tapped on the map: photo, name and status; tap to open, or get directions. */
 function SelectedCat({ cat, now, onOpen, onClose }: { cat: Cat; now: number; onOpen: () => void; onClose: () => void }) {
   const t = useTheme();
   const photoUrl = usePhotoUrl(cat.photoPath);
   const live = isLive(cat.lastFixAt, 20 * 60, now);
   return (
     <View style={[styles.selected, { backgroundColor: t.surface }]}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Open ${cat.name}`} onPress={onOpen} style={styles.selectedMain}>
+      <Pressable accessibilityRole="button" accessibilityLabel={tr('Open {name}', { name: cat.name })} onPress={onOpen} style={styles.selectedMain}>
         <CatAvatar name={cat.name} color={cat.color} size={64} photoUrl={photoUrl} ring={cat.lostMode ? t.danger : undefined} badge={catBadge(cat, t)} />
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={[styles.selectedName, { color: t.text }]} numberOfLines={1}>{cat.name}</Text>
           <Text style={{ color: live ? t.live : t.textMuted, fontFamily: fonts.bodyMedium }} numberOfLines={1}>
-            {cat.lostMode ? 'Lost mode · ' : ''}{placeLine(cat)?.line ?? (live ? 'Live' : 'Last seen')} · {relativeTime(cat.lastFixAt, now)}
+            {cat.lostMode ? `${tr('Lost mode')} · ` : ''}{placeLine(cat)?.line ?? (live ? tr('Live') : tr('Last seen'))} · {relativeTime(cat.lastFixAt, now)}
             {cat.lastBatteryPct ? ` · ${cat.lastBatteryPct}%` : ''}
           </Text>
           <View style={{ flexDirection: 'row' }}>
             <AccessPill cat={cat} own />
           </View>
         </View>
-        <Ionicons name="chevron-forward" size={20} color={t.textMuted} />
       </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} hitSlop={10} style={styles.selectedClose}>
-        <Ionicons name="close" size={18} color={t.textMuted} />
-      </Pressable>
+      <View style={styles.selectedActions}>
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('Close')} onPress={onClose} hitSlop={10}>
+          <Ionicons name="close" size={18} color={t.textMuted} />
+        </Pressable>
+        {cat.lastLat !== null && cat.lastLng !== null && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={tr('Directions to {name}', { name: cat.name })}
+            onPress={() => void Linking.openURL(directionsUrl(cat.lastLat!, cat.lastLng!)).catch(() => undefined)}
+            style={[styles.routeBtn, { backgroundColor: t.surfaceAlt }]}
+          >
+            <Ionicons name="walk-outline" size={20} color={t.text} />
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
@@ -231,13 +263,13 @@ function SelectedCat({ cat, now, onOpen, onClose }: { cat: Cat; now: number; onO
 function FirstRun({ onAdd, onJoin }: { onAdd: () => void; onJoin: () => void }) {
   const t = useTheme();
   const steps: [string, string][] = [
-    ['Add your cat', 'Give it a name and a colour. A photo can come later.'],
-    ['Choose its tracker', 'Use this phone for a quick test, or pair a GPS collar with the code on its label.'],
-    ['Share with your household', 'In Settings, invite people to your household, or invite a cat sitter from a cat\'s edit screen.'],
+    [tr('Add your cat'), tr('Give it a name and a colour. A photo can come later.')],
+    [tr('Choose its tracker'), tr('Use this phone for a quick test, or pair a GPS collar with the code on its label.')],
+    [tr('Share with your household'), tr('Under Me, invite people to your household, or invite a cat sitter from a cat\'s edit screen.')],
   ];
   return (
     <View style={styles.firstRun}>
-      <Text style={[styles.firstRunTitle, { color: t.text }]}>Let's get your cat on the map</Text>
+      <Text style={[styles.firstRunTitle, { color: t.text }]}>{tr("Let's get your cat on the map")}</Text>
       {steps.map(([title, body], i) => (
         <View key={title} style={styles.step}>
           <View style={[styles.stepNumber, { backgroundColor: t.primary }]}>
@@ -249,8 +281,8 @@ function FirstRun({ onAdd, onJoin }: { onAdd: () => void; onJoin: () => void }) 
           </View>
         </View>
       ))}
-      <Button title="Add your first cat" icon="add" onPress={onAdd} />
-      <Button title="I have an invite code" variant="ghost" onPress={onJoin} />
+      <Button title={tr('Add your first cat')} icon="add" onPress={onAdd} />
+      <Button title={tr('I have an invite code')} variant="ghost" onPress={onJoin} />
     </View>
   );
 }
@@ -258,17 +290,23 @@ function FirstRun({ onAdd, onJoin }: { onAdd: () => void; onJoin: () => void }) 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   map: { flex: 1 },
+  mapButtons: { position: 'absolute', right: space.lg, top: 64, gap: space.sm },
+  mapBtn: {
+    width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 10, elevation: 4,
+  },
   selected: {
-    position: 'absolute', left: space.lg, right: space.lg, bottom: radius.sheet + space.md,
+    position: 'absolute', left: space.lg, right: space.lg, bottom: radius.sheet + space.md, flexDirection: 'row',
     borderRadius: radius.lg, shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 16, elevation: 6,
   },
-  selectedMain: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, paddingRight: space.lg },
+  selectedMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md },
+  selectedActions: { justifyContent: 'space-between', alignItems: 'center', paddingVertical: space.sm, paddingRight: space.md },
+  routeBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   selectedName: { fontFamily: fonts.display, fontSize: 20 },
-  selectedClose: { position: 'absolute', top: 8, right: 8 },
   overlays: { position: 'absolute', top: space.md, left: space.lg, right: space.lg, gap: space.sm },
   sheet: {
     borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet, marginTop: -radius.sheet,
-    paddingTop: space.sm, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 16, elevation: 8,
+    paddingTop: space.sm, paddingBottom: space.sm, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 16, elevation: 8,
   },
   statusPill: {
     alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: space.sm,

@@ -2,6 +2,7 @@
 import type { Cat, CatEvent } from './backend/types';
 // .ts extension so the node test runner can load this file too.
 import { formatDistance } from './geo.ts';
+import { t } from './i18n/core.ts';
 
 export interface PlaceLine {
   /** Short: "At Home" or "Out". */
@@ -16,10 +17,13 @@ export interface PlaceLine {
 export function placeLine(cat: Pick<Cat, 'place'>): PlaceLine | null {
   const p = cat.place;
   if (!p) return null;
-  if (p.zoneName) return { title: `At ${p.zoneName}`, line: `At ${p.zoneName}`, detail: null, inside: true };
+  if (p.zoneName) {
+    const at = t('At {zone}', { zone: p.zoneName });
+    return { title: at, line: at, detail: null, inside: true };
+  }
   if (p.nearestZoneName && p.nearestZoneM !== null) {
-    const detail = `${formatDistance(p.nearestZoneM)} from ${p.nearestZoneName}`;
-    return { title: 'Out', line: `Out · ${detail}`, detail, inside: false };
+    const detail = t('{distance} from {zone}', { distance: formatDistance(p.nearestZoneM), zone: p.nearestZoneName });
+    return { title: t('Out'), line: `${t('Out')} · ${detail}`, detail, inside: false };
   }
   return null;
 }
