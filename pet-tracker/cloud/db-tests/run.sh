@@ -34,3 +34,5 @@ psql -q -v ON_ERROR_STOP=1 -d "$DB" -f resting_test.sql
 psql -q -v ON_ERROR_STOP=1 -d "$DB" -f ../supabase/migrations/20261113001100_staff_labels.sql
 psql -q -v ON_ERROR_STOP=1 -d "$DB" -f staff_test.sql
 psql -q -v ON_ERROR_STOP=1 -d "$DB" -f demo_test.sql
+psql -q -v ON_ERROR_STOP=1 -d "$DB" -f ../supabase/migrations/20261115001200_app_complete.sql
+psql -q -v ON_ERROR_STOP=1 -d "$DB" -f app_test.sql
