@@ -17,9 +17,9 @@ import { Button, Card, ErrorText, Pill, SectionTitle } from '../src/components/u
 import { ask, messageOf } from '../src/dialogs';
 import { relativeTime } from '../src/geo';
 import { fonts, radius, space, useTheme } from '../src/theme';
-import { t as tr } from '../src/i18n';
+import { locale, t as tr } from '../src/i18n';
 
-const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 export default function Staff() {
   const t = useTheme();
@@ -69,7 +69,7 @@ export default function Staff() {
   const reset = async (trk: StaffTracker) => {
     const yes = await ask(
       tr('Take back {deviceUid}?', { deviceUid: trk.deviceUid }),
-      `${trk.ownerEmail ? `${trk.ownerEmail} loses this tracker and its history. ` : ''}It gets a new code; the old label stops working.`,
+      `${trk.ownerEmail ? `${tr('{email} loses this tracker and its history.', { email: trk.ownerEmail })} ` : ''}${tr('It gets a new code; the old label stops working.')}`,
       tr('Take back'),
       true,
     );
@@ -191,7 +191,7 @@ export default function Staff() {
               <Text style={{ color: t.textMuted, fontSize: 12, lineHeight: 17 }}>
                 Made {day(trk.registeredAt)}{trk.registeredBy ? ` by ${trk.registeredBy}` : ''}
                 {trk.claimedAt ? ` · claimed ${day(trk.claimedAt)}` : ''}
-                {trk.lastSeenAt ? ` · last check-in ${relativeTime(trk.lastSeenAt)}` : ''}
+                {trk.lastSeenAt ? ` · ${tr('last check-in {when}', { when: relativeTime(trk.lastSeenAt) })}` : ''}
                 {trk.iccid ? ` · SIM …${trk.iccid.slice(-6)}` : ''}
               </Text>
               {trk.ownerEmail && (

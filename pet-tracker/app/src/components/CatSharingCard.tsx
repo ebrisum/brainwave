@@ -122,7 +122,7 @@ export function CatSharingCard({ cat }: { cat: Cat }) {
       {code ? (
         <View style={[styles.codeBox, { backgroundColor: t.surfaceAlt }]}>
           <Text style={{ color: t.textMuted, fontSize: 13, textAlign: 'center' }}>
-            Cat-sitter code for {cat.name} · {code.until ? `access until ${shortDate(code.until)}` : 'no end date'} · use within 7 days
+            {tr('Cat-sitter code for {name}', { name: cat.name })} · {code.until ? tr('access until {date}', { date: shortDate(code.until) }) : tr('no end date')} · {tr('use within 7 days')}
           </Text>
           <Text selectable style={[styles.code, { color: t.text }]}>{prettyCode(code.code)}</Text>
           <Button

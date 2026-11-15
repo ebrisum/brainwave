@@ -69,7 +69,7 @@ export default function AddCat() {
   }, [backend]);
 
   if (!backend) return null;
-  const catName = name.trim() || 'your cat';
+  const catName = name.trim() || tr('your cat');
 
   const input = [styles.input, { backgroundColor: t.surfaceAlt, color: t.text, borderColor: t.border }];
   const canSave =

@@ -80,7 +80,7 @@ static enum zone_place last_place = PLACE_UNKNOWN;
 static bool contacted;               /* a session succeeded since boot */
 static int64_t last_contact_ms;
 
-static const struct upload_cfg upload_cfg = {
+static struct upload_cfg upload_cfg = {
 	.home_batch = CONFIG_TRACKER_HOME_BATCH,
 	.home_max_age_ms = (int64_t)CONFIG_TRACKER_HOME_MAX_AGE_S * MSEC_PER_SEC,
 	.contact_max_ms = (int64_t)CONFIG_TRACKER_CONTACT_MAX_S * MSEC_PER_SEC,
@@ -241,6 +241,12 @@ static void config_handler(const struct tracker_config *cfg)
 	if (cfg->zone_count != config.zone_count) {
 		LOG_INF("%u home zone(s)", cfg->zone_count);
 	}
+	/* Live: each fix at once. Saver: twice the batch (one radio session per
+	 * CLOUD_BATCH_MAX fixes at most). Normal: the build's default.
+	 */
+	upload_cfg.home_batch = cfg->power_mode == POWER_LIVE    ? 1
+			      : cfg->power_mode == POWER_SAVER ? MIN(2 * CONFIG_TRACKER_HOME_BATCH, CLOUD_BATCH_MAX)
+							       : CONFIG_TRACKER_HOME_BATCH;
 
 	config = *cfg;
 	reschedule();

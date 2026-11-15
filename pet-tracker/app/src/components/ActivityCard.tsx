@@ -11,7 +11,7 @@ import type { ActivityDay } from '../backend/types';
 import { activityLevel, formatDistance } from '../geo';
 import { radius, space, useTheme } from '../theme';
 import { Card, SectionTitle } from './ui';
-import { t as tr } from '../i18n';
+import { locale, t as tr } from '../i18n';
 
 const DAY_INITIAL = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -90,7 +90,7 @@ export function ActivityCard({ days, color, name, kind }: { days: ActivityDay[];
 
       <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18 }}>
         {shown
-          ? `${new Date(`${shown.key}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}: ${formatDistance(shown.d?.distanceM ?? 0)} walked, ${Math.round(shown.d?.activeMinutes ?? 0)} min on the move${shown.d?.nightShare != null ? `, ${Math.round(shown.d.nightShare * 100)} % at night` : ''}.`
+          ? `${new Date(`${shown.key}T12:00:00`).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'short' })}: ${tr('{distance} walked, {m} min on the move', { distance: formatDistance(shown.d?.distanceM ?? 0), m: Math.round(shown.d?.activeMinutes ?? 0) })}${shown.d?.nightShare != null ? `, ${tr('{pct}% at night', { pct: Math.round(shown.d.nightShare * 100) })}` : ''}.`
           : kind === 'collar' ? tr('Estimated from collar positions: GPS jitter is ignored, only real movement counts. Tap a bar for details.') : tr('Estimated from phone positions: GPS jitter is ignored, only real movement counts. Tap a bar for details.')}
       </Text>
     </Card>

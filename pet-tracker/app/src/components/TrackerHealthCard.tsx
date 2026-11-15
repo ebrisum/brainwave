@@ -16,13 +16,13 @@ import { t as tr } from '../i18n';
 const LOW_PCT = 25;
 
 function daysText(days: number): string {
-  if (days < 1) return 'less than a day left';
+  if (days < 1) return tr('less than a day left');
   const d = Math.round(days);
-  return `about ${d} ${d === 1 ? 'day' : 'days'} left`;
+  return d === 1 ? tr('about 1 day left') : tr('about {n} days left', { n: d });
 }
 
 function intervalText(s: number): string {
-  return s < 60 ? `every ${s} s` : `every ${Math.round(s / 60)} min`;
+  return s < 60 ? tr('every {n} s', { n: s }) : tr('every {n} min', { n: Math.round(s / 60) });
 }
 
 export function TrackerHealthCard({ cat }: { cat: Cat }) {
@@ -90,7 +90,7 @@ export function TrackerHealthCard({ cat }: { cat: Cat }) {
               {health?.daysLeft != null
                 ? daysText(health.daysLeft)
                 : cat.kind === 'collar'
-                  ? 'estimate after a few hours of use'
+                  ? tr('estimate after a few hours of use')
                   : ''}
             </Text>
           </View>

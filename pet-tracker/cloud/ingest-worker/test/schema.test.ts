@@ -107,6 +107,9 @@ test("collar config: database notification becomes a retained downlink", () => {
   assert.deepEqual(d, { topic: `pt/v1/${ID}/down/config`, payload: JSON.stringify(cfg) });
   assert.equal(toDownlink(JSON.stringify({ device_uid: "pt-1", config: cfg })), null, "bad device id");
   assert.equal(toDownlink(JSON.stringify({ device_uid: ID, config: { ...cfg, interval_s: 5 } })), null, "out of range");
+  const live = { ...cfg, power_mode: "live" };
+  assert.deepEqual(JSON.parse(toDownlink(JSON.stringify({ device_uid: ID, config: live }))!.payload), live, "power mode passes");
+  assert.equal(toDownlink(JSON.stringify({ device_uid: ID, config: { ...cfg, power_mode: "turbo" } })), null, "unknown power mode");
   assert.equal(toDownlink("{"), null, "invalid JSON");
   assert.equal(toDownlink(undefined), null);
 });

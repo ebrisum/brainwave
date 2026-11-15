@@ -115,6 +115,7 @@ struct config_msg {
 	int32_t night_interval_s;
 	struct zone_msg zones[POLICY_MAX_ZONES];
 	size_t zones_len;
+	const char *power_mode;
 };
 
 static const struct json_obj_descr config_descr[] = {
@@ -126,6 +127,7 @@ static const struct json_obj_descr config_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct config_msg, night_interval_s, JSON_TOK_NUMBER),
 	JSON_OBJ_DESCR_OBJ_ARRAY(struct config_msg, zones, POLICY_MAX_ZONES, zones_len,
 				 zone_descr, ARRAY_SIZE(zone_descr)),
+	JSON_OBJ_DESCR_PRIM(struct config_msg, power_mode, JSON_TOK_STRING),
 };
 
 struct fota_msg {
@@ -156,6 +158,14 @@ static void on_config(char *json, size_t len)
 
 	cfg.moving_interval_s = (uint32_t)msg.interval_s;
 	cfg.lost_mode = (fields & BIT(1)) ? msg.lost_mode : false;
+	cfg.power_mode = POWER_NORMAL;
+	if ((fields & BIT(7)) && msg.power_mode != NULL) {
+		if (strcmp(msg.power_mode, "saver") == 0) {
+			cfg.power_mode = POWER_SAVER;
+		} else if (strcmp(msg.power_mode, "live") == 0) {
+			cfg.power_mode = POWER_LIVE;
+		}
+	}
 
 	/* Night watch is optional; accept it only if the whole window is valid. */
 	if ((fields & (BIT(2) | BIT(3) | BIT(4) | BIT(5))) == (BIT(2) | BIT(3) | BIT(4) | BIT(5)) &&

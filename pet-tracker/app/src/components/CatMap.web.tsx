@@ -93,7 +93,7 @@ export function CatMap({
           {[1, 2, 3].map((i) =>
             circle(`ring${i}`, view.lat0, view.lng0, ringStepM * i, { borderWidth: 1, borderStyle: 'dashed', borderColor: t.mapGrid }),
           )}
-          <Text style={[styles.scale, { color: t.textMuted }]}>rings every {formatDistance(ringStepM)}</Text>
+          <Text style={[styles.scale, { color: t.textMuted }]}>{tr('rings every {distance}', { distance: formatDistance(ringStepM) })}</Text>
 
           {blobs.length > 0 && (
             // The browser can blur the rings into one smooth glow.

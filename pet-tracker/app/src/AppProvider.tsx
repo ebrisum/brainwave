@@ -10,7 +10,7 @@ import { DemoBackend } from './backend/demoBackend';
 import { SupabaseBackend } from './backend/supabaseBackend';
 import { supabase } from './backend/supabaseClient';
 import type { Backend, Cat, CatEvent, UserSettings } from './backend/types';
-import { getLang, tk } from './i18n';
+import { getLang, t as tr, tk } from './i18n';
 import { inNightWindow } from './geo';
 import { onNotificationOpened, registerForPush, type PushStatus } from './notifications/push';
 import { usePhoneTracker, type TrackerStatus } from './tracking/usePhoneTracker';
@@ -241,7 +241,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const tracker = usePhoneTracker(
     backend,
-    trackedCatId ? { id: trackedCatId, name: trackedCat?.name ?? 'your cat' } : null,
+    trackedCatId ? { id: trackedCatId, name: trackedCat?.name ?? tr('your cat') } : null,
     effectiveIntervalS,
   );
 

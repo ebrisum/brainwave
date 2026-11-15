@@ -22,8 +22,18 @@ struct tracker_fix {
 };
 
 /* Remote configuration delivered on pt/v1/<id>/down/config (QoS 1). */
+/* Power mode chosen in the app. The backend already sets moving_interval_s
+ * for it; the collar also changes how it batches uploads at home.
+ */
+enum power_mode {
+	POWER_NORMAL = 0,
+	POWER_SAVER,  /* larger batches at home: fewer radio sessions */
+	POWER_LIVE,   /* every fix goes out at once, also at home */
+};
+
 struct tracker_config {
 	uint32_t moving_interval_s;
+	enum power_mode power_mode;
 	bool lost_mode;
 	/* Night watch: shorter interval while moving in a UTC window (the
 	 * backend converts the owner's local window and re-sends it daily).

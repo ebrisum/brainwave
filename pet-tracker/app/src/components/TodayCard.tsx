@@ -19,9 +19,9 @@ export function TodayCard({ cat, events, activity, hasZones }: { cat: Cat; event
   const isToday = today && today.day === new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local
   const summary = isToday
     ? [
-        `${formatDistance(today.distanceM)} walked`,
-        today.activeMinutes >= 1 ? `${fmtDuration(today.activeMinutes * 60)} active` : null,
-        today.roamRadiusM ? `furthest ${formatDistance(today.roamRadiusM)} from home` : null,
+        tr('{distance} walked', { distance: formatDistance(today.distanceM) }),
+        today.activeMinutes >= 1 ? tr('{time} active', { time: fmtDuration(today.activeMinutes * 60) }) : null,
+        today.roamRadiusM ? tr('furthest {distance} from home', { distance: formatDistance(today.roamRadiusM) }) : null,
       ].filter(Boolean).join(' · ')
     : null;
 

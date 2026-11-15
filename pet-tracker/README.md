@@ -27,8 +27,10 @@ firmware/                      Zephyr application (nRF Connect SDK v3.4.1)
   prj.conf                     production config (PSM 12 h / 6 s, RAI, 1NCE APN, no UART)
   overlay-debug.conf           logs + short intervals for the bench
   sysbuild.conf                MCUboot: ECDSA-P256, encrypted images, HW anti-rollback
-app/                           Expo (SDK 57) React Native app: multi-cat map, phone-as-tracker,
-                               route replay, home zones; demo mode or Supabase
+app/                           Expo (SDK 58) React Native app, English and Dutch: tabs Map / Cats /
+                               Alerts / Places / Me; lost-cat hub (live link, poster, compass),
+                               collar page (power mode, new collar), day timeline, insights,
+                               cat profile, help, privacy (export, retention); demo mode or Supabase
 cloud/
   supabase/migrations/         schema, RLS, ingest/claim functions, retention job, cats + phone trackers
   supabase/functions/          Edge Functions: AWS IoT ingest, Traccar ingest, tracker commands, push
@@ -41,6 +43,7 @@ cloud/
   db-tests/                    behavioural SQL tests (PostgreSQL + PostGIS)
 docs/06-first-test-with-your-cat.md   step-by-step: deploy, push, Traccar, MT710, first test
 docs/07-selling-trackers.md          labels, scanning, who has which tracker, returns
+docs/08-app-features.md              what is in the app, and how to switch the new parts on
 ```
 
 ## What has been verified here
@@ -48,13 +51,13 @@ docs/07-selling-trackers.md          labels, scanning, who has which tracker, re
 | Area | How | Result |
 |---|---|---|
 | Firmware compiles | `west build` for `nrf9160dk/nrf9160/ns` (production + debug) and `thingy91/nrf9160/ns` with NCS v3.4.1 / Zephyr SDK 1.0.1 | ✅ no app warnings; signed + encrypted DFU image produced |
-| Database | `cloud/db-tests/run.sh` on PostgreSQL 16 + PostGIS 3.4 | ✅ 189 checks |
-| Mobile app | `tsc`, unit tests, `expo export` web + Android + iOS, headless-Chromium walkthrough with simulated GPS | ✅ |
-| Worker | `npm test`, `tsc --noEmit` | ✅ 13/13 |
+| Database | `cloud/db-tests/run.sh` on PostgreSQL 16 + PostGIS 3.4 | ✅ 286 checks |
+| Mobile app | `tsc`, 37 unit tests (incl. every text has a Dutch translation), `expo export` web + Android + iOS, headless-Chromium walkthrough of every tab and screen in English and Dutch (demo mode) | ✅ no runtime errors |
+| Worker | `npm test`, `tsc --noEmit` | ✅ 13/13 (config with power mode) |
 | Power policy | `firmware/tests/host/run.sh` (gcc, `-Werror`) | ✅ |
 | End to end (power) | simulated collar → Mosquitto (mTLS + ACL) → worker → Postgres: config with home zones, batch of 3, heartbeat, "still" check-in, spoofed batch | ✅ zones delivered, 3 fixes + "left home" alert stored, heartbeat updates battery/last seen, "still" marks the collar resting, spoof dropped by the ACL |
 | End to end | Mosquitto (mTLS + ACL) → worker → Postgres (TLS, least-privilege role) | ✅ including spoofing / no-cert rejection |
-| Edge functions | `deno check`, unit tests for the Traccar mapping, local HTTP smoke tests (AWS IoT and Traccar ingest) | ✅ |
+| Edge functions | `deno check`, unit tests for the Traccar mapping and the push texts (English/Dutch), local HTTP smoke tests (AWS IoT and Traccar ingest) | ✅ |
 | Tracker bridge | Traccar + MT710 on a live network | ⏳ not yet: see docs/06 |
 
 **Not verified yet:**

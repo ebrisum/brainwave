@@ -50,7 +50,7 @@ export function TimeField({ label, minutes, onChange }: { label: string; minutes
     <View style={{ flex: 1 }}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${label} ${hhmm(minutes)}, change time`}
+        accessibilityLabel={`${label} ${hhmm(minutes)}, ${tr('change time')}`}
         onPress={() => (open ? close() : setOpen(true))}
         style={[styles.tile, { backgroundColor: t.surfaceAlt }]}
       >

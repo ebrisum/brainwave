@@ -61,7 +61,7 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: t.bg },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: tr('Map'), headerTitle: tr('My cats'), tabBarIcon: icon('map-outline', 'map') }} />
+      <Tabs.Screen name="index" options={{ title: tr('Map'), headerShown: false, tabBarIcon: icon('map-outline', 'map') }} />
       <Tabs.Screen name="cats" options={{ title: tr('Cats'), tabBarIcon: icon('paw-outline', 'paw') }} />
       <Tabs.Screen
         name="alerts"

@@ -26,7 +26,7 @@ export function HouseholdPicker({
       detail:
         h.members.length === 1
           ? tr('Only you so far · invite people under Me')
-          : `${catName} is visible to ${h.members.length} people: ${h.members.map((m) => m.email.split('@')[0]).join(', ')}`,
+          : tr('{name} is visible to {n} people: {people}', { name: catName, n: h.members.length, people: h.members.map((m) => m.email.split('@')[0]).join(', ') }),
     })),
   ];
   return (

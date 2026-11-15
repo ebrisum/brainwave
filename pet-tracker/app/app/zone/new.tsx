@@ -70,7 +70,7 @@ export default function NewZone() {
   }, [backend, householdId, householdName]);
 
   if (!backend || (!cat && !householdId) || (!householdId && !canCatZone)) return null;
-  const forName = scope === 'household' ? householdName ?? 'the household' : cat?.name ?? '';
+  const forName = scope === 'household' ? householdName ?? tr('the household') : cat?.name ?? '';
 
   const cancel = <Pressable accessibilityRole="button" onPress={() => router.back()} hitSlop={10}><Text style={{ color: t.text, fontSize: 16 }}>{tr('Cancel')}</Text></Pressable>;
 

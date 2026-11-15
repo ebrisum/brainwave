@@ -17,6 +17,8 @@ import { DEVICE_ID_RE } from "./schema.ts";
 export const collarConfigSchema = z
   .object({
     interval_s: z.number().int().gte(60).lte(86_400),
+    /** Battery saver / normal / live (migration 1200); older backends leave it out. */
+    power_mode: z.enum(["saver", "normal", "live"]).optional(),
     lost_mode: z.boolean(),
     night_mode: z.boolean(),
     night_start_utc_min: z.number().int().gte(0).lte(1439),

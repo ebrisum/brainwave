@@ -44,7 +44,7 @@ export function usePhoneTracker(
 ): TrackerStatus {
   const [status, setStatus] = useState<TrackerStatus>(OFF);
   const catId = cat?.id ?? null;
-  const catName = cat?.name ?? 'your cat';
+  const catName = cat?.name ?? tr('your cat');
 
   useEffect(() => {
     if (!backend || !catId) {

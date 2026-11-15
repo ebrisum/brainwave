@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useApp } from '../../src/AppProvider';
 import type { Cat } from '../../src/backend/types';
@@ -38,6 +39,7 @@ export default function MapTab() {
   const t = useTheme();
   const router = useRouter();
   const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const now = useNow(15_000);
   const { ready, backend, cats, alert, dismissAlert, trackedCatId, tracker, openCatRequest, clearOpenCatRequest, lastSyncAt, syncFailed } = useApp();
   // Cat tapped on the map: zoom to it and show its card.
@@ -106,7 +108,7 @@ export default function MapTab() {
           locateKey={locateKey}
         />
         {cats.length > 0 && (
-          <View style={styles.mapButtons}>
+          <View style={[styles.mapButtons, { top: insets.top + 64 }]}>
             {mapButtons.map((b) => (
               <Pressable
                 key={b.label}
@@ -126,7 +128,7 @@ export default function MapTab() {
         )}
       </View>
 
-      <View style={styles.overlays} pointerEvents="box-none">
+      <View style={[styles.overlays, { top: insets.top + space.md }]} pointerEvents="box-none">
         {cats.length > 0 && (
           <View style={[styles.statusPill, { backgroundColor: t.surface }]}>
             <View style={[styles.dot, { backgroundColor: liveCount ? t.liveDot : t.border }]} />
@@ -290,7 +292,7 @@ function FirstRun({ onAdd, onJoin }: { onAdd: () => void; onJoin: () => void }) 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   map: { flex: 1 },
-  mapButtons: { position: 'absolute', right: space.lg, top: 64, gap: space.sm },
+  mapButtons: { position: 'absolute', right: space.lg, gap: space.sm },
   mapBtn: {
     width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 10, elevation: 4,
