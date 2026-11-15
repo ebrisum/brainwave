@@ -11,6 +11,7 @@ import type { ActivityDay } from '../backend/types';
 import { activityLevel, formatDistance } from '../geo';
 import { radius, space, useTheme } from '../theme';
 import { Card, SectionTitle } from './ui';
+import { t as tr } from '../i18n';
 
 const DAY_INITIAL = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -36,7 +37,7 @@ export function ActivityCard({ days, color, name, kind }: { days: ActivityDay[];
 
   return (
     <Card style={{ gap: space.md }}>
-      <SectionTitle>Activity (estimated)</SectionTitle>
+      <SectionTitle>{tr('Activity (estimated)')}</SectionTitle>
 
       <View style={styles.levelRow}>
         <View style={[styles.levelIcon, { backgroundColor: t.accentSoft }]}>
@@ -49,13 +50,13 @@ export function ActivityCard({ days, color, name, kind }: { days: ActivityDay[];
       </View>
 
       <View style={styles.stats}>
-        <Stat label="walked today" value={formatDistance(today?.distanceM ?? 0)} />
-        <Stat label="on the move" value={`${Math.round(today?.activeMinutes ?? 0)} min`} />
-        <Stat label="furthest from home" value={today?.roamRadiusM != null ? formatDistance(today.roamRadiusM) : '–'} />
+        <Stat label={tr('walked today')} value={formatDistance(today?.distanceM ?? 0)} />
+        <Stat label={tr('on the move')} value={tr('{m} min', { m: Math.round(today?.activeMinutes ?? 0) })} />
+        <Stat label={tr('furthest from home')} value={today?.roamRadiusM != null ? formatDistance(today.roamRadiusM) : '–'} />
       </View>
 
       <View>
-        <View style={styles.chart} accessibilityRole="image" accessibilityLabel={`Distance per day for the last 7 days, today ${formatDistance(today?.distanceM ?? 0)}`}>
+        <View style={styles.chart} accessibilityRole="image" accessibilityLabel={tr('Distance per day for the last 7 days, today {distanceM}', { distanceM: formatDistance(today?.distanceM ?? 0) })}>
           {series.map((s) => {
             const v = s.d?.distanceM ?? 0;
             const h = Math.max(2, (v / max) * 96);
@@ -90,7 +91,7 @@ export function ActivityCard({ days, color, name, kind }: { days: ActivityDay[];
       <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18 }}>
         {shown
           ? `${new Date(`${shown.key}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}: ${formatDistance(shown.d?.distanceM ?? 0)} walked, ${Math.round(shown.d?.activeMinutes ?? 0)} min on the move${shown.d?.nightShare != null ? `, ${Math.round(shown.d.nightShare * 100)} % at night` : ''}.`
-          : `Estimated from ${kind === 'collar' ? 'collar' : 'phone'} positions: GPS jitter is ignored, only real movement counts. Tap a bar for details.`}
+          : kind === 'collar' ? tr('Estimated from collar positions: GPS jitter is ignored, only real movement counts. Tap a bar for details.') : tr('Estimated from phone positions: GPS jitter is ignored, only real movement counts. Tap a bar for details.')}
       </Text>
     </Card>
   );

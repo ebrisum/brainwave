@@ -10,6 +10,7 @@ import { supabase } from '../src/backend/supabaseClient';
 import { Button, Card, CatAvatar } from '../src/components/ui';
 import { capabilities } from '../src/runtime';
 import { fonts, radius, space, useTheme } from '../src/theme';
+import { t as tr } from '../src/i18n';
 
 type Busy = 'in' | 'up' | 'apple' | 'google' | 'resend' | null;
 
@@ -18,10 +19,10 @@ const MIN_PASSWORD = 8;
 
 /** Turns Supabase's messages into something a cat owner can act on. */
 function friendly(message: string): string {
-  if (/invalid login credentials/i.test(message)) return "That e-mail and password don't match. Try again, or reset your password.";
-  if (/already (been )?registered/i.test(message)) return 'An account with this e-mail already exists. Sign in instead.';
-  if (/password should be at least/i.test(message)) return `Use a password with at least ${MIN_PASSWORD} characters.`;
-  if (/rate limit|too many/i.test(message)) return 'Too many attempts. Wait a minute and try again.';
+  if (/invalid login credentials/i.test(message)) return tr("That e-mail and password don't match. Try again, or reset your password.");
+  if (/already (been )?registered/i.test(message)) return tr('An account with this e-mail already exists. Sign in instead.');
+  if (/password should be at least/i.test(message)) return tr('Use a password with at least {min} characters.', { min: MIN_PASSWORD });
+  if (/rate limit|too many/i.test(message)) return tr('Too many attempts. Wait a minute and try again.');
   return message;
 }
 
@@ -80,7 +81,7 @@ export default function Login() {
       if (error) {
         if (/confirm/i.test(error.message)) {
           setNeedsConfirm(true);
-          throw new Error('Please confirm your e-mail first. Check your inbox for the link.');
+          throw new Error(tr('Please confirm your e-mail first. Check your inbox for the link.'));
         }
         throw new Error(error.message);
       }
@@ -92,7 +93,7 @@ export default function Login() {
       if (error) throw new Error(error.message);
       if (!data.session) {
         setNeedsConfirm(true);
-        setMessage({ text: `We sent a confirmation link to ${email.trim()}. Open it, then sign in here.`, tone: 'info' });
+        setMessage({ text: tr('We sent a confirmation link to {email}. Open it, then sign in here.', { email: email.trim() }), tone: 'info' });
       }
     });
 
@@ -100,16 +101,16 @@ export default function Login() {
     run('resend', async () => {
       const { error } = await supabase!.auth.resend({ type: 'signup', email: email.trim() });
       if (error) throw new Error(error.message);
-      setMessage({ text: 'Confirmation e-mail sent again.', tone: 'info' });
+      setMessage({ text: tr('Confirmation e-mail sent again.'), tone: 'info' });
     });
 
   const input = [styles.input, { backgroundColor: t.surfaceAlt, color: t.text, borderColor: t.border }];
 
   // Say what is missing, but only once the user has started typing.
   const hint = email.length > 0 && !emailOk
-    ? 'Enter an e-mail address like name@example.com.'
+    ? tr('Enter an e-mail address like name@example.com.')
     : password.length > 0 && password.length < MIN_PASSWORD
-      ? `Create an account with at least ${MIN_PASSWORD} characters.`
+      ? tr('Create an account with at least {min} characters.', { min: MIN_PASSWORD })
       : null;
 
   return (
@@ -118,9 +119,9 @@ export default function Login() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={[styles.hero, { backgroundColor: t.primary }]}>
             <Text style={[styles.eyebrow, { color: t.primaryText }]}>CAT TRACKER</Text>
-            <Text style={[styles.heroTitle, { color: t.primaryText }]}>Know where your cats roam.</Text>
+            <Text style={[styles.heroTitle, { color: t.primaryText }]}>{tr('Know where your cats roam.')}</Text>
             <Text style={[styles.heroSub, { color: t.primaryText }]}>
-              Live location, route history and home-zone alerts for every cat in the house.
+              {tr('Live location, route history and home-zone alerts for every cat in the house.')}
             </Text>
             <View style={styles.avatars}>
               <CatAvatar name="M" color="#F59E0B" size={40} />
@@ -131,7 +132,7 @@ export default function Login() {
 
           {supabaseConfigured ? (
             <Card style={{ gap: space.md }}>
-              <Text style={[styles.cardTitle, { color: t.text }]}>Sign in</Text>
+              <Text style={[styles.cardTitle, { color: t.text }]}>{tr('Sign in')}</Text>
 
               {apple && (() => {
                 const Apple = require('expo-apple-authentication') as typeof import('expo-apple-authentication');
@@ -156,9 +157,9 @@ export default function Login() {
 
               <TextInput
                 style={input}
-                placeholder="E-mail"
+                placeholder={tr('E-mail')}
                 placeholderTextColor={t.textMuted}
-                accessibilityLabel="E-mail"
+                accessibilityLabel={tr('E-mail')}
                 autoCapitalize="none"
                 autoComplete="email"
                 keyboardType="email-address"
@@ -170,9 +171,9 @@ export default function Login() {
               <View style={styles.passwordRow}>
                 <TextInput
                   style={[...input, styles.passwordInput]}
-                  placeholder="Password"
+                  placeholder={tr('Password')}
                   placeholderTextColor={t.textMuted}
-                  accessibilityLabel="Password"
+                  accessibilityLabel={tr('Password')}
                   secureTextEntry={!showPassword}
                   autoComplete="password"
                   textContentType="password"
@@ -183,7 +184,7 @@ export default function Login() {
                 />
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  accessibilityLabel={showPassword ? tr('Hide password') : tr('Show password')}
                   onPress={() => setShowPassword((s) => !s)}
                   hitSlop={10}
                   style={styles.eye}
@@ -194,21 +195,21 @@ export default function Login() {
 
               {hint && <Text style={{ color: t.textMuted, lineHeight: 20 }}>{hint}</Text>}
               {message && <Text style={{ color: message.tone === 'error' ? t.danger : t.live, lineHeight: 20 }}>{message.text}</Text>}
-              <Button title="Sign in" onPress={() => void signIn()} busy={busy === 'in'} disabled={!canSignIn} />
+              <Button title={tr('Sign in')} onPress={() => void signIn()} busy={busy === 'in'} disabled={!canSignIn} />
               <Button
                 variant="secondary"
-                title="Create account"
+                title={tr('Create account')}
                 onPress={() => void signUp()}
                 busy={busy === 'up'}
                 disabled={!canSignUp}
               />
               <View style={styles.links}>
                 <Pressable accessibilityRole="link" onPress={() => router.push({ pathname: '/reset-password', params: { email: email.trim() } })}>
-                  <Text style={{ color: t.accent, fontWeight: '700' }}>Forgot password?</Text>
+                  <Text style={{ color: t.accent, fontWeight: '700' }}>{tr('Forgot password?')}</Text>
                 </Pressable>
                 {needsConfirm && (
                   <Pressable accessibilityRole="link" onPress={() => void resend()} disabled={busy === 'resend'}>
-                    <Text style={{ color: t.accent, fontWeight: '700' }}>Resend confirmation</Text>
+                    <Text style={{ color: t.accent, fontWeight: '700' }}>{tr('Resend confirmation')}</Text>
                   </Pressable>
                 )}
               </View>
@@ -216,8 +217,7 @@ export default function Login() {
           ) : (
             <Card>
               <Text style={{ color: t.textMuted, lineHeight: 20 }}>
-                No backend configured. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to app/.env and
-                restart Expo to use accounts.
+                {tr('No backend configured. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to app/.env and restart Expo to use accounts.')}
               </Text>
             </Card>
           )}
@@ -227,8 +227,8 @@ export default function Login() {
                 <Ionicons name="paw-outline" size={20} color={t.text} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: t.text, fontFamily: fonts.bodySemibold }}>Just looking? Try the demo</Text>
-                <Text style={{ color: t.textMuted, fontSize: 13 }}>Two simulated cats. Nothing is stored.</Text>
+                <Text style={{ color: t.text, fontFamily: fonts.bodySemibold }}>{tr('Just looking? Try the demo')}</Text>
+                <Text style={{ color: t.textMuted, fontSize: 13 }}>{tr('Two simulated cats. Nothing is stored.')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={t.textMuted} />
             </Pressable>

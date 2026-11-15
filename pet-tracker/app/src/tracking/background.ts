@@ -14,6 +14,7 @@ import { Platform } from 'react-native';
 
 import { supabase } from '../backend/supabaseClient';
 import { capabilities } from '../runtime';
+import { t as tr } from '../i18n';
 
 export const BG_TASK = 'cat-tracker-phone-location';
 const BG_CAT_KEY = 'tracker.bg.catId';
@@ -76,8 +77,8 @@ export async function startBackgroundTracking(catId: string, catName: string, in
     activityType: Location.ActivityType.Fitness,
     showsBackgroundLocationIndicator: true,
     foregroundService: {
-      notificationTitle: `Tracking ${catName}`,
-      notificationBody: 'This phone is acting as the cat tracker.',
+      notificationTitle: tr('Tracking {name}', { name: catName }),
+      notificationBody: tr('This phone is acting as the cat tracker.'),
       notificationColor: '#D97706',
       killServiceOnDestroy: false,
     },

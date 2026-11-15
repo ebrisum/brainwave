@@ -8,6 +8,7 @@ import { Platform } from 'react-native';
 
 import type { Backend } from '../backend/types';
 import { capabilities, easProjectId, isExpoGo } from '../runtime';
+import { t as tr } from '../i18n';
 
 type NotificationsModule = typeof import('expo-notifications');
 let notificationsModule: NotificationsModule | null | undefined;
@@ -46,13 +47,13 @@ export function configureNotifications(): void {
   });
   if (Platform.OS === 'android') {
     void Notifications.setNotificationChannelAsync('urgent', {
-      name: 'Escapes & lost mode',
+      name: tr('Escapes & lost mode'),
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#D97706',
     });
     void Notifications.setNotificationChannelAsync('default', {
-      name: 'Home & battery',
+      name: tr('Home & battery'),
       importance: Notifications.AndroidImportance.DEFAULT,
     });
   }

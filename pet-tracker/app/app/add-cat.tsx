@@ -12,6 +12,7 @@ import { QrScanner } from '../src/components/QrScanner';
 import { messageOf } from '../src/dialogs';
 import { CatPhotoField } from '../src/photo/CatPhotoField';
 import { fonts, radius, space, useTheme } from '../src/theme';
+import { t as tr } from '../src/i18n';
 
 type Source = 'phone' | 'collar';
 
@@ -109,25 +110,25 @@ export default function AddCat() {
         <CatPhotoField name={name} color={color} photoUrl={photoUri} onPhoto={setPhotoUri} onRemove={() => setPhotoUri(null)} />
       </View>
 
-      <SectionTitle>Name</SectionTitle>
+      <SectionTitle>{tr('Name')}</SectionTitle>
       <TextInput
         style={input}
-        placeholder="e.g. Minoes"
+        placeholder={tr('e.g. Minoes')}
         placeholderTextColor={t.textMuted}
-        accessibilityLabel="Cat name"
+        accessibilityLabel={tr('Cat name')}
         value={name}
         onChangeText={setName}
         maxLength={64}
         autoFocus
       />
 
-      <SectionTitle>Map colour</SectionTitle>
+      <SectionTitle>{tr('Map colour')}</SectionTitle>
       <View style={styles.swatches}>
         {CAT_COLORS.map((c) => (
           <Pressable
             key={c}
             accessibilityRole="button"
-            accessibilityLabel={`Colour ${c}`}
+            accessibilityLabel={tr('Colour {v}', { v: c })}
             accessibilityState={{ selected: c === color }}
             onPress={() => setColor(c)}
             style={[styles.swatch, { backgroundColor: c, borderColor: c === color ? t.text : 'transparent' }]}
@@ -141,7 +142,7 @@ export default function AddCat() {
           <HouseholdPicker households={households} value={householdId} onChange={setHouseholdId} catName={catName} />
         ) : (
           <Text style={{ color: t.textMuted, lineHeight: 20, paddingVertical: space.sm }}>
-            Only you. To share {catName}, create a household in Settings or invite a cat sitter from {catName}'s edit screen.
+            {tr("Only you. To share {name}, create a household under Me or invite a cat sitter from {name}'s edit screen.", { name: catName })}
           </Text>
         )}
       </View>
@@ -150,8 +151,8 @@ export default function AddCat() {
       <View style={styles.modes}>
         {(
           [
-            { value: 'phone', icon: 'phone-portrait-outline', title: 'This phone', body: 'Test without a collar. Uses this phone\'s GPS.' },
-            { value: 'collar', icon: 'radio-outline', title: 'GPS collar', body: 'Pair it with the code on its label.' },
+            { value: 'phone', icon: 'phone-portrait-outline', title: tr('This phone'), body: tr("Test without a collar. Uses this phone's GPS.") },
+            { value: 'collar', icon: 'radio-outline', title: tr('GPS collar'), body: tr('Pair it with the code on its label.') },
           ] as const
         ).map((m) => {
           const selected = source === m.value;
@@ -177,8 +178,7 @@ export default function AddCat() {
       {source === 'phone' ? (
         <View style={[styles.box, { backgroundColor: t.surface, borderColor: t.border }]}>
           <Text style={{ color: t.textMuted, lineHeight: 20 }}>
-            Use this for your own phone, or one whose owner has agreed. The phone sends its GPS position as this cat while
-            tracking, and shows a persistent "tracking" notification.
+            {tr('Use this for your own phone, or one whose owner has agreed. The phone sends its GPS position as this cat while tracking, and shows a persistent "tracking" notification.')}
           </Text>
           <Pressable
             accessibilityRole="checkbox"
@@ -188,25 +188,25 @@ export default function AddCat() {
           >
             <Ionicons name={consent ? 'checkbox' : 'square-outline'} size={24} color={consent ? t.accent : t.textMuted} />
             <Text style={{ color: t.text, flex: 1, lineHeight: 20 }}>
-              The owner of this phone knows it shares their location with everyone who sees this cat.
+              {tr('The owner of this phone knows it shares their location with everyone who sees this cat.')}
             </Text>
           </Pressable>
           <View style={styles.switchRow}>
-            <Text style={{ color: t.text, fontWeight: '700', flex: 1 }}>Start tracking right after adding</Text>
+            <Text style={{ color: t.text, fontWeight: '700', flex: 1 }}>{tr('Start tracking right after adding')}</Text>
             <Switch value={trackNow} onValueChange={setTrackNow} trackColor={{ true: t.accent }} />
           </View>
         </View>
       ) : (
         <View style={[styles.box, { backgroundColor: t.surface, borderColor: t.border, gap: space.sm }]}>
-          {canScan && <Button title="Scan the QR code" icon="qr-code-outline" onPress={() => setScanning(true)} />}
+          {canScan && <Button title={tr('Scan the QR code')} icon="qr-code-outline" onPress={() => setScanning(true)} />}
           <Text style={{ color: t.textMuted, lineHeight: 20 }}>
-            {canScan ? 'Or type the collar ID and code from the label.' : "Type the collar ID and code from the collar's label."}
+            {canScan ? tr('Or type the collar ID and code from the label.') : tr("Type the collar ID and code from the collar's label.")}
           </Text>
           <TextInput
             style={input}
-            placeholder="Collar ID (on the label)"
+            placeholder={tr('Collar ID (on the label)')}
             placeholderTextColor={t.textMuted}
-            accessibilityLabel="Collar ID"
+            accessibilityLabel={tr('Collar ID')}
             autoCapitalize="none"
             autoCorrect={false}
             value={deviceUid}
@@ -214,9 +214,9 @@ export default function AddCat() {
           />
           <TextInput
             style={input}
-            placeholder="Code, e.g. ABCD-EFGH-JKLM"
+            placeholder={tr('Code, e.g. ABCD-EFGH-JKLM')}
             placeholderTextColor={t.textMuted}
-            accessibilityLabel="Claim code"
+            accessibilityLabel={tr('Claim code')}
             autoCapitalize="characters"
             autoCorrect={false}
             value={claimCode}
@@ -229,7 +229,7 @@ export default function AddCat() {
       <ErrorText>{error}</ErrorText>
 
       <Button
-        title={source === 'phone' ? 'Add cat' : 'Claim collar'}
+        title={source === 'phone' ? tr('Add cat') : tr('Claim collar')}
         onPress={() => void save()}
         busy={busy}
         disabled={!canSave}
@@ -239,11 +239,11 @@ export default function AddCat() {
         <Text style={{ color: t.textMuted, textAlign: 'center', marginTop: space.sm, fontSize: 13 }}>
           {source === 'phone'
             ? !name.trim()
-              ? 'Give your cat a name to continue.'
-              : 'Confirm the phone owner agreed to continue.'
+              ? tr('Give your cat a name to continue.')
+              : tr('Confirm the phone owner agreed to continue.')
             : check !== null && check !== 'checking' && check.status !== 'ready'
-              ? 'This label cannot be added (see above).'
-              : 'Scan the label, or type the collar ID and code, to continue.'}
+              ? tr('This label cannot be added (see above).')
+              : tr('Scan the label, or type the collar ID and code, to continue.')}
         </Text>
       )}
       <QrScanner
@@ -267,20 +267,20 @@ function LabelCheck({ check }: { check: ClaimCheck | 'checking' | null }) {
     return (
       <View style={styles.checkRow}>
         <ActivityIndicator color={t.textMuted} />
-        <Text style={{ color: t.textMuted }}>Checking the label…</Text>
+        <Text style={{ color: t.textMuted }}>{tr('Checking the label…')}</Text>
       </View>
     );
   }
   const look = {
-    ready: { icon: 'checkmark-circle', fg: t.live, bg: t.liveSoft, text: `${check.model ?? 'Collar'} recognised. Ready to add.` },
-    yours: { icon: 'information-circle', fg: t.accent, bg: t.accentSoft, text: 'This collar is already in your account.' },
+    ready: { icon: 'checkmark-circle', fg: t.live, bg: t.liveSoft, text: tr('{model} recognised. Ready to add.', { model: check.model ?? tr('Collar') }) },
+    yours: { icon: 'information-circle', fg: t.accent, bg: t.accentSoft, text: tr('This collar is already in your account.') },
     taken: {
       icon: 'alert-circle', fg: t.danger, bg: t.dangerSoft,
-      text: 'This collar is linked to someone else\'s account. If you just bought it new, please contact us.',
+      text: tr("This collar is linked to someone else's account. If you just bought it new, please contact us."),
     },
     invalid: {
       icon: 'alert-circle', fg: t.warn, bg: t.surfaceAlt,
-      text: "The collar ID and code don't match. Check the label: codes never use I, O, 0 or 1.",
+      text: tr("The collar ID and code don't match. Check the label: codes never use I, O, 0 or 1."),
     },
   }[check.status] as { icon: 'checkmark-circle'; fg: string; bg: string; text: string };
   return (

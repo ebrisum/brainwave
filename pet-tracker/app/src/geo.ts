@@ -346,10 +346,10 @@ export type ActivityIcon = 'bed-outline' | 'paw-outline' | 'cafe-outline' | 'wal
 export function activityLevel(todayM: number, history: readonly number[]): { label: string; icon: ActivityIcon } {
   const past = history.filter((m) => m > 0);
   const avg = past.length ? past.reduce((s, m) => s + m, 0) / past.length : 0;
-  if (todayM < 50) return { label: 'Lazy day', icon: 'bed-outline' };
-  if (avg === 0) return { label: 'Out and about', icon: 'paw-outline' };
+  if (todayM < 50) return { label: t('Lazy day'), icon: 'bed-outline' };
+  if (avg === 0) return { label: t('Out and about'), icon: 'paw-outline' };
   const ratio = todayM / avg;
-  if (ratio < 0.6) return { label: 'Taking it easy', icon: 'cafe-outline' };
-  if (ratio <= 1.4) return { label: 'Usual rounds', icon: 'walk-outline' };
-  return { label: 'Explorer mode', icon: 'compass-outline' };
+  if (ratio < 0.6) return { label: t('Taking it easy'), icon: 'cafe-outline' };
+  if (ratio <= 1.4) return { label: t('Usual rounds'), icon: 'walk-outline' };
+  return { label: t('Explorer mode'), icon: 'compass-outline' };
 }

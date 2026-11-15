@@ -11,6 +11,7 @@ import type { Cat, TrackerHealth } from '../backend/types';
 import { relativeTime } from '../geo';
 import { fonts, radius, space, useTheme } from '../theme';
 import { Card, Pill, SectionTitle } from './ui';
+import { t as tr } from '../i18n';
 
 const LOW_PCT = 25;
 
@@ -42,20 +43,20 @@ export function TrackerHealthCard({ cat }: { cat: Cat }) {
   const low = battery !== null && battery < LOW_PCT;
   const silent = health?.silent ?? false;
   const lastSeen = health?.lastSeenAt ?? cat.lastSeenAt ?? cat.lastFixAt;
-  const name = cat.kind === 'phone' ? 'Phone tracker' : 'Collar';
+  const name = cat.kind === 'phone' ? tr('Phone tracker') : tr('Collar');
 
   return (
     <Card style={{ gap: space.md }}>
       <View style={styles.header}>
         <SectionTitle>{name}</SectionTitle>
         {silent ? (
-          <Pill label="Silent" tone="danger" icon="cloud-offline-outline" />
+          <Pill label={tr('Silent')} tone="danger" icon="cloud-offline-outline" />
         ) : health?.resting ? (
-          <Pill label="Resting" tone="night" icon="moon-outline" />
+          <Pill label={tr('Resting')} tone="night" icon="moon-outline" />
         ) : lastSeen ? (
-          <Pill label="Checking in" tone="live" />
+          <Pill label={tr('Checking in')} tone="live" />
         ) : (
-          <Pill label="Waiting for first check-in" />
+          <Pill label={tr('Waiting for first check-in')} />
         )}
       </View>
 
@@ -64,7 +65,7 @@ export function TrackerHealthCard({ cat }: { cat: Cat }) {
           <Ionicons name="alert-circle" size={20} color={t.danger} />
           <Text style={{ color: t.text, flex: 1, lineHeight: 20 }}>
             No check-in since {relativeTime(lastSeen)}.{' '}
-            {low ? 'The battery was low: charge it and put it back on.' : `It may be out of mobile coverage (a cellar or shed), or switched off.`}
+            {low ? tr('The battery was low: charge it and put it back on.') : tr('It may be out of mobile coverage (a cellar or shed), or switched off.')}
           </Text>
         </View>
       )}
@@ -73,8 +74,9 @@ export function TrackerHealthCard({ cat }: { cat: Cat }) {
         <View style={[styles.notice, { backgroundColor: t.nightSoft }]}>
           <Ionicons name="moon-outline" size={20} color={t.night} />
           <Text style={{ color: t.text, flex: 1, lineHeight: 20 }}>
-            {cat.name} hasn't moved since {health.lastFixAt ? relativeTime(health.lastFixAt) : 'the last position'}, so the collar
-            saves its battery: it checks in every few hours and sends a new position the moment {cat.name} moves.
+            {tr("{name} hasn't moved since {when}, so the collar saves its battery: it checks in every few hours and sends a new position the moment {name} moves.", {
+              name: cat.name, when: health.lastFixAt ? relativeTime(health.lastFixAt) : tr('the last position'),
+            })}
           </Text>
         </View>
       )}
@@ -102,9 +104,9 @@ export function TrackerHealthCard({ cat }: { cat: Cat }) {
       )}
 
       <View style={styles.facts}>
-        <Fact label="Last check-in" value={lastSeen ? relativeTime(lastSeen) : '—'} />
-        <Fact label="Positions today" value={health ? String(health.fixes24h) : '—'} />
-        <Fact label="Reports" value={health ? intervalText(health.reportIntervalS) : '—'} />
+        <Fact label={tr('Last check-in')} value={lastSeen ? relativeTime(lastSeen) : '—'} />
+        <Fact label={tr('Positions today')} value={health ? String(health.fixes24h) : '—'} />
+        <Fact label={tr('Reports')} value={health ? intervalText(health.reportIntervalS) : '—'} />
       </View>
     </Card>
   );

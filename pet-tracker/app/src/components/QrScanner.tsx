@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { parseClaimQr, type ClaimLabel } from '../claim';
 import { fonts, radius, space } from '../theme';
 import { Button } from './ui';
+import { t as tr } from '../i18n';
 
 export function QrScanner({ visible, onClose, onScanned }: { visible: boolean; onClose: () => void; onScanned: (label: ClaimLabel) => void }) {
   return (
@@ -39,20 +40,20 @@ function Scanner({ onClose, onScanned }: { onClose: () => void; onScanned: (labe
     }
     if (data !== lastWrong.current) {
       lastWrong.current = data;
-      setHint("That's not a Cat Tracker label. Look for the QR code on the collar's label or box.");
+      setHint(tr("That's not a Cat Tracker label. Look for the QR code on the collar's label or box."));
     }
   };
 
   const header = (
     <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} hitSlop={12} style={styles.round}>
+      <Pressable accessibilityRole="button" accessibilityLabel={tr('Close')} onPress={onClose} hitSlop={12} style={styles.round}>
         <Ionicons name="close" size={24} color="#fff" />
       </Pressable>
-      <Text style={styles.title}>Scan the label</Text>
+      <Text style={styles.title}>{tr('Scan the label')}</Text>
       {permission?.granted ? (
         <Pressable
           accessibilityRole="switch"
-          accessibilityLabel="Flashlight"
+          accessibilityLabel={tr('Flashlight')}
           accessibilityState={{ checked: torch }}
           onPress={() => setTorch((v) => !v)}
           hitSlop={12}
@@ -75,14 +76,14 @@ function Scanner({ onClose, onScanned }: { onClose: () => void; onScanned: (labe
         <View style={styles.center}>
           <Ionicons name="camera-outline" size={40} color="#fff" />
           <Text style={styles.text}>
-            The camera reads the QR code on your collar's label, so you don't have to type the code.
+            {tr("The camera reads the QR code on your collar's label, so you don't have to type the code.")}
           </Text>
           {permission.canAskAgain ? (
-            <Button title="Allow camera" icon="camera" onPress={() => void requestPermission()} />
+            <Button title={tr('Allow camera')} icon="camera" onPress={() => void requestPermission()} />
           ) : (
-            <Button title="Open phone settings" icon="settings-outline" onPress={() => void Linking.openSettings().catch(() => undefined)} />
+            <Button title={tr('Open phone settings')} icon="settings-outline" onPress={() => void Linking.openSettings().catch(() => undefined)} />
           )}
-          <Button title="Type the code instead" variant="ghost" textColor="#fff" onPress={onClose} />
+          <Button title={tr('Type the code instead')} variant="ghost" textColor="#fff" onPress={onClose} />
         </View>
       </View>
     );
@@ -100,7 +101,7 @@ function Scanner({ onClose, onScanned }: { onClose: () => void; onScanned: (labe
       {header}
       <View style={styles.center} pointerEvents="none">
         <View style={styles.frame} />
-        <Text style={styles.text}>Point the camera at the QR code on the collar's label or box.</Text>
+        <Text style={styles.text}>{tr("Point the camera at the QR code on the collar's label or box.")}</Text>
         {hint && (
           <View style={styles.hint}>
             <Text style={{ color: '#fff', textAlign: 'center' }}>{hint}</Text>

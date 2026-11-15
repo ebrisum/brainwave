@@ -15,6 +15,7 @@ import { messageOf } from '../dialogs';
 import { fonts, radius, space } from '../theme';
 import { cropGeometry } from './geometry';
 import { cropAvatar, type PickedImage } from './photo';
+import { t as tr } from '../i18n';
 
 const MAX_ZOOM = 5;
 
@@ -117,17 +118,17 @@ function Cropper({ image, name, color, onCancel, onDone }: Props & { image: Pick
     <View style={[styles.screen, { paddingTop: insets.top + space.sm, paddingBottom: insets.bottom + space.md }]}>
       <View style={styles.header}>
         <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={12} disabled={busy}>
-          <Text style={styles.headerBtn}>Cancel</Text>
+          <Text style={styles.headerBtn}>{tr('Cancel')}</Text>
         </Pressable>
-        <Text style={styles.title}>Move and scale</Text>
+        <Text style={styles.title}>{tr('Move and scale')}</Text>
         <Pressable accessibilityRole="button" onPress={() => void done()} hitSlop={12} disabled={busy}>
-          <Text style={[styles.headerBtn, { color: '#7AA2FF', opacity: busy ? 0.5 : 1 }]}>{busy ? 'Saving…' : 'Use photo'}</Text>
+          <Text style={[styles.headerBtn, { color: '#7AA2FF', opacity: busy ? 0.5 : 1 }]}>{busy ? tr('Saving…') : tr('Use photo')}</Text>
         </Pressable>
       </View>
 
       <View
         style={{ width: area, height: area, alignSelf: 'center', overflow: 'hidden' }}
-        accessibilityLabel="Photo. Drag to move, pinch to zoom."
+        accessibilityLabel={tr('Photo. Drag to move, pinch to zoom.')}
         {...responder.panHandlers}
       >
         <Image
@@ -153,21 +154,21 @@ function Cropper({ image, name, color, onCancel, onDone }: Props & { image: Pick
       </View>
 
       <View style={styles.zoomRow}>
-        <IconButton icon="remove" label="Zoom out" onPress={() => zoomTo(view.zoom / 1.25)} disabled={view.zoom <= 1} />
-        <Text style={styles.hint}>Drag to move · pinch to zoom</Text>
-        <IconButton icon="add" label="Zoom in" onPress={() => zoomTo(view.zoom * 1.25)} disabled={view.zoom >= MAX_ZOOM} />
+        <IconButton icon="remove" label={tr('Zoom out')} onPress={() => zoomTo(view.zoom / 1.25)} disabled={view.zoom <= 1} />
+        <Text style={styles.hint}>{tr('Drag to move · pinch to zoom')}</Text>
+        <IconButton icon="add" label={tr('Zoom in')} onPress={() => zoomTo(view.zoom * 1.25)} disabled={view.zoom >= MAX_ZOOM} />
       </View>
 
       <View style={styles.previews}>
         <View style={styles.preview}>
           <CatAvatar name={name} color={color} size={88} photo={picture(88, 84)} />
-          <Text style={styles.previewLabel}>Profile</Text>
+          <Text style={styles.previewLabel}>{tr('Profile')}</Text>
         </View>
         <View style={styles.preview}>
           <View style={styles.mapChip}>
             <CatAvatar name={name} color={color} size={36} ring="#ffffff" photo={picture(36, 30)} />
           </View>
-          <Text style={styles.previewLabel}>On the map</Text>
+          <Text style={styles.previewLabel}>{tr('On the map')}</Text>
         </View>
       </View>
       {error && <Text style={styles.error}>{error}</Text>}

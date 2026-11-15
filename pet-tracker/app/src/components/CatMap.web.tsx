@@ -14,6 +14,7 @@ import type { CatMapProps } from './CatMap.types';
 import { heatBlobs } from './heat';
 import { CatAvatar } from './ui';
 import { catBadge, usePhotoUrl } from './usePhotoUrl';
+import { t as tr } from '../i18n';
 
 function RadarCat({ cat, x, y, onPress }: { cat: Cat; x: number; y: number; onPress?: () => void }) {
   const t = useTheme();
@@ -160,10 +161,10 @@ export function CatMap({
       )}
       {!view && (
         <View style={styles.empty}>
-          <Text style={{ color: t.textMuted }}>No positions yet</Text>
+          <Text style={{ color: t.textMuted }}>{tr('No positions yet')}</Text>
         </View>
       )}
-      <Text style={[styles.badge, { color: t.textMuted, backgroundColor: t.surface }]}>Web preview · real map on the phone</Text>
+      <Text style={[styles.badge, { color: t.textMuted, backgroundColor: t.surface }]}>{tr('Web preview · real map on the phone')}</Text>
     </View>
   );
 }

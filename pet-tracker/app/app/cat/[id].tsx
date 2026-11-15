@@ -26,25 +26,26 @@ import { usePhotoUrl } from '../../src/components/usePhotoUrl';
 import { ask, messageOf } from '../../src/dialogs';
 import { distanceM, formatDistance, inNightWindow, isLive, relativeTime } from '../../src/geo';
 import { placeLine } from '../../src/place';
-import { fmtDuration, shortDate } from '../../src/time';
+import { clock, fmtDuration, shortDate } from '../../src/time';
+import { t as tr, tk, tn } from '../../src/i18n';
 import { fonts, radius, space, useTheme } from '../../src/theme';
 
 const ROUTE_RANGES = [
-  { value: 1, label: '1 h' },
-  { value: 24, label: '24 h' },
-  { value: 168, label: '7 days' },
+  { value: 1, label: tk('1 h') },
+  { value: 24, label: tk('24 h') },
+  { value: 168, label: tk('7 days') },
 ] as const;
 
 const HEAT_RANGES = [
-  { value: 24, label: '24 h' },
-  { value: 168, label: '7 days' },
-  { value: 720, label: '30 days' },
+  { value: 24, label: tk('24 h') },
+  { value: 168, label: tk('7 days') },
+  { value: 720, label: tk('30 days') },
 ] as const;
 
 const TABS = [
-  { value: 'activity', label: 'Activity' },
-  { value: 'zones', label: 'Zones' },
-  { value: 'alerts', label: 'Alerts' },
+  { value: 'activity', label: tk('Activity') },
+  { value: 'zones', label: tk('Zones') },
+  { value: 'alerts', label: tk('Alerts') },
 ] as const;
 
 type Tab = (typeof TABS)[number]['value'];
@@ -52,10 +53,12 @@ type Tab = (typeof TABS)[number]['value'];
 type Section = 'load' | 'lost' | 'tracker' | 'zones' | 'sitting';
 
 const LAYERS = [
-  { value: 'live', label: 'Live' },
-  { value: 'route', label: 'Route' },
-  { value: 'heatmap', label: 'Heatmap' },
+  { value: 'live', label: tk('Live') },
+  { value: 'route', label: tk('Route') },
+  { value: 'heatmap', label: tk('Heatmap') },
 ] as const;
+
+const translated = <T extends { label: string }>(xs: readonly T[]) => xs.map((x) => ({ ...x, label: tr(x.label) }));
 
 export default function CatScreen() {
   const t = useTheme();
@@ -143,8 +146,8 @@ export default function CatScreen() {
   if (!cat) {
     return (
       <View style={[styles.center, { backgroundColor: t.bg }]}>
-        <Text style={{ color: t.textMuted }}>This cat is no longer in your list.</Text>
-        <Button title="Back to all cats" variant="ghost" onPress={() => router.replace('/')} />
+        <Text style={{ color: t.textMuted }}>{tr('This cat is no longer in your list.')}</Text>
+        <Button title={tr('Back to all cats')} variant="ghost" onPress={() => router.replace('/cats')} />
       </View>
     );
   }
@@ -173,19 +176,20 @@ export default function CatScreen() {
   };
 
   const stopSitting = async () => {
-    if (!(await ask(`Stop looking after ${cat.name}?`, `${cat.name} disappears from your list. The owner can invite you again.`, 'Stop', true))) return;
+    if (!(await ask(tr('Stop looking after {name}?', { name: cat.name }), tr('{name} disappears from your list. The owner can invite you again.', { name: cat.name }), tr('Stop'), true))) return;
     await run('sitting', async () => {
       await backend.removeCatSitter(cat.id, backend.userId);
       await refresh();
-      router.replace('/');
+      router.replace('/cats');
     });
   };
 
   const toggleLost = async () => {
     if (cat.lostMode) {
       void run('lost', () => backend.setLostMode(cat.id, false));
-    } else if (await ask(`Is ${cat.name} lost?`, `Lost mode makes the tracker report as often as possible and alerts everyone who sees ${cat.name}. It uses more battery.`, 'Turn on lost mode')) {
-      void run('lost', () => backend.setLostMode(cat.id, true));
+    } else if (await ask(tr('Is {name} lost?', { name: cat.name }), tr('Lost mode makes the collar report as often as possible and alerts everyone who sees {name}. It uses more battery.', { name: cat.name }), tr('Turn on lost mode'))) {
+      await run('lost', () => backend.setLostMode(cat.id, true));
+      router.push({ pathname: '/lost/[id]', params: { id: cat.id } });
     }
   };
 
@@ -194,9 +198,9 @@ export default function CatScreen() {
       setTrackedCatId(null);
     } else if (
       await ask(
-        'Use this phone as the tracker?',
-        `Its location is shared with everyone who sees ${cat.name} as ${cat.name}'s position. Only do this with a phone whose owner knows and agrees. Next, your phone asks for location access. "Allow all the time" keeps tracking with the screen off.`,
-        'Use this phone',
+        tr('Use this phone as the tracker?'),
+        tr('Its location is shared with everyone who sees {name} as {name}\'s position. Only do this with a phone whose owner knows and agrees. Next, your phone asks for location access. "Allow all the time" keeps tracking with the screen off.', { name: cat.name }),
+        tr('Use this phone'),
       )
     ) {
       setTrackedCatId(cat.id);
@@ -209,7 +213,7 @@ export default function CatScreen() {
   };
 
   const removeZone = async (z: HomeZone) => {
-    if (!(await ask(`Delete ${z.name}?`, 'Alerts for this zone stop.', 'Delete zone', true))) return;
+    if (!(await ask(tr('Delete {zone}?', { zone: z.name }), tr('Alerts for this zone stop.'), tr('Delete zone'), true))) return;
     await run('zones', async () => {
       await backend.removeZone(z.id);
       await load();
@@ -224,38 +228,36 @@ export default function CatScreen() {
 
   const routeSheet = (
     <>
-      <Segmented options={ROUTE_RANGES} value={rangeH as 1 | 24 | 168} onChange={(v) => { setReplayIndex(null); setPlaying(false); setRangeH(v); }} />
+      <Segmented options={translated(ROUTE_RANGES)} value={rangeH as 1 | 24 | 168} onChange={(v) => { setReplayIndex(null); setPlaying(false); setRangeH(v); }} />
       <View style={styles.statRow}>
-        <Text style={{ color: t.text, fontFamily: fonts.display, fontSize: 20 }}>{formatDistance(walked)} walked</Text>
-        <Text style={{ color: t.textMuted, fontSize: 13 }}>{track.length} positions</Text>
+        <Text style={{ color: t.text, fontFamily: fonts.display, fontSize: 20 }}>{tr('{distance} walked', { distance: formatDistance(walked) })}</Text>
+        <Text style={{ color: t.textMuted, fontSize: 13 }}>{tn(track.length, '{n} position', '{n} positions')}</Text>
       </View>
 
       {track.length > 1 ? (
         <>
           <View style={styles.timeLine}>
             <Text style={[styles.mono, { color: t.text }]}>
-              {cursor
-                ? new Date(cursor.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                : new Date(track[track.length - 1]!.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {cursor ? clock(cursor.at) : clock(track[track.length - 1]!.at)}
             </Text>
             <Text style={{ color: t.textMuted, fontSize: 13 }}>
-              {cursor ? `Point ${(replayIndex ?? 0) + 1} of ${track.length}` : 'Smoothed route'}
+              {cursor ? tr('Point {i} of {n}', { i: (replayIndex ?? 0) + 1, n: track.length }) : tr('Smoothed route')}
             </Text>
           </View>
           <Scrubber
-            label="Route position"
+            label={tr('Route position')}
             fraction={(replayIndex ?? track.length - 1) / (track.length - 1)}
             onSeek={seek}
             color={cat.color}
           />
           <View style={styles.scrubLabels}>
-            <Text style={[styles.tiny, { color: t.textMuted }]}>{new Date(track[0]!.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
-            <Text style={[styles.tiny, { color: t.textMuted }]}>{new Date(track[track.length - 1]!.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+            <Text style={[styles.tiny, { color: t.textMuted }]}>{clock(track[0]!.at)}</Text>
+            <Text style={[styles.tiny, { color: t.textMuted }]}>{clock(track[track.length - 1]!.at)}</Text>
           </View>
           <View style={styles.controls}>
-            <IconButton icon="play-back" label="Previous point" onPress={() => setReplayIndex((i) => Math.max(0, (i ?? 1) - 1))} />
+            <IconButton icon="play-back" label={tr('Previous point')} onPress={() => setReplayIndex((i) => Math.max(0, (i ?? 1) - 1))} />
             <Button
-              title={playing ? 'Pause' : 'Play'}
+              title={playing ? tr('Pause') : tr('Play')}
               icon={playing ? 'pause' : 'play'}
               style={{ flex: 1, height: 52 }}
               onPress={() => {
@@ -263,16 +265,16 @@ export default function CatScreen() {
                 setPlaying((p) => !p);
               }}
             />
-            <IconButton icon="play-forward" label="Next point" onPress={() => setReplayIndex((i) => Math.min(track.length - 1, (i ?? -1) + 1))} />
+            <IconButton icon="play-forward" label={tr('Next point')} onPress={() => setReplayIndex((i) => Math.min(track.length - 1, (i ?? -1) + 1))} />
           </View>
           {replayIndex !== null && (
             <Pressable accessibilityRole="button" onPress={() => { setPlaying(false); setReplayIndex(null); }} hitSlop={8}>
-              <Text style={{ color: t.accent, fontFamily: fonts.bodySemibold, textAlign: 'center' }}>Stop replay</Text>
+              <Text style={{ color: t.accent, fontFamily: fonts.bodySemibold, textAlign: 'center' }}>{tr('Stop replay')}</Text>
             </Pressable>
           )}
         </>
       ) : (
-        <Text style={{ color: t.textMuted }}>Not enough positions in this period yet.</Text>
+        <Text style={{ color: t.textMuted }}>{tr('Not enough positions in this period yet.')}</Text>
       )}
       <ErrorText>{errors.load}</ErrorText>
     </>
@@ -280,7 +282,7 @@ export default function CatScreen() {
 
   const heatSheet = (
     <>
-      <Segmented options={HEAT_RANGES} value={heatRangeH as 24 | 168 | 720} onChange={setHeatRangeH} />
+      <Segmented options={translated(HEAT_RANGES)} value={heatRangeH as 24 | 168 | 720} onChange={setHeatRangeH} />
       <View style={styles.legend}>
         <View style={styles.legendBar}>
           {HEAT_LEGEND.map((c) => (
@@ -288,12 +290,12 @@ export default function CatScreen() {
           ))}
         </View>
         <View style={styles.legendLabels}>
-          <Text style={[styles.tiny, { color: t.textMuted }]}>passing by</Text>
-          <Text style={[styles.tiny, { color: t.textMuted }]}>hours spent</Text>
+          <Text style={[styles.tiny, { color: t.textMuted }]}>{tr('passing by')}</Text>
+          <Text style={[styles.tiny, { color: t.textMuted }]}>{tr('hours spent')}</Text>
         </View>
       </View>
       {heat.length === 0 ? (
-        <Text style={{ color: t.textMuted }}>Not enough positions in this period yet.</Text>
+        <Text style={{ color: t.textMuted }}>{tr('Not enough positions in this period yet.')}</Text>
       ) : (
         heat.slice(0, 5).map((c, i) => (
           <View key={`${c.lat},${c.lng}`} style={[styles.rankRow, { borderBottomColor: t.surfaceAlt }]}>
@@ -304,7 +306,7 @@ export default function CatScreen() {
               <View style={styles.rankTop}>
                 <Text style={{ color: t.text, fontFamily: fonts.display, fontSize: 18 }}>{fmtDuration(c.weightS)}</Text>
                 <Text style={{ color: t.textMuted, fontSize: 13 }}>
-                  {cat.lastLat !== null && cat.lastLng !== null ? `${formatDistance(distanceM(c.lat, c.lng, cat.lastLat, cat.lastLng))} from ${cat.name} now` : ''}
+                  {cat.lastLat !== null && cat.lastLng !== null ? tr('{distance} from {name} now', { distance: formatDistance(distanceM(c.lat, c.lng, cat.lastLat, cat.lastLng)), name: cat.name }) : ''}
                 </Text>
               </View>
               <View style={[styles.barTrack, { backgroundColor: t.surfaceAlt }]}>
@@ -342,7 +344,7 @@ export default function CatScreen() {
         />
         {!immersive && (
           <View style={styles.layerBar}>
-            <Segmented<MapLayer> options={LAYERS} value={layer} onChange={selectLayer} />
+            <Segmented<MapLayer> options={translated(LAYERS)} value={layer} onChange={selectLayer} />
           </View>
         )}
       </View>
@@ -350,18 +352,18 @@ export default function CatScreen() {
       {immersive ? (
         <>
           <View style={[styles.floatTop, { top: insets.top + 8 }]} pointerEvents="box-none">
-            <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={[styles.floatBtn, { backgroundColor: t.surface }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel={tr('Back')} onPress={() => router.back()} style={[styles.floatBtn, { backgroundColor: t.surface }]}>
               <Ionicons name="arrow-back" size={22} color={t.text} />
             </Pressable>
             <View style={[styles.floatPill, { backgroundColor: t.surface }]}>
               <View style={[styles.dot, { backgroundColor: cat.color }]} />
               <Text style={{ color: t.text, fontFamily: fonts.bodySemibold }}>
-                {cat.name}'s {layer === 'route' ? 'route' : 'favourite places'}
+                {layer === 'route' ? tr("{name}'s route", { name: cat.name }) : tr("{name}'s favourite places", { name: cat.name })}
               </Text>
             </View>
           </View>
           <View style={[styles.layerFloat, { top: sheetTop - 58 }]}>
-            <Segmented<MapLayer> options={LAYERS} value={layer} onChange={selectLayer} />
+            <Segmented<MapLayer> options={translated(LAYERS)} value={layer} onChange={selectLayer} />
           </View>
           <View style={[styles.sheet, { top: sheetTop, paddingBottom: insets.bottom + space.xl, backgroundColor: t.surface }]}>
             <View style={[styles.grabber, { backgroundColor: t.border }]} />
@@ -386,16 +388,16 @@ export default function CatScreen() {
                   <>
                     <Text style={[styles.big, { color: place.inside ? t.live : t.text }]} numberOfLines={1}>{place.title}</Text>
                     <Text style={{ color: t.textMuted }} numberOfLines={1}>
-                      {[place.detail, cat.lastFixAt ? `seen ${relativeTime(cat.lastFixAt)}` : null].filter(Boolean).join(' · ')}
+                      {[place.detail, cat.lastFixAt ? tr('seen {when}', { when: relativeTime(cat.lastFixAt) }) : null].filter(Boolean).join(' · ')}
                     </Text>
                   </>
                 ) : (
-                  <Text style={[styles.big, { color: t.text }]}>{cat.lastFixAt ? relativeTime(cat.lastFixAt) : 'No location yet'}</Text>
+                  <Text style={[styles.big, { color: t.text }]}>{cat.lastFixAt ? relativeTime(cat.lastFixAt) : tr('No location yet')}</Text>
                 )}
               </View>
               {owner && (
                 <Button
-                  title="Edit"
+                  title={tr('Edit')}
                   icon="create-outline"
                   variant="secondary"
                   style={styles.editBtn}
@@ -404,20 +406,40 @@ export default function CatScreen() {
               )}
             </View>
             <View style={styles.pillRow}>
-              <Pill label={live ? 'Live' : 'Offline'} tone={live ? 'live' : 'neutral'} />
-              <Pill label={cat.kind === 'phone' ? 'Phone tracker' : 'GPS collar'} icon={cat.kind === 'phone' ? 'phone-portrait-outline' : 'radio-outline'} />
+              <Pill label={live ? tr('Live') : tr('Offline')} tone={live ? 'live' : 'neutral'} />
+              <Pill label={cat.kind === 'phone' ? tr('Phone tracker') : tr('GPS collar')} icon={cat.kind === 'phone' ? 'phone-portrait-outline' : 'radio-outline'} />
               <AccessPill cat={cat} own />
-              {nightNow && <Pill label="Night watch" tone="night" icon="moon-outline" />}
+              {nightNow && <Pill label={tr('Night watch')} tone="night" icon="moon-outline" />}
             </View>
             <Text style={{ color: lowBattery ? t.warn : t.textMuted, lineHeight: 20 }}>
               {[
-                cat.lastAccuracyM !== null ? `GPS accuracy about ${Math.round(cat.lastAccuracyM)} m` : null,
-                cat.lastBatteryPct ? (lowBattery ? `Battery low: ${cat.lastBatteryPct}%` : `Battery ${cat.lastBatteryPct}%`) : null,
-                !owner && cat.access === 'household' ? `Only the owner can edit ${cat.name}` : null,
+                cat.lastAccuracyM !== null ? tr('GPS accuracy about {m} m', { m: Math.round(cat.lastAccuracyM) }) : null,
+                cat.lastBatteryPct ? (lowBattery ? tr('Battery low: {pct}%', { pct: cat.lastBatteryPct }) : tr('Battery {pct}%', { pct: cat.lastBatteryPct })) : null,
+                !owner && cat.access === 'household' ? tr('Only the owner can edit {name}', { name: cat.name }) : null,
               ]
                 .filter(Boolean)
                 .join(' · ') || ' '}
             </Text>
+          </View>
+
+          <View style={styles.quick}>
+            {[
+              { icon: 'compass-outline' as const, label: tr('Find'), path: '/find/[id]' as const },
+              { icon: 'calendar-outline' as const, label: tr('History'), path: '/history/[id]' as const },
+              { icon: 'stats-chart-outline' as const, label: tr('Insights'), path: '/insights/[id]' as const },
+              { icon: 'id-card-outline' as const, label: tr('Profile'), path: '/profile/[id]' as const },
+              ...(cat.kind === 'collar' ? [{ icon: 'radio-outline' as const, label: tr('Collar'), path: '/collar/[id]' as const }] : []),
+            ].map((a) => (
+              <Pressable
+                key={a.path}
+                accessibilityRole="button"
+                onPress={() => router.push({ pathname: a.path, params: { id: cat.id } })}
+                style={({ pressed }) => [styles.quickBtn, { backgroundColor: t.surface, opacity: pressed ? 0.8 : 1 }]}
+              >
+                <Ionicons name={a.icon} size={22} color={t.text} />
+                <Text style={{ color: t.text, fontSize: 12, fontFamily: fonts.bodySemibold }}>{a.label}</Text>
+              </Pressable>
+            ))}
           </View>
 
           {/* Lost mode: the most important action on this screen */}
@@ -426,29 +448,30 @@ export default function CatScreen() {
               <>
                 <View style={styles.lostTitle}>
                   <Ionicons name="alert-circle" size={26} color={t.danger} />
-                  <Text style={[styles.big, { color: t.danger, marginTop: 0 }]}>{cat.name} is in lost mode</Text>
+                  <Text style={[styles.big, { color: t.danger, marginTop: 0 }]}>{tr('{name} is in lost mode', { name: cat.name })}</Text>
                 </View>
                 <Text style={{ color: t.text, lineHeight: 20 }}>
-                  Since {cat.lostModeSince ? relativeTime(cat.lostModeSince) : 'just now'}.{' '}
-                  {cat.kind === 'phone' ? 'The tracking phone reports every 15 s.' : 'The collar reports every minute.'} Everyone who sees {cat.name} was notified.
+                  {tr('Since {when}', { when: cat.lostModeSince ? relativeTime(cat.lostModeSince) : tr('just now') })}.{' '}
+                  {cat.kind === 'phone' ? tr('The tracking phone reports every 15 s.') : tr('The collar reports every minute.')} {tr('Everyone who sees {name} was notified.', { name: cat.name })}
                 </Text>
-                <Button title={`${cat.name} is found · turn off`} variant="secondary" busy={busy === 'lost'} onPress={() => void toggleLost()} />
+                <Button title={tr('Search tools: live link, poster, compass')} icon="search" onPress={() => router.push({ pathname: '/lost/[id]', params: { id: cat.id } })} />
+                <Button title={tr('{name} is found · turn off', { name: cat.name })} variant="secondary" busy={busy === 'lost'} onPress={() => void toggleLost()} />
               </>
             ) : (
               <View style={styles.lostRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: t.text, fontFamily: fonts.bodySemibold, fontSize: 16 }}>Can't find {cat.name}?</Text>
-                  <Text style={{ color: t.textMuted, lineHeight: 20, marginTop: 2 }}>Lost mode reports more often and alerts everyone who sees {cat.name}.</Text>
+                  <Text style={{ color: t.text, fontFamily: fonts.bodySemibold, fontSize: 16 }}>{tr("Can't find {name}?", { name: cat.name })}</Text>
+                  <Text style={{ color: t.textMuted, lineHeight: 20, marginTop: 2 }}>{tr('Lost mode reports more often and alerts everyone who sees {name}.', { name: cat.name })}</Text>
                 </View>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Turn on lost mode for ${cat.name}`}
+                  accessibilityLabel={tr('Turn on lost mode for {name}', { name: cat.name })}
                   disabled={busy === 'lost'}
                   onPress={() => void toggleLost()}
                   style={({ pressed }) => [styles.lostPill, { backgroundColor: t.danger, opacity: pressed ? 0.8 : 1 }]}
                 >
                   <Ionicons name="alert-circle" size={16} color="#fff" />
-                  <Text style={{ color: '#fff', fontFamily: fonts.bodySemibold }}>Lost mode</Text>
+                  <Text style={{ color: '#fff', fontFamily: fonts.bodySemibold }}>{tr('Lost mode')}</Text>
                 </Pressable>
               </View>
             )}
@@ -457,18 +480,18 @@ export default function CatScreen() {
 
           {cat.kind === 'phone' && owner && (
             <Card style={{ gap: space.md }}>
-              <SectionTitle>Phone tracker</SectionTitle>
+              <SectionTitle>{tr('Phone tracker')}</SectionTitle>
               <Text style={{ color: t.textMuted, lineHeight: 20 }}>
                 {isTracked
                   ? tracker.mode === 'background'
-                    ? `This phone sends its location as ${cat.name} every ${effectiveIntervalS < 60 ? `${effectiveIntervalS} s` : `${Math.round(effectiveIntervalS / 60)} min`}, also with the screen off.`
-                    : `This phone sends its location as ${cat.name} while the app is open. For screen-off tracking, use the installed app and allow location "all the time".`
+                    ? tr('This phone sends its location as {name} every {every}, also with the screen off.', { name: cat.name, every: effectiveIntervalS < 60 ? `${effectiveIntervalS} s` : `${Math.round(effectiveIntervalS / 60)} min` })
+                    : tr('This phone sends its location as {name} while the app is open. For screen-off tracking, use the installed app and allow location "all the time".', { name: cat.name })
                   : trackedCatId
-                    ? `This phone is currently tracking another cat. Switching moves the tracker to ${cat.name}.`
-                    : `Use this phone's GPS as ${cat.name}'s collar.`}
+                    ? tr('This phone is currently tracking another cat. Switching moves the tracker to {name}.', { name: cat.name })
+                    : tr("Use this phone's GPS as {name}'s collar.", { name: cat.name })}
               </Text>
               <Button
-                title={isTracked ? 'Stop tracking' : `Track ${cat.name} with this phone`}
+                title={isTracked ? tr('Stop tracking') : tr('Track {name} with this phone', { name: cat.name })}
                 variant={isTracked ? 'secondary' : 'primary'}
                 icon={isTracked ? 'stop-circle-outline' : 'navigate-outline'}
                 busy={busy === 'tracker'}
@@ -481,14 +504,14 @@ export default function CatScreen() {
           <TodayCard cat={cat} events={events} activity={activity} hasZones={zones.length > 0} />
           <TrackerHealthCard cat={cat} />
 
-          <Segmented<Tab> options={TABS.map((x) => (x.value === 'alerts' && events.length ? { value: x.value, label: `Alerts (${events.length})` } : x))} value={tab} onChange={setTab} />
+          <Segmented<Tab> options={translated(TABS).map((x) => (x.value === 'alerts' && events.length ? { value: x.value, label: `${tr('Alerts')} (${events.length})` } : x))} value={tab} onChange={setTab} />
 
           {tab === 'activity' && <ActivityCard days={activity} color={cat.color} name={cat.name} kind={cat.kind} />}
 
           {tab === 'zones' && (
             <Card style={{ gap: space.md }}>
-              <SectionTitle>Home zones</SectionTitle>
-              {zones.length === 0 && <Text style={{ color: t.textMuted, lineHeight: 20 }}>No zones yet. Get an alert when {cat.name} leaves or comes back.</Text>}
+              <SectionTitle>{tr('Home zones')}</SectionTitle>
+              {zones.length === 0 && <Text style={{ color: t.textMuted, lineHeight: 20 }}>{tr('No zones yet. Get an alert when {name} leaves or comes back.', { name: cat.name })}</Text>}
               {zones.map((z) => {
                 const inside = cat.lastLat !== null && cat.lastLng !== null ? distanceM(z.lat, z.lng, cat.lastLat, cat.lastLng) <= z.radiusM : null;
                 return (
@@ -496,19 +519,19 @@ export default function CatScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: t.text, fontFamily: fonts.bodySemibold }}>{z.name}</Text>
                       <Text style={{ color: t.textMuted, fontSize: 13 }}>
-                        {formatDistance(z.radiusM)} radius · {z.householdName ? `${z.householdName}, all its cats` : z.allCats ? 'all your cats' : `only ${cat.name}`}
-                        {inside !== null ? ` · ${cat.name} is ${inside ? 'inside' : 'outside'}` : ''}
+                        {tr('{distance} radius', { distance: formatDistance(z.radiusM) })} · {z.householdName ? tr('{household}, all its cats', { household: z.householdName }) : z.allCats ? tr('all your cats') : tr('only {name}', { name: cat.name })}
+                        {inside !== null ? ` · ${inside ? tr('{name} is inside', { name: cat.name }) : tr('{name} is outside', { name: cat.name })}` : ''}
                       </Text>
                     </View>
                     {(z.householdId ? cat.access !== 'sitter' : owner) && (
-                      <Button title="Delete" variant="ghost" busy={busy === 'zones'} onPress={() => void removeZone(z)} />
+                      <Button title={tr('Delete')} variant="ghost" busy={busy === 'zones'} onPress={() => void removeZone(z)} />
                     )}
                   </View>
                 );
               })}
               {(owner || cat.access === 'household') && (
                 <Button
-                  title={cat.householdId && cat.access !== 'sitter' ? `Add a zone for ${cat.householdName ?? 'the household'}` : 'Add a zone'}
+                  title={cat.householdId && cat.access !== 'sitter' ? tr('Add a zone for {household}', { household: cat.householdName ?? tr('the household') }) : tr('Add a zone')}
                   icon="add"
                   variant="secondary"
                   onPress={() => router.push({ pathname: '/zone/new', params: { catId: cat.id } })}
@@ -516,7 +539,7 @@ export default function CatScreen() {
               )}
               {cat.householdId && cat.access !== 'sitter' && (
                 <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18 }}>
-                  A household's zones work for every cat in it. You can also manage them in Settings → Households.
+                  {tr("A household's zones work for every cat in it. You can also manage them in the Places tab.")}
                 </Text>
               )}
               <ErrorText>{errors.zones}</ErrorText>
@@ -525,15 +548,15 @@ export default function CatScreen() {
 
           {tab === 'alerts' && (
             <Card style={{ gap: space.md }}>
-              <SectionTitle>Alerts</SectionTitle>
+              <SectionTitle>{tr('Alerts')}</SectionTitle>
               {events.length === 0 ? (
-                <Text style={{ color: t.textMuted }}>No zone alerts yet.</Text>
+                <Text style={{ color: t.textMuted }}>{tr('No zone alerts yet.')}</Text>
               ) : (
                 events.slice(0, 20).map((e) => (
                   <View key={e.id} style={styles.eventRow}>
                     <Ionicons name={e.transition === 'exit' ? 'exit-outline' : 'home-outline'} size={20} color={e.transition === 'exit' ? t.danger : t.live} />
                     <Text style={{ color: t.text, flex: 1 }}>
-                      {e.transition === 'exit' ? 'Left' : 'Back in'} {e.zoneName}
+                      {e.transition === 'exit' ? tr('Left {zone}', { zone: e.zoneName }) : tr('Back in {zone}', { zone: e.zoneName })}
                       <Text style={{ color: t.textMuted }}>{`  ·  ${relativeTime(e.at)}`}</Text>
                     </Text>
                   </View>
@@ -544,15 +567,15 @@ export default function CatScreen() {
 
           {cat.access === 'sitter' && (
             <Card style={{ gap: space.sm }}>
-              <SectionTitle>Cat sitting</SectionTitle>
+              <SectionTitle>{tr('Cat sitting')}</SectionTitle>
               <Text style={{ color: t.textMuted, lineHeight: 20 }}>
                 {cat.sitterUntil
-                  ? `You're looking after ${cat.name} until ${shortDate(cat.sitterUntil)}. After that ${cat.name} disappears from your list.`
-                  : `You're looking after ${cat.name} until the owner stops it.`}{' '}
-                You see where {cat.name} is, get the same alerts and can switch lost mode on.
+                  ? tr("You're looking after {name} until {date}. After that {name} disappears from your list.", { name: cat.name, date: shortDate(cat.sitterUntil) })
+                  : tr("You're looking after {name} until the owner stops it.", { name: cat.name })}{' '}
+                {tr('You see where {name} is, get the same alerts and can switch lost mode on.', { name: cat.name })}
               </Text>
               <ErrorText>{errors.sitting}</ErrorText>
-              <Button title={`Stop looking after ${cat.name}`} variant="ghost" textColor={t.danger} busy={busy === 'sitting'} onPress={() => void stopSitting()} />
+              <Button title={tr('Stop looking after {name}', { name: cat.name })} variant="ghost" textColor={t.danger} busy={busy === 'sitting'} onPress={() => void stopSitting()} />
             </Card>
           )}
         </ScrollView>
@@ -598,4 +621,6 @@ const styles = StyleSheet.create({
   hero: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   heroName: { fontSize: 17, fontFamily: fonts.bodySemibold },
   editBtn: { minHeight: 40, paddingHorizontal: space.md },
+  quick: { flexDirection: 'row', gap: space.sm },
+  quickBtn: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: space.md, borderRadius: radius.md },
 });

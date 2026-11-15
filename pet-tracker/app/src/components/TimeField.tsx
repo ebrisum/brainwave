@@ -4,6 +4,7 @@ import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 import { dateAtMinute, hhmm, minuteOfDate, parseHHMM } from '../time';
 import { radius, space, useTheme } from '../theme';
 import { Button } from './ui';
+import { t as tr } from '../i18n';
 
 /**
  * A time of day. On iOS and Android it opens the native time picker; iOS
@@ -74,7 +75,7 @@ export function TimeField({ label, minutes, onChange }: { label: string; minutes
               }
             }}
           />
-          {Platform.OS === 'ios' && <Button title="Done" variant="secondary" onPress={close} />}
+          {Platform.OS === 'ios' && <Button title={tr('Done')} variant="secondary" onPress={close} />}
         </View>
       )}
     </View>

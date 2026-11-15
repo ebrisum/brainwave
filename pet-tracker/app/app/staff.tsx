@@ -17,13 +17,14 @@ import { Button, Card, ErrorText, Pill, SectionTitle } from '../src/components/u
 import { ask, messageOf } from '../src/dialogs';
 import { relativeTime } from '../src/geo';
 import { fonts, radius, space, useTheme } from '../src/theme';
+import { t as tr } from '../src/i18n';
 
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 export default function Staff() {
   const t = useTheme();
   const { backend } = useApp();
-  const [model, setModel] = useState('Test collar');
+  const [model, setModel] = useState(tr('Test collar'));
   const [deviceUid, setDeviceUid] = useState('');
   const [iccid, setIccid] = useState('');
   const [label, setLabel] = useState<(NewTrackerLabel & { reissued?: boolean }) | null>(null);
@@ -65,19 +66,19 @@ export default function Staff() {
     }
   };
 
-  const reset = async (tr: StaffTracker) => {
+  const reset = async (trk: StaffTracker) => {
     const yes = await ask(
-      `Take back ${tr.deviceUid}?`,
-      `${tr.ownerEmail ? `${tr.ownerEmail} loses this tracker and its history. ` : ''}It gets a new code; the old label stops working.`,
-      'Take back',
+      tr('Take back {deviceUid}?', { deviceUid: trk.deviceUid }),
+      `${trk.ownerEmail ? `${trk.ownerEmail} loses this tracker and its history. ` : ''}It gets a new code; the old label stops working.`,
+      tr('Take back'),
       true,
     );
     if (!yes) return;
-    setBusy(`reset-${tr.deviceUid}`);
+    setBusy(`reset-${trk.deviceUid}`);
     setError(null);
     try {
-      const code = await backend.staffResetTracker(tr.deviceUid);
-      setLabel({ deviceUid: tr.deviceUid, claimCode: code, model: tr.model, reissued: true });
+      const code = await backend.staffResetTracker(trk.deviceUid);
+      setLabel({ deviceUid: trk.deviceUid, claimCode: code, model: trk.model, reissued: true });
       await load();
     } catch (e) {
       setError(messageOf(e));
@@ -88,50 +89,48 @@ export default function Staff() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-      <Stack.Screen options={{ title: 'Trackers & labels' }} />
+      <Stack.Screen options={{ title: tr('Trackers & labels') }} />
         <ErrorText>{error}</ErrorText>
 
         {label ? (
           <Card style={{ gap: space.md, alignItems: 'center' }}>
-            <SectionTitle>{label.reissued ? 'New label (old one no longer works)' : 'New label'}</SectionTitle>
+            <SectionTitle>{label.reissued ? tr('New label (old one no longer works)') : tr('New label')}</SectionTitle>
             <View style={[styles.label, { borderColor: t.border }]}>
               <QrCode value={claimLink(label.deviceUid, label.claimCode)} size={200} />
               <Text style={styles.labelBrand}>Cat Tracker</Text>
-              <Text style={styles.labelHint}>Open the app → Add cat → GPS collar → Scan</Text>
+              <Text style={styles.labelHint}>{tr('Open the app → Add cat → GPS collar → Scan')}</Text>
               <Text style={styles.labelKey}>COLLAR ID</Text>
               <Text selectable style={styles.labelValue}>{label.deviceUid}</Text>
               <Text style={styles.labelKey}>CODE</Text>
               <Text selectable style={styles.labelValue}>{prettyClaimCode(label.claimCode)}</Text>
             </View>
             <Text style={{ color: t.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 18 }}>
-              Registered{label.model ? ` as ${label.model}` : ''}. Whoever has this code can add the tracker, so put
-              the label inside the box.
+              {label.model ? tr('Registered as {model}.', { model: label.model }) : tr('Registered.')} {tr('Whoever has this code can add the tracker, so put the label inside the box.')}
             </Text>
             <View style={styles.row}>
               <Button
-                title="Share"
+                title={tr('Share')}
                 icon="share-outline"
                 variant="secondary"
                 style={{ flex: 1 }}
                 onPress={() =>
                   void Share.share({
-                    message: `Cat Tracker collar ${label.deviceUid}, code ${prettyClaimCode(label.claimCode)}\n${claimLink(label.deviceUid, label.claimCode)}`,
+                    message: `${tr('Cat Tracker collar {id}, code {code}', { id: label.deviceUid, code: prettyClaimCode(label.claimCode) })}\n${claimLink(label.deviceUid, label.claimCode)}`,
                   })
                 }
               />
-              <Button title="Done" style={{ flex: 1 }} onPress={() => setLabel(null)} />
+              <Button title={tr('Done')} style={{ flex: 1 }} onPress={() => setLabel(null)} />
             </View>
           </Card>
         ) : (
           <Card style={{ gap: space.sm }}>
-            <SectionTitle>New label</SectionTitle>
+            <SectionTitle>{tr('New label')}</SectionTitle>
             <Text style={{ color: t.textMuted, lineHeight: 20 }}>
-              The tracker is registered right away and its QR code appears here. Leave the collar ID empty for a test
-              label.
+              {tr('The tracker is registered right away and its QR code appears here. Leave the collar ID empty for a test label.')}
             </Text>
-            <Text style={[styles.field, { color: t.textMuted }]}>Model</Text>
-            <TextInput style={input} value={model} onChangeText={setModel} maxLength={32} accessibilityLabel="Model" />
-            <Text style={[styles.field, { color: t.textMuted }]}>Collar ID (IMEI), optional</Text>
+            <Text style={[styles.field, { color: t.textMuted }]}>{tr('Model')}</Text>
+            <TextInput style={input} value={model} onChangeText={setModel} maxLength={32} accessibilityLabel={tr('Model')} />
+            <Text style={[styles.field, { color: t.textMuted }]}>{tr('Collar ID (IMEI), optional')}</Text>
             <TextInput
               style={input}
               value={deviceUid}
@@ -140,9 +139,9 @@ export default function Staff() {
               placeholderTextColor={t.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
-              accessibilityLabel="Collar ID"
+              accessibilityLabel={tr('Collar ID')}
             />
-            <Text style={[styles.field, { color: t.textMuted }]}>SIM number (ICCID), optional</Text>
+            <Text style={[styles.field, { color: t.textMuted }]}>{tr('SIM number (ICCID), optional')}</Text>
             <TextInput
               style={input}
               value={iccid}
@@ -151,57 +150,57 @@ export default function Staff() {
               placeholderTextColor={t.textMuted}
               keyboardType="number-pad"
               maxLength={22}
-              accessibilityLabel="SIM number"
+              accessibilityLabel={tr('SIM number')}
             />
-            <Button title="Make label" icon="qr-code-outline" busy={busy === 'make'} onPress={() => void make()} />
+            <Button title={tr('Make label')} icon="qr-code-outline" busy={busy === 'make'} onPress={() => void make()} />
           </Card>
         )}
 
         <Card style={{ gap: space.sm }}>
-          <SectionTitle>Who has which tracker</SectionTitle>
+          <SectionTitle>{tr('Who has which tracker')}</SectionTitle>
           <TextInput
             style={input}
             value={search}
             onChangeText={setSearch}
             onSubmitEditing={() => void load()}
-            placeholder="Search: collar ID, SIM or e-mail"
+            placeholder={tr('Search: collar ID, SIM or e-mail')}
             placeholderTextColor={t.textMuted}
             autoCapitalize="none"
             returnKeyType="search"
-            accessibilityLabel="Search trackers"
+            accessibilityLabel={tr('Search trackers')}
           />
-          {trackers.length === 0 && <Text style={{ color: t.textMuted }}>No trackers yet.</Text>}
-          {trackers.map((tr) => (
-            <View key={tr.deviceUid} style={[styles.tracker, { borderBottomColor: t.border }]}>
+          {trackers.length === 0 && <Text style={{ color: t.textMuted }}>{tr('No trackers yet.')}</Text>}
+          {trackers.map((trk) => (
+            <View key={trk.deviceUid} style={[styles.tracker, { borderBottomColor: t.border }]}>
               <View style={styles.row}>
-                <Text style={[styles.trackerId, { color: t.text }]} selectable>{tr.deviceUid}</Text>
-                {tr.model && <Pill label={tr.model} />}
+                <Text style={[styles.trackerId, { color: t.text }]} selectable>{trk.deviceUid}</Text>
+                {trk.model && <Pill label={trk.model} />}
                 <View style={{ flex: 1 }} />
-                {tr.ownerEmail ? <Pill label="Claimed" tone="live" /> : <Pill label="Not claimed yet" />}
+                {trk.ownerEmail ? <Pill label={tr('Claimed')} tone="live" /> : <Pill label={tr('Not claimed yet')} />}
               </View>
-              {tr.ownerEmail && (
+              {trk.ownerEmail && (
                 <View style={styles.row}>
                   <Ionicons name="person-outline" size={14} color={t.textMuted} />
                   <Text style={{ color: t.text, flex: 1 }} numberOfLines={1}>
-                    {tr.ownerEmail}
-                    {tr.catName ? ` · ${tr.catName}` : ''}
-                    {tr.householdName ? ` · ${tr.householdName}` : ''}
+                    {trk.ownerEmail}
+                    {trk.catName ? ` · ${trk.catName}` : ''}
+                    {trk.householdName ? ` · ${trk.householdName}` : ''}
                   </Text>
                 </View>
               )}
               <Text style={{ color: t.textMuted, fontSize: 12, lineHeight: 17 }}>
-                Made {day(tr.registeredAt)}{tr.registeredBy ? ` by ${tr.registeredBy}` : ''}
-                {tr.claimedAt ? ` · claimed ${day(tr.claimedAt)}` : ''}
-                {tr.lastSeenAt ? ` · last check-in ${relativeTime(tr.lastSeenAt)}` : ''}
-                {tr.iccid ? ` · SIM …${tr.iccid.slice(-6)}` : ''}
+                Made {day(trk.registeredAt)}{trk.registeredBy ? ` by ${trk.registeredBy}` : ''}
+                {trk.claimedAt ? ` · claimed ${day(trk.claimedAt)}` : ''}
+                {trk.lastSeenAt ? ` · last check-in ${relativeTime(trk.lastSeenAt)}` : ''}
+                {trk.iccid ? ` · SIM …${trk.iccid.slice(-6)}` : ''}
               </Text>
-              {tr.ownerEmail && (
+              {trk.ownerEmail && (
                 <Button
-                  title="Take back (return)"
+                  title={tr('Take back (return)')}
                   variant="ghost"
                   textColor={t.danger}
-                  busy={busy === `reset-${tr.deviceUid}`}
-                  onPress={() => void reset(tr)}
+                  busy={busy === `reset-${trk.deviceUid}`}
+                  onPress={() => void reset(trk)}
                   style={{ alignSelf: 'flex-start' }}
                 />
               )}

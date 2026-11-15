@@ -4,13 +4,13 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { Redirect, Tabs } from 'expo-router';
+import { Redirect, Tabs, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 import { useApp } from '../../src/AppProvider';
 import { t as tr } from '../../src/i18n';
-import { WELCOME_KEY } from '../../src/onboarding';
+import { PENDING_INVITE_KEY, WELCOME_KEY } from '../../src/onboarding';
 import { fonts, useTheme } from '../../src/theme';
 
 
@@ -23,7 +23,14 @@ const icon = (name: Icon, active: Icon) =>
 export default function TabsLayout() {
   const t = useTheme();
   const { ready, backend, unread } = useApp();
+  const router = useRouter();
   const [welcomeSeen, setWelcomeSeen] = useState<boolean | null>(null);
+
+  // An invite link opened before signing in: continue with it now.
+  useEffect(() => {
+    if (!backend) return;
+    void AsyncStorage.getItem(PENDING_INVITE_KEY).then((code) => code && router.push('/join'));
+  }, [backend, router]);
 
   useEffect(() => {
     AsyncStorage.getItem(WELCOME_KEY)

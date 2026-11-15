@@ -15,15 +15,17 @@ import { fonts, radius, space, useTheme } from '../theme';
 import { HouseholdPicker } from './HouseholdPicker';
 import { prettyCode } from './HouseholdsCard';
 import { Button, ErrorText, Segmented } from './ui';
+import { t as tr } from '../i18n';
+import { inviteUrl } from '../links';
 
 const DAY_MS = 24 * 3600 * 1000;
-const DURATIONS = [
-  { value: 7, label: '1 week' },
-  { value: 14, label: '2 weeks' },
-  { value: 30, label: '1 month' },
-  { value: 0, label: 'No end' },
+const DURATIONS = () => [
+  { value: 7, label: tr('1 week') },
+  { value: 14, label: tr('2 weeks') },
+  { value: 30, label: tr('1 month') },
+  { value: 0, label: tr('No end') },
 ] as const;
-type Days = (typeof DURATIONS)[number]['value'];
+type Days = ReturnType<typeof DURATIONS>[number]['value'];
 
 export function CatSharingCard({ cat }: { cat: Cat }) {
   const t = useTheme();
@@ -75,7 +77,7 @@ export function CatSharingCard({ cat }: { cat: Cat }) {
     });
 
   const removeSitter = async (s: CatSitter) => {
-    if (!(await ask(`Stop ${s.email} looking after ${cat.name}?`, `${cat.name} disappears from their list straight away.`, 'Remove', true))) return;
+    if (!(await ask(tr('Stop {email} looking after {name}?', { email: s.email, name: cat.name }), `${cat.name} disappears from their list straight away.`, tr('Remove'), true))) return;
     await run(`rm-${s.userId}`, () => backend.removeCatSitter(cat.id, s.userId));
   };
 
@@ -87,11 +89,11 @@ export function CatSharingCard({ cat }: { cat: Cat }) {
         </View>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={{ color: t.text, fontFamily: fonts.bodySemibold, fontSize: 16 }}>Who sees {cat.name}</Text>
-          <Text style={{ color: t.textMuted, fontSize: 13 }}>A household, and cat sitters for a while</Text>
+          <Text style={{ color: t.textMuted, fontSize: 13 }}>{tr('A household, and cat sitters for a while')}</Text>
         </View>
       </View>
 
-      <Text style={[styles.label, { color: t.textMuted }]}>Household</Text>
+      <Text style={[styles.label, { color: t.textMuted }]}>{tr('Household')}</Text>
       <HouseholdPicker
         households={households}
         value={cat.householdId ?? null}
@@ -100,20 +102,20 @@ export function CatSharingCard({ cat }: { cat: Cat }) {
         busyId={busy?.startsWith('hh-') ? (busy === 'hh-private' ? null : busy.slice(3)) : undefined}
         disabled={busy !== null}
       />
-      <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18 }}>Create households and invite people in Settings.</Text>
+      <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18 }}>{tr('Create households and invite people under Me → Households & sharing.')}</Text>
 
-      <Text style={[styles.label, { color: t.textMuted, marginTop: space.sm }]}>Cat sitters</Text>
+      <Text style={[styles.label, { color: t.textMuted, marginTop: space.sm }]}>{tr('Cat sitters')}</Text>
       <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18 }}>
-        A neighbour or friend follows only {cat.name}: location, alerts and lost mode. They don't join a household.
+        {tr("A neighbour or friend follows only {name}: location, alerts and lost mode. They don't join a household.", { name: cat.name })}
       </Text>
       {sitters.map((s) => (
         <View key={s.userId} style={styles.rowAlign}>
           <Ionicons name="person-circle-outline" size={22} color={t.textMuted} />
           <View style={{ flex: 1 }}>
             <Text style={{ color: t.text, fontSize: 15 }} numberOfLines={1}>{s.email}</Text>
-            <Text style={{ color: t.textMuted, fontSize: 13 }}>{s.until ? `Until ${shortDate(s.until)}` : 'No end date'}</Text>
+            <Text style={{ color: t.textMuted, fontSize: 13 }}>{s.until ? tr('Until {until}', { until: shortDate(s.until) }) : tr('No end date')}</Text>
           </View>
-          <Button title="Remove" variant="ghost" busy={busy === `rm-${s.userId}`} onPress={() => void removeSitter(s)} />
+          <Button title={tr('Remove')} variant="ghost" busy={busy === `rm-${s.userId}`} onPress={() => void removeSitter(s)} />
         </View>
       ))}
 
@@ -124,22 +126,22 @@ export function CatSharingCard({ cat }: { cat: Cat }) {
           </Text>
           <Text selectable style={[styles.code, { color: t.text }]}>{prettyCode(code.code)}</Text>
           <Button
-            title="Share code"
+            title={tr('Share code')}
             icon="share-outline"
             onPress={() =>
               void Share.share({
-                message: `Can you keep an eye on ${cat.name}? In Cat Tracker, open Settings → Households → "Join with a code" and enter ${prettyCode(code.code)}`,
+                message: tr('Can you keep an eye on {name}? {link} (or enter code {code} under Me → Households & sharing)', { name: cat.name, code: prettyCode(code.code), link: inviteUrl(code.code) }),
               })
             }
           />
-          <Button title="Done" variant="ghost" onPress={() => setCode(null)} />
+          <Button title={tr('Done')} variant="ghost" onPress={() => setCode(null)} />
         </View>
       ) : demo ? (
-        <Text style={{ color: t.textMuted, fontSize: 13 }}>Inviting cat sitters needs an account.</Text>
+        <Text style={{ color: t.textMuted, fontSize: 13 }}>{tr('Inviting cat sitters needs an account.')}</Text>
       ) : (
         <>
-          <Segmented<Days> options={DURATIONS} value={days} onChange={setDays} />
-          <Button title="Invite a cat sitter" icon="person-add-outline" variant="secondary" busy={busy === 'invite'} onPress={() => void invite()} />
+          <Segmented<Days> options={DURATIONS()} value={days} onChange={setDays} />
+          <Button title={tr('Invite a cat sitter')} icon="person-add-outline" variant="secondary" busy={busy === 'invite'} onPress={() => void invite()} />
         </>
       )}
       <ErrorText>{error}</ErrorText>

@@ -14,6 +14,7 @@ import { supabase } from '../src/backend/supabaseClient';
 import { parseRecoveryLink } from '../src/recoveryLink';
 import { Button } from '../src/components/ui';
 import { fonts, radius, space, useTheme } from '../src/theme';
+import { t as tr } from '../src/i18n';
 
 const CODE_LENGTH = 6;
 
@@ -40,7 +41,7 @@ export default function ResetPassword() {
     setBusy(false);
     if (error) return setMessage({ text: error.message, tone: 'error' });
     setStep('code');
-    setMessage({ text: `If ${email.trim()} has an account, an e-mail is on its way: enter its code, or paste its link below.`, tone: 'info' });
+    setMessage({ text: tr('If {email} has an account, an e-mail is on its way: enter its code, or paste its link below.', { email: email.trim() }), tone: 'info' });
   };
 
   const setNewPassword = async () => {
@@ -74,7 +75,7 @@ export default function ResetPassword() {
         </Text>
       </View>
 
-      <Text style={[styles.title, { color: t.text }]}>Reset password</Text>
+      <Text style={[styles.title, { color: t.text }]}>{tr('Reset password')}</Text>
 
       {message && (
         <View style={[styles.banner, { backgroundColor: message.tone === 'error' ? t.dangerSoft : t.liveSoft }]}>
@@ -85,22 +86,22 @@ export default function ResetPassword() {
 
       {step === 'email' ? (
         <>
-          <Text style={{ color: t.textMuted, lineHeight: 20 }}>Enter your e-mail and we'll send you a code to choose a new password.</Text>
+          <Text style={{ color: t.textMuted, lineHeight: 20 }}>{tr("Enter your e-mail and we'll send you a code to choose a new password.")}</Text>
           <TextInput
             style={input}
-            placeholder="E-mail"
+            placeholder={tr('E-mail')}
             placeholderTextColor={t.textMuted}
-            accessibilityLabel="E-mail"
+            accessibilityLabel={tr('E-mail')}
             autoCapitalize="none"
             keyboardType="email-address"
             value={email}
             onChangeText={setEmail}
           />
-          <Button title="Send code" onPress={() => void sendCode()} busy={busy} disabled={!/.+@.+\..+/.test(email.trim())} />
+          <Button title={tr('Send code')} onPress={() => void sendCode()} busy={busy} disabled={!/.+@.+\..+/.test(email.trim())} />
         </>
       ) : (
         <>
-          <Text style={[styles.label, { color: t.textMuted }]}>6-digit code</Text>
+          <Text style={[styles.label, { color: t.textMuted }]}>{tr('6-digit code')}</Text>
           <View style={styles.codeRow}>
             {Array.from({ length: CODE_LENGTH }, (_, i) => {
               const digit = code[i];
@@ -116,7 +117,7 @@ export default function ResetPassword() {
             })}
             {/* One real input sits over the boxes, so paste and autofill still work. */}
             <TextInput
-              accessibilityLabel="6-digit code"
+              accessibilityLabel={tr('6-digit code')}
               value={code}
               onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 8))}
               keyboardType="number-pad"
@@ -126,15 +127,15 @@ export default function ResetPassword() {
             />
           </View>
 
-          <Text style={[styles.label, { color: t.textMuted }]}>No code in the e-mail? Paste its link</Text>
+          <Text style={[styles.label, { color: t.textMuted }]}>{tr('No code in the e-mail? Paste its link')}</Text>
           <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18 }}>
-            Press and hold the reset link or button in the e-mail, choose "Copy link" (don't open it), and paste it here.
+            Press and hold the reset link or button in the e-mail, choose tr('Copy link') (don't open it), and paste it here.
           </Text>
           <TextInput
             style={input}
             placeholder="https://…supabase.co/auth/v1/verify?token=…"
             placeholderTextColor={t.textMuted}
-            accessibilityLabel="Link from the e-mail"
+            accessibilityLabel={tr('Link from the e-mail')}
             autoCapitalize="none"
             autoCorrect={false}
             value={link}
@@ -142,28 +143,28 @@ export default function ResetPassword() {
           />
           {link.trim().length > 0 && (
             <Text style={{ color: recovery ? t.live : t.danger, fontSize: 13 }}>
-              {recovery ? 'Link recognised.' : "That doesn't look like the reset link from the e-mail."}
+              {recovery ? tr('Link recognised.') : tr("That doesn't look like the reset link from the e-mail.")}
             </Text>
           )}
 
-          <Text style={[styles.label, { color: t.textMuted }]}>New password</Text>
+          <Text style={[styles.label, { color: t.textMuted }]}>{tr('New password')}</Text>
           <TextInput
             style={input}
-            placeholder="At least 8 characters"
+            placeholder={tr('At least 8 characters')}
             placeholderTextColor={t.textMuted}
-            accessibilityLabel="New password"
+            accessibilityLabel={tr('New password')}
             secureTextEntry
             textContentType="newPassword"
             value={password}
             onChangeText={setPassword}
           />
-          <Button title="Set new password" onPress={() => void setNewPassword()} busy={busy} disabled={(code.trim().length < CODE_LENGTH && !recovery) || password.length < 8} />
+          <Button title={tr('Set new password')} onPress={() => void setNewPassword()} busy={busy} disabled={(code.trim().length < CODE_LENGTH && !recovery) || password.length < 8} />
           <View style={styles.links}>
             <Pressable accessibilityRole="link" onPress={() => setStep('email')}>
-              <Text style={{ color: t.accent, fontFamily: fonts.bodySemibold }}>Use another e-mail</Text>
+              <Text style={{ color: t.accent, fontFamily: fonts.bodySemibold }}>{tr('Use another e-mail')}</Text>
             </Pressable>
             <Pressable accessibilityRole="link" onPress={() => void sendCode()}>
-              <Text style={{ color: t.accent, fontFamily: fonts.bodySemibold }}>Send a new code</Text>
+              <Text style={{ color: t.accent, fontFamily: fonts.bodySemibold }}>{tr('Send a new code')}</Text>
             </Pressable>
           </View>
         </>

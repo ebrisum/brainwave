@@ -42,6 +42,7 @@ import type {
   ReportResult,
   TrackPoint,
 } from './types';
+import { t as tr } from '../i18n';
 
 interface DeviceRow {
   id: string;
@@ -150,7 +151,7 @@ const toZone = (r: ZoneRow): HomeZone => ({
 function toCat(r: DeviceRow, info: AccessInfo, place: CatPlace | null): Cat {
   return {
     id: r.id,
-    name: r.display_name ?? 'Unnamed cat',
+    name: r.display_name ?? tr('Unnamed cat'),
     color: r.color,
     kind: r.kind,
     ownerId: r.owner_id,
@@ -208,7 +209,7 @@ export class SupabaseBackend implements Backend {
   constructor(db: SupabaseClient, userId: string, email: string | undefined) {
     this.#db = db;
     this.userId = userId;
-    this.userLabel = email ?? 'Signed in';
+    this.userLabel = email ?? tr('Signed in');
   }
 
   async listCats(): Promise<Cat[]> {
@@ -373,7 +374,7 @@ export class SupabaseBackend implements Backend {
 
   async setPhoto(catId: string, localUri: string): Promise<void> {
     const body = await readLocalFile(localUri);
-    if (body.byteLength === 0) throw new Error('Could not read the photo. Please try again.');
+    if (body.byteLength === 0) throw new Error(tr('Could not read the photo. Please try again.'));
     const path = `${this.userId}/${catId}-${Date.now()}.jpg`;
     const { error } = await this.#db.storage.from(PHOTO_BUCKET).upload(path, body, { contentType: 'image/jpeg', upsert: false });
     fail(error);
@@ -479,7 +480,7 @@ export class SupabaseBackend implements Backend {
     const { error } = await this.#db.rpc('create_circle_geofence', {
       p_device_id: 'catId' in target ? target.catId : null,
       p_household_id: 'householdId' in target ? target.householdId : null,
-      p_name: name.trim() || 'Home', p_lat: lat, p_lng: lng, p_radius_m: radiusM, p_alert_on_enter: true,
+      p_name: name.trim() || tr('Home'), p_lat: lat, p_lng: lng, p_radius_m: radiusM, p_alert_on_enter: true,
     });
     fail(error);
   }

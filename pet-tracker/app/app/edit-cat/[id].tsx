@@ -18,11 +18,12 @@ import { CatPhotoField } from '../../src/photo/CatPhotoField';
 import { ask, messageOf } from '../../src/dialogs';
 import { deviceTimezone } from '../../src/time';
 import { fonts, radius, space, useTheme } from '../../src/theme';
+import { t as tr } from '../../src/i18n';
 
-const NIGHT_INTERVALS = [
-  { value: 120, label: '2 min' },
-  { value: 300, label: '5 min' },
-  { value: 600, label: '10 min' },
+const NIGHT_INTERVALS = () => [
+  { value: 120, label: tr('2 min') },
+  { value: 300, label: tr('5 min') },
+  { value: 600, label: tr('10 min') },
 ] as const;
 
 type Key = 'photo' | 'save' | 'night' | 'delete';
@@ -78,9 +79,9 @@ export default function EditCat() {
 
   const deleteCat = async () => {
     const yes = await ask(
-      `Delete ${cat.name}?`,
-      'Its location history, zones and alerts are deleted for everyone who sees it. This cannot be undone.',
-      'Delete',
+      tr('Delete {name}?', { name: cat.name }),
+      tr('Its location history, zones and alerts are deleted for everyone who sees it. This cannot be undone.'),
+      tr('Delete'),
       true,
     );
     if (!yes) return;
@@ -98,15 +99,15 @@ export default function EditCat() {
     <ScrollView style={{ backgroundColor: t.bg }} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
       <Stack.Screen
         options={{
-          title: `Edit ${cat.name}`,
+          title: tr('Edit {name}', { name: cat.name }),
           headerLeft: () => (
             <Pressable accessibilityRole="button" onPress={() => router.back()} hitSlop={10}>
-              <Text style={{ color: t.text, fontSize: 16 }}>Cancel</Text>
+              <Text style={{ color: t.text, fontSize: 16 }}>{tr('Cancel')}</Text>
             </Pressable>
           ),
           headerRight: () => (
-            <Pressable accessibilityRole="button" accessibilityLabel="Save" disabled={!name.trim() || busy === 'save'} onPress={() => void save()} hitSlop={10}>
-              <Text style={{ color: name.trim() ? t.accent : t.textMuted, fontSize: 16, fontFamily: fonts.bodySemibold }}>Save</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={tr('Save')} disabled={!name.trim() || busy === 'save'} onPress={() => void save()} hitSlop={10}>
+              <Text style={{ color: name.trim() ? t.accent : t.textMuted, fontSize: 16, fontFamily: fonts.bodySemibold }}>{tr('Save')}</Text>
             </Pressable>
           ),
         }}
@@ -127,18 +128,18 @@ export default function EditCat() {
           })}
         />
         <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18, textAlign: 'center' }}>
-          The circle is exactly what the avatar shows. Visible to everyone who sees this cat.
+          {tr('The circle is exactly what the avatar shows. Visible to everyone who sees this cat.')}
         </Text>
         <ErrorText>{errors.photo}</ErrorText>
       </View>
 
       <View style={[styles.card, { backgroundColor: t.surface, gap: 16 }]}>
         <View style={{ gap: 6 }}>
-          <Text style={[styles.label, { color: t.textMuted }]}>Name</Text>
-          <TextInput style={input} value={name} onChangeText={setName} maxLength={64} accessibilityLabel="Cat name" />
+          <Text style={[styles.label, { color: t.textMuted }]}>{tr('Name')}</Text>
+          <TextInput style={input} value={name} onChangeText={setName} maxLength={64} accessibilityLabel={tr('Cat name')} />
         </View>
         <View style={{ gap: 10 }}>
-          <Text style={[styles.label, { color: t.textMuted }]}>Map colour</Text>
+          <Text style={[styles.label, { color: t.textMuted }]}>{tr('Map colour')}</Text>
           <View style={styles.swatches}>
             {CAT_COLORS.map((c) => {
               const selected = c === color;
@@ -146,7 +147,7 @@ export default function EditCat() {
                 <Pressable
                   key={c}
                   accessibilityRole="button"
-                  accessibilityLabel={`Colour ${c}`}
+                  accessibilityLabel={tr('Colour {v}', { v: c })}
                   accessibilityState={{ selected }}
                   onPress={() => setColor(c)}
                   style={[styles.swatchRing, { borderColor: selected ? t.text : 'transparent' }]}
@@ -166,11 +167,11 @@ export default function EditCat() {
             <Ionicons name="moon-outline" size={20} color={t.night} />
           </View>
           <View style={{ flex: 1, gap: 2 }}>
-            <Text style={{ color: t.text, fontFamily: fonts.bodySemibold, fontSize: 16 }}>Night watch</Text>
-            <Text style={{ color: t.textMuted, fontSize: 13 }}>Track more often at night</Text>
+            <Text style={{ color: t.text, fontFamily: fonts.bodySemibold, fontSize: 16 }}>{tr('Night watch')}</Text>
+            <Text style={{ color: t.textMuted, fontSize: 13 }}>{tr('Track more often at night')}</Text>
           </View>
           <Switch
-            accessibilityLabel="Night watch"
+            accessibilityLabel={tr('Night watch')}
             value={cat.night.enabled}
             onValueChange={(v) => saveNight({ ...cat.night, enabled: v })}
             trackColor={{ true: t.night, false: t.surfaceAlt }}
@@ -179,14 +180,14 @@ export default function EditCat() {
           />
         </View>
         <Text style={{ color: t.textMuted, lineHeight: 21, fontSize: 14 }}>
-          Cats roam at night. During these hours, positions update more often while {cat.name} is on the move.{' '}
-          {cat.kind === 'collar' ? 'The collar picks up changes at its next check-in.' : 'Applies to this phone while it tracks.'}
+          {tr('Cats roam at night. During these hours, positions update more often while {name} is on the move.', { name: cat.name })}{' '}
+          {cat.kind === 'collar' ? tr('The collar picks up changes at its next check-in.') : tr('Applies to this phone while it tracks.')}
         </Text>
         {cat.night.enabled && (
           <>
             <View style={styles.timeRow}>
-              <TimeField label="From" minutes={cat.night.startMin} onChange={(m) => saveNight({ ...cat.night, startMin: m })} />
-              <TimeField label="Until" minutes={cat.night.endMin} onChange={(m) => saveNight({ ...cat.night, endMin: m })} />
+              <TimeField label={tr('From')} minutes={cat.night.startMin} onChange={(m) => saveNight({ ...cat.night, startMin: m })} />
+              <TimeField label={tr('Until')} minutes={cat.night.endMin} onChange={(m) => saveNight({ ...cat.night, endMin: m })} />
             </View>
             <View style={{ gap: 6 }}>
               <View style={[styles.timeline, { backgroundColor: t.surfaceAlt }]}>
@@ -201,8 +202,8 @@ export default function EditCat() {
               </View>
             </View>
             <View style={{ gap: 8 }}>
-              <Text style={[styles.label, { color: t.textMuted }]}>Update every</Text>
-              <Segmented options={NIGHT_INTERVALS} value={cat.night.intervalS as 120 | 300 | 600} onChange={(v) => saveNight({ ...cat.night, intervalS: v })} />
+              <Text style={[styles.label, { color: t.textMuted }]}>{tr('Update every')}</Text>
+              <Segmented options={NIGHT_INTERVALS()} value={cat.night.intervalS as 120 | 300 | 600} onChange={(v) => saveNight({ ...cat.night, intervalS: v })} />
             </View>
           </>
         )}
@@ -216,8 +217,8 @@ export default function EditCat() {
               <Ionicons name="phone-portrait-outline" size={20} color={t.accent} />
             </View>
             <View style={{ flex: 1, gap: 2 }}>
-              <Text style={{ color: t.text, fontFamily: fonts.bodySemibold, fontSize: 16 }}>Phone tracker</Text>
-              <Text style={{ color: t.textMuted, fontSize: 13 }}>How often this phone sends its location</Text>
+              <Text style={{ color: t.text, fontFamily: fonts.bodySemibold, fontSize: 16 }}>{tr('Phone tracker')}</Text>
+              <Text style={{ color: t.textMuted, fontSize: 13 }}>{tr('How often this phone sends its location')}</Text>
             </View>
           </View>
           {REPORT_INTERVALS.map((r) => {
@@ -241,7 +242,7 @@ export default function EditCat() {
             );
           })}
           <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18, paddingBottom: 8 }}>
-            Lost mode and night watch can shorten this automatically.
+            {tr('Lost mode and night watch can shorten this automatically.')}
           </Text>
         </View>
       )}
@@ -249,12 +250,12 @@ export default function EditCat() {
       <CatSharingCard cat={cat} />
 
       <View style={[styles.card, { backgroundColor: t.surface, gap: 12, borderWidth: 1, borderColor: t.dangerSoft }]}>
-        <Text style={{ color: t.text, fontFamily: fonts.bodySemibold, fontSize: 16 }}>Delete {cat.name}</Text>
+        <Text style={{ color: t.text, fontFamily: fonts.bodySemibold, fontSize: 16 }}>{tr('Delete {name}', { name: cat.name })}</Text>
         <Text style={{ color: t.textMuted, lineHeight: 20 }}>
-          Removes {cat.name} with its location history, zones and alerts for everyone who sees it. This cannot be undone.
+          {tr('Removes {name} with its location history, zones and alerts for everyone who sees it. This cannot be undone.', { name: cat.name })}
         </Text>
         <ErrorText>{errors.delete}</ErrorText>
-        <Button title={`Delete ${cat.name} and its history`} variant="danger" icon="trash-outline" busy={busy === 'delete'} onPress={() => void deleteCat()} />
+        <Button title={tr('Delete {name} and its history', { name: cat.name })} variant="danger" icon="trash-outline" busy={busy === 'delete'} onPress={() => void deleteCat()} />
       </View>
     </ScrollView>
   );

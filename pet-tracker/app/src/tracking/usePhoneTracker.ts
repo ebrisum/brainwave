@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 
 import type { Backend, ReportResult } from '../backend/types';
 import { onBackgroundReport, startBackgroundTracking, stopBackgroundTracking } from './background';
+import { t as tr } from '../i18n';
 
 export type TrackerState = 'off' | 'starting' | 'tracking' | 'denied' | 'error';
 
@@ -106,7 +107,7 @@ export function usePhoneTracker(
           const bg = await startBackgroundTracking(catId, catName, intervalS);
           if (cancelled) return;
           if (bg === 'denied') {
-            setStatus({ ...OFF, catId, state: 'denied', error: 'Location permission was not granted.' });
+            setStatus({ ...OFF, catId, state: 'denied', error: tr('Location permission was not granted.') });
             return;
           }
           if (bg === 'started') {
@@ -129,7 +130,7 @@ export function usePhoneTracker(
         const perm = await Location.requestForegroundPermissionsAsync();
         if (cancelled) return;
         if (perm.status !== 'granted') {
-          setStatus({ ...OFF, catId, state: 'denied', error: 'Location permission was not granted.' });
+          setStatus({ ...OFF, catId, state: 'denied', error: tr('Location permission was not granted.') });
           return;
         }
         await activateKeepAwakeAsync(KEEP_AWAKE_TAG)

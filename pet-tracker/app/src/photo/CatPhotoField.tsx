@@ -8,6 +8,7 @@ import { messageOf } from '../dialogs';
 import { useTheme } from '../theme';
 import { PhotoCropper } from './PhotoCropper';
 import { pickPhoto, type PickedImage } from './photo';
+import { t as tr } from '../i18n';
 
 interface Props {
   name: string;
@@ -46,10 +47,10 @@ export function CatPhotoField({ name, color, photoUrl, onPhoto, onRemove }: Prop
         </View>
       </View>
       <View style={styles.row}>
-        <Button style={{ flex: 1 }} variant="secondary" title="Choose photo" icon="image-outline" busy={busy === 'library'} onPress={() => void pick('library')} />
-        <Button style={{ flex: 1 }} variant="secondary" title="Take photo" icon="camera-outline" busy={busy === 'camera'} onPress={() => void pick('camera')} />
+        <Button style={{ flex: 1 }} variant="secondary" title={tr('Choose photo')} icon="image-outline" busy={busy === 'library'} onPress={() => void pick('library')} />
+        <Button style={{ flex: 1 }} variant="secondary" title={tr('Take photo')} icon="camera-outline" busy={busy === 'camera'} onPress={() => void pick('camera')} />
       </View>
-      {photoUrl && onRemove && <Button title="Remove photo" variant="ghost" onPress={onRemove} />}
+      {photoUrl && onRemove && <Button title={tr('Remove photo')} variant="ghost" onPress={onRemove} />}
       <ErrorText>{error}</ErrorText>
       <PhotoCropper
         image={picked}

@@ -8,6 +8,7 @@ import { todayStory } from '../place';
 import { fmtDuration } from '../time';
 import { fonts, space, useTheme } from '../theme';
 import { Card, SectionTitle } from './ui';
+import { t as tr } from '../i18n';
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -26,7 +27,7 @@ export function TodayCard({ cat, events, activity, hasZones }: { cat: Cat; event
 
   return (
     <Card style={{ gap: space.md }}>
-      <SectionTitle>Today</SectionTitle>
+      <SectionTitle>{tr('Today')}</SectionTitle>
       {summary && <Text style={{ color: t.text, fontFamily: fonts.bodyMedium, lineHeight: 20 }}>{summary}</Text>}
 
       {story.length === 0 ? (
@@ -34,8 +35,8 @@ export function TodayCard({ cat, events, activity, hasZones }: { cat: Cat; event
           {hasZones
             ? cat.place?.zoneName
               ? `${cat.name} hasn't left ${cat.place.zoneName} today.`
-              : `No zone changes today.`
-            : `Set a home zone to see when ${cat.name} leaves and comes back.`}
+              : tr('No zone changes today.')
+            : tr('Set a home zone to see when {name} leaves and comes back.', { name: cat.name })}
         </Text>
       ) : (
         <View>
@@ -48,7 +49,7 @@ export function TodayCard({ cat, events, activity, hasZones }: { cat: Cat; event
                     <View style={[styles.dashed, { borderColor: t.border }]} />
                   </View>
                   <Text style={[styles.away, { color: s.ongoing ? t.text : t.textMuted }]}>
-                    {s.ongoing ? `Out for ${fmtDuration(s.minutes * 60)} so far` : `Out for ${fmtDuration(s.minutes * 60)}`}
+                    {s.ongoing ? tr('Out for {minutes} so far', { minutes: fmtDuration(s.minutes * 60) }) : tr('Out for {minutes}', { minutes: fmtDuration(s.minutes * 60) })}
                   </Text>
                 </View>
               );
@@ -63,7 +64,7 @@ export function TodayCard({ cat, events, activity, hasZones }: { cat: Cat; event
                 <View style={styles.eventText}>
                   <Ionicons name={exit ? 'exit-outline' : 'home-outline'} size={16} color={exit ? t.danger : t.live} />
                   <Text style={{ color: t.text, fontFamily: fonts.bodySemibold, flex: 1 }}>
-                    {exit ? 'Left' : 'Back in'} {s.zoneName}
+                    {exit ? tr('Left') : tr('Back in')} {s.zoneName}
                   </Text>
                   <Text style={{ color: t.textMuted, fontFamily: 'GeistMono_500Medium', fontSize: 13 }}>{clock(s.at)}</Text>
                 </View>

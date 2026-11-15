@@ -3,6 +3,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useApp } from '../AppProvider';
 import { relativeTime } from '../geo';
 import { fonts, radius, space, useTheme } from '../theme';
+import { t as tr } from '../i18n';
 
 /** Shows that this phone is acting as a cat's collar, from any screen. Stop and Settings act from here. */
 export function TrackerBanner({ onPress }: { onPress?: () => void }) {
@@ -11,14 +12,14 @@ export function TrackerBanner({ onPress }: { onPress?: () => void }) {
   if (tracker.state === 'off') return null;
 
   const cat = cats.find((c) => c.id === tracker.catId);
-  const name = cat?.name ?? 'your cat';
+  const name = cat?.name ?? tr('your cat');
   const every = effectiveIntervalS < 60 ? `${effectiveIntervalS} s` : `${Math.round(effectiveIntervalS / 60)} min`;
-  const last = tracker.lastSentAt ? ` · last update ${relativeTime(tracker.lastSentAt)}` : '';
+  const last = tracker.lastSentAt ? ` · ${tr('last update {when}', { when: relativeTime(tracker.lastSentAt) })}` : '';
   const text = {
-    starting: `Starting GPS for ${name}…`,
-    tracking: `This phone is ${name}'s tracker · every ${every}${tracker.mode === 'background' ? ' · works with the screen off' : ''}${last}`,
-    denied: `Location is off, so ${name} is not being tracked from this phone.`,
-    error: `Could not send location: ${tracker.error ?? 'unknown error'}`,
+    starting: tr('Starting GPS for {name}…', { name }),
+    tracking: `${tr("This phone is {name}'s tracker · every {every}", { name, every })}${tracker.mode === 'background' ? ` · ${tr('works with the screen off')}` : ''}${last}`,
+    denied: tr('Location is off, so {name} is not being tracked from this phone.', { name }),
+    error: tr('Could not send location: {error}', { error: tracker.error ?? tr('unknown error') }),
     off: '',
   }[tracker.state];
   const problem = tracker.state === 'denied' || tracker.state === 'error';
@@ -35,12 +36,12 @@ export function TrackerBanner({ onPress }: { onPress?: () => void }) {
         </Text>
       </Pressable>
       {tracker.state === 'denied' ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Open phone settings" onPress={() => void Linking.openSettings().catch(() => undefined)} hitSlop={8}>
-          <Text style={[styles.action, { color: t.accent }]}>Settings</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('Open phone settings')} onPress={() => void Linking.openSettings().catch(() => undefined)} hitSlop={8}>
+          <Text style={[styles.action, { color: t.accent }]}>{tr('Settings')}</Text>
         </Pressable>
       ) : (
-        <Pressable accessibilityRole="button" accessibilityLabel="Stop tracking" onPress={() => setTrackedCatId(null)} hitSlop={8}>
-          <Text style={[styles.action, { color: t.textMuted }]}>Stop</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('Stop tracking')} onPress={() => setTrackedCatId(null)} hitSlop={8}>
+          <Text style={[styles.action, { color: t.textMuted }]}>{tr('Stop')}</Text>
         </Pressable>
       )}
     </View>

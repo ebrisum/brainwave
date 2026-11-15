@@ -15,14 +15,15 @@ import { CatMap } from '../../src/components/CatMap';
 import { Button, ErrorText, IconButton, Segmented } from '../../src/components/ui';
 import { messageOf } from '../../src/dialogs';
 import { fonts, radius, space, useTheme } from '../../src/theme';
+import { t as tr } from '../../src/i18n';
 
 // Radius presets: 15-25 m fits a house (with garden), larger ones a street or area.
-const SIZES = [
-  { value: 15, label: '15 m' },
-  { value: 25, label: '25 m' },
-  { value: 50, label: '50 m' },
-  { value: 100, label: '100 m' },
-  { value: 250, label: '250 m' },
+const SIZES = () => [
+  { value: 15, label: tr('15 m') },
+  { value: 25, label: tr('25 m') },
+  { value: 50, label: tr('50 m') },
+  { value: 100, label: tr('100 m') },
+  { value: 250, label: tr('250 m') },
 ] as const;
 
 /** Fine-tuning range and step for the radius (the database accepts 10-5000 m). */
@@ -32,7 +33,7 @@ const STEP_M = 5;
 /** Below this, indoor GPS error is about as large as the zone itself. */
 const SMALL_ZONE_M = 25;
 
-const SUGGESTED = ['Home', 'Garden', 'Neighbours', 'Holiday home'];
+const SUGGESTED = () => [tr('Home'), tr('Garden'), tr('Neighbours'), tr('Holiday home')];
 
 export default function NewZone() {
   const t = useTheme();
@@ -46,7 +47,7 @@ export default function NewZone() {
   const [householdName, setHouseholdName] = useState<string | null>(cat?.householdName ?? null);
   const canCatZone = cat !== undefined && cat.access === 'owner';
 
-  const [name, setName] = useState('Home');
+  const [name, setName] = useState(tr('Home'));
   const [radiusM, setRadiusM] = useState<number>(25);
   const [scope, setScope] = useState<'household' | 'cat'>(householdId ? 'household' : 'cat');
   const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
@@ -71,12 +72,12 @@ export default function NewZone() {
   if (!backend || (!cat && !householdId) || (!householdId && !canCatZone)) return null;
   const forName = scope === 'household' ? householdName ?? 'the household' : cat?.name ?? '';
 
-  const cancel = <Pressable accessibilityRole="button" onPress={() => router.back()} hitSlop={10}><Text style={{ color: t.text, fontSize: 16 }}>Cancel</Text></Pressable>;
+  const cancel = <Pressable accessibilityRole="button" onPress={() => router.back()} hitSlop={10}><Text style={{ color: t.text, fontSize: 16 }}>{tr('Cancel')}</Text></Pressable>;
 
   const useMyLocation = async () => {
     setError(null);
     const perm = await Location.requestForegroundPermissionsAsync();
-    if (perm.status !== 'granted') return setError('Location permission is needed to use your position.');
+    if (perm.status !== 'granted') return setError(tr('Location permission is needed to use your position.'));
     const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
     setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
   };
@@ -98,12 +99,12 @@ export default function NewZone() {
     }
   };
 
-  const hint = !center ? 'Set the centre first: use "At my position" or long-press the map.' : !name.trim() ? 'Give the zone a name.' : null;
+  const hint = !center ? tr('Set the centre first: use "At my position" or long-press the map.') : !name.trim() ? tr('Give the zone a name.') : null;
   const centreIsCat = center !== null && anchor !== undefined && anchor.lastLat === center.lat && anchor.lastLng === center.lng;
 
   return (
     <ScrollView style={{ backgroundColor: t.bg }} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-      <Stack.Screen options={{ title: scope === 'household' ? `Zone for ${forName}` : 'New zone', headerLeft: () => cancel }} />
+      <Stack.Screen options={{ title: scope === 'household' ? tr('Zone for {forName}', { forName }) : tr('New zone'), headerLeft: () => cancel }} />
 
       <View style={[styles.mapWrap, { height: Math.min(330, Math.round(height * 0.36)) }]}>
         <CatMap
@@ -115,13 +116,13 @@ export default function NewZone() {
         />
         <View style={styles.mapHint} pointerEvents="none">
           <Ionicons name="hand-left-outline" size={14} color={t.textMuted} />
-          <Text style={{ color: t.textMuted, fontSize: 13 }}>Long-press the map to move the centre</Text>
+          <Text style={{ color: t.textMuted, fontSize: 13 }}>{tr('Long-press the map to move the centre')}</Text>
         </View>
       </View>
 
       <View style={[styles.card, { backgroundColor: t.surface }]}>
         <View style={styles.field}>
-          <Text style={[styles.label, { color: t.textMuted }]}>Centre</Text>
+          <Text style={[styles.label, { color: t.textMuted }]}>{tr('Centre')}</Text>
           <View style={styles.centreRow}>
             {anchor && (
               <Pressable
@@ -140,24 +141,24 @@ export default function NewZone() {
               style={[styles.centreBtn, { borderColor: t.surfaceAlt, backgroundColor: t.surfaceAlt }]}
             >
               <Ionicons name="navigate-outline" size={16} color={t.text} />
-              <Text style={{ color: t.text, fontFamily: fonts.bodySemibold }}>At my position</Text>
+              <Text style={{ color: t.text, fontFamily: fonts.bodySemibold }}>{tr('At my position')}</Text>
             </Pressable>
           </View>
         </View>
 
         <View style={styles.field}>
-          <Text style={[styles.label, { color: t.textMuted }]}>Name</Text>
+          <Text style={[styles.label, { color: t.textMuted }]}>{tr('Name')}</Text>
           <TextInput
             style={[styles.input, { backgroundColor: t.surfaceAlt, color: t.text, borderColor: t.border }]}
             value={name}
             onChangeText={setName}
             maxLength={64}
-            placeholder="Zone name"
+            placeholder={tr('Zone name')}
             placeholderTextColor={t.textMuted}
-            accessibilityLabel="Zone name"
+            accessibilityLabel={tr('Zone name')}
           />
           <View style={styles.chips}>
-            {SUGGESTED.map((s) => {
+            {SUGGESTED().map((s) => {
               const selected = name === s;
               return (
                 <Pressable
@@ -175,12 +176,12 @@ export default function NewZone() {
         </View>
 
         <View style={styles.field}>
-          <Text style={[styles.label, { color: t.textMuted }]}>Size</Text>
-          <Segmented<number> options={SIZES} value={radiusM} onChange={setRadiusM} />
+          <Text style={[styles.label, { color: t.textMuted }]}>{tr('Size')}</Text>
+          <Segmented<number> options={SIZES()} value={radiusM} onChange={setRadiusM} />
           <View style={styles.stepper}>
             <IconButton
               icon="remove"
-              label="Make the zone smaller"
+              label={tr('Make the zone smaller')}
               disabled={radiusM <= MIN_RADIUS_M}
               onPress={() => setRadiusM((r) => Math.max(MIN_RADIUS_M, r - STEP_M))}
             />
@@ -190,26 +191,25 @@ export default function NewZone() {
             </View>
             <IconButton
               icon="add"
-              label="Make the zone larger"
+              label={tr('Make the zone larger')}
               disabled={radiusM >= MAX_RADIUS_M}
               onPress={() => setRadiusM((r) => Math.min(MAX_RADIUS_M, r + STEP_M))}
             />
           </View>
           {radiusM < SMALL_ZONE_M && (
             <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18 }}>
-              GPS is often 10–30 m off indoors. You still only get a "left" alert once a cat is clearly outside, but
-              the app may briefly show it as outside while in the house.
+              {tr('GPS is often 10–30 m off indoors. You still only get a "left" alert once a cat is clearly outside, but the app may briefly show it as outside while in the house.')}
             </Text>
           )}
         </View>
 
         {householdId && canCatZone && (
           <View style={styles.field}>
-            <Text style={[styles.label, { color: t.textMuted }]}>Applies to</Text>
+            <Text style={[styles.label, { color: t.textMuted }]}>{tr('Applies to')}</Text>
             <Segmented<'household' | 'cat'>
               options={[
-                { value: 'household', label: householdName ?? 'Household' },
-                { value: 'cat', label: `Only ${cat!.name}` },
+                { value: 'household', label: householdName ?? tr('Household') },
+                { value: 'cat', label: tr('Only {name}', { name: cat!.name }) },
               ]}
               value={scope}
               onChange={setScope}
@@ -218,14 +218,14 @@ export default function NewZone() {
         )}
         <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 18 }}>
           {scope === 'household'
-            ? `Every cat in ${forName} uses this zone, also cats added later, and everyone in ${forName} gets its alerts.`
-            : `Only ${forName} uses this zone.`}
+            ? tr('Every cat in {forName} uses this zone, also cats added later, and everyone in {forName} gets its alerts.', { forName })
+            : tr('Only {forName} uses this zone.', { forName })}
         </Text>
       </View>
 
       <ErrorText>{error}</ErrorText>
       {hint && <Text style={{ color: t.textMuted, lineHeight: 20, textAlign: 'center' }}>{hint}</Text>}
-      <Button title={`Save ${name.trim() || 'zone'}`} icon="checkmark" onPress={() => void save()} busy={busy} disabled={!center || !name.trim()} />
+      <Button title={tr('Save {zone}', { zone: name.trim() || 'zone' })} icon="checkmark" onPress={() => void save()} busy={busy} disabled={!center || !name.trim()} />
     </ScrollView>
   );
 }

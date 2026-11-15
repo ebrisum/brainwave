@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Household } from '../backend/types';
 import { fonts, useTheme } from '../theme';
+import { t as tr } from '../i18n';
 
 /** "Private" or one of your households: who sees this cat. */
 export function HouseholdPicker({
@@ -18,13 +19,13 @@ export function HouseholdPicker({
 }) {
   const t = useTheme();
   const options: { id: string | null; name: string; detail: string }[] = [
-    { id: null, name: 'Private', detail: 'Only you (and cat sitters you invite)' },
+    { id: null, name: tr('Private'), detail: tr('Only you (and cat sitters you invite)') },
     ...households.map((h) => ({
       id: h.id,
       name: h.name,
       detail:
         h.members.length === 1
-          ? 'Only you so far · invite people in Settings'
+          ? tr('Only you so far · invite people under Me')
           : `${catName} is visible to ${h.members.length} people: ${h.members.map((m) => m.email.split('@')[0]).join(', ')}`,
     })),
   ];

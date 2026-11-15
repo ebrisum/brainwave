@@ -33,6 +33,7 @@ import {
   type ReportResult,
   type TrackPoint,
 } from './types';
+import { t as tr } from '../i18n';
 
 const DEFAULT_CENTER = { lat: 52.3676, lng: 4.9041 }; // Amsterdam, until the phone reports
 const SIM_TICK_MS = 4000;
@@ -41,8 +42,8 @@ const DEMO_USER = 'demo-user';
 const DEMO_HOUSEHOLD = 'demo-household';
 /** Label of the demo collar (also printed by cloud/provisioning for testing). */
 export const DEMO_COLLAR = { deviceUid: 'DEMO-0001', claimCode: 'DEMOCODE2345' } as const;
-const NEEDS_ACCOUNT_COLLAR = 'A new collar needs an account. Exit the demo and sign in.';
-const NEEDS_ACCOUNT = 'Sharing needs an account. Exit the demo and sign in to invite people.';
+const NEEDS_ACCOUNT_COLLAR = () => tr('A new collar needs an account. Exit the demo and sign in.');
+const NEEDS_ACCOUNT = () => tr('Sharing needs an account. Exit the demo and sign in to invite people.');
 
 let nextId = 1;
 const newId = (p: string) => `${p}-${Date.now().toString(36)}-${(nextId++).toString(36)}`;
@@ -55,7 +56,9 @@ interface SimState {
 export class DemoBackend implements Backend {
   readonly mode = 'demo' as const;
   readonly userId = DEMO_USER;
-  readonly userLabel = 'Demo mode';
+  get userLabel() {
+    return tr('Demo mode');
+  }
 
   #cats = new Map<string, Cat>();
   #tracks = new Map<string, TrackPoint[]>();
@@ -73,7 +76,7 @@ export class DemoBackend implements Backend {
   #readUntil = 0;
   #settings: UserSettings = { ...DEFAULT_SETTINGS, notify: { ...DEFAULT_SETTINGS.notify } };
   #shares = new Map<string, ShareLink>();
-  #households = new Map<string, { id: string; name: string }>([[DEMO_HOUSEHOLD, { id: DEMO_HOUSEHOLD, name: 'Demo household' }]]);
+  #households = new Map<string, { id: string; name: string }>([[DEMO_HOUSEHOLD, { id: DEMO_HOUSEHOLD, name: tr('Demo household') }]]);
 
   constructor() {
     this.#seed('Tijger', '#6366F1', 180, 40);
@@ -86,8 +89,8 @@ export class DemoBackend implements Backend {
       name, color, kind, ownerId: DEMO_USER,
       lastLat: null, lastLng: null, lastAccuracyM: null, lastBatteryPct: null, lastFixAt: null,
       lostMode: false, lostModeSince: null, night: { ...DEFAULT_NIGHT }, photoPath: null,
-      householdId: DEMO_HOUSEHOLD, householdName: 'Demo household', access: 'owner', sitterUntil: null,
-      lastSeenAt: null, place: null, powerMode: 'normal', model: kind === 'collar' ? 'Demo collar' : null, fwVersion: null,
+      householdId: DEMO_HOUSEHOLD, householdName: tr('Demo household'), access: 'owner', sitterUntil: null,
+      lastSeenAt: null, place: null, powerMode: 'normal', model: kind === 'collar' ? tr('Demo collar') : null, fwVersion: null,
       profile: { ...EMPTY_PROFILE },
     };
   }
@@ -209,12 +212,12 @@ export class DemoBackend implements Backend {
 
   #alert(cat: Cat, kind: AlertKind, meta: AlertItem['meta'] = {}) {
     const titles: Record<AlertKind, string> = {
-      zone_exit: `${cat.name} left ${meta.zone ?? 'a zone'}`,
-      zone_enter: `${cat.name} is back in ${meta.zone ?? 'a zone'}`,
-      low_battery: `${cat.name}'s tracker battery is low`,
-      lost_mode: `Lost mode on for ${cat.name}`,
-      tracker_silent: `${cat.name}'s tracker is silent`,
-      found: `${cat.name} is found`,
+      zone_exit: tr('{name} left {zone}', { name: cat.name, zone: meta.zone ?? tr('a zone') }),
+      zone_enter: tr('{name} is back in {zone}', { name: cat.name, zone: meta.zone ?? tr('a zone') }),
+      low_battery: tr("{name}'s tracker battery is low", { name: cat.name }),
+      lost_mode: tr('Lost mode on for {name}', { name: cat.name }),
+      tracker_silent: tr("{name}'s tracker is silent", { name: cat.name }),
+      found: tr('{name} is found', { name: cat.name }),
     };
     this.#alerts.unshift({ id: newId('al'), catId: cat.id, kind, title: titles[kind], body: '', meta, at: new Date().toISOString(), unread: true });
     this.#alerts.splice(200);
@@ -238,7 +241,7 @@ export class DemoBackend implements Backend {
 
   async addPhoneCat(name: string, color: string): Promise<string> {
     const trimmed = name.trim();
-    if (!trimmed || trimmed.length > 64) throw new Error('Name must be 1-64 characters');
+    if (!trimmed || trimmed.length > 64) throw new Error(tr('Name must be 1-64 characters'));
     const cat = this.#newCat(trimmed, color, 'phone');
     this.#cats.set(cat.id, cat);
     this.#emitCat(cat);
@@ -250,13 +253,13 @@ export class DemoBackend implements Backend {
     return false;
   }
   async staffCreateTracker(): Promise<never> {
-    throw new Error(NEEDS_ACCOUNT);
+    throw new Error(NEEDS_ACCOUNT());
   }
   async staffListTrackers(): Promise<never> {
-    throw new Error(NEEDS_ACCOUNT);
+    throw new Error(NEEDS_ACCOUNT());
   }
   async staffResetTracker(): Promise<never> {
-    throw new Error(NEEDS_ACCOUNT);
+    throw new Error(NEEDS_ACCOUNT());
   }
 
   // One pretend collar, so scanning and adding a collar can be tried in demo mode.
@@ -264,16 +267,16 @@ export class DemoBackend implements Backend {
     if (deviceUid.trim() !== DEMO_COLLAR.deviceUid || normalizeClaimCode(claimCode) !== DEMO_COLLAR.claimCode) {
       return { status: 'invalid', model: null };
     }
-    return { status: this.#demoCollarClaimed ? 'yours' : 'ready', model: 'Demo collar' };
+    return { status: this.#demoCollarClaimed ? 'yours' : 'ready', model: tr('Demo collar') };
   }
 
   async claimCollar(deviceUid: string, claimCode: string): Promise<string> {
     const check = await this.checkClaimCode(deviceUid, claimCode);
     if (check.status !== 'ready') {
-      throw new Error(check.status === 'yours' ? 'This collar is already in your list.' : 'In demo mode only the demo collar can be added.');
+      throw new Error(check.status === 'yours' ? tr('This collar is already in your list.') : tr('In demo mode only the demo collar can be added.'));
     }
     this.#demoCollarClaimed = true;
-    const cat = this.#newCat('New cat', '#10B981', 'collar');
+    const cat = this.#newCat(tr('New cat'), '#10B981', 'collar');
     const p = offset(this.#center.lat, this.#center.lng, 60, 120);
     Object.assign(cat, { lastLat: p.lat, lastLng: p.lng, lastAccuracyM: 10, lastBatteryPct: 100, lastFixAt: new Date().toISOString() });
     this.#cats.set(cat.id, cat);
@@ -283,7 +286,7 @@ export class DemoBackend implements Backend {
 
   #cat(id: string): Cat {
     const cat = this.#cats.get(id);
-    if (!cat) throw new Error('Cat not found');
+    if (!cat) throw new Error(tr('Cat not found'));
     return cat;
   }
 
@@ -385,7 +388,7 @@ export class DemoBackend implements Backend {
     const householdId = 'householdId' in target ? target.householdId : null;
     const key = householdId ? `hh:${householdId}` : (target as { catId: string }).catId;
     const zone: HomeZone = {
-      id: newId('zone'), name: name.trim() || 'Home', lat, lng, radiusM, allCats: householdId !== null,
+      id: newId('zone'), name: name.trim() || tr('Home'), lat, lng, radiusM, allCats: householdId !== null,
       householdId, householdName: householdId ? this.#households.get(householdId)?.name ?? null : null,
     };
     this.#zones.set(key, [...(this.#zones.get(key) ?? []), zone]);
@@ -419,7 +422,7 @@ export class DemoBackend implements Backend {
   }
   async createHousehold(name: string): Promise<string> {
     const id = newId('hh');
-    this.#households.set(id, { id, name: name.trim() || 'Household' });
+    this.#households.set(id, { id, name: name.trim() || tr('Household') });
     return id;
   }
   async renameHousehold(householdId: string, name: string): Promise<void> {
@@ -442,7 +445,7 @@ export class DemoBackend implements Backend {
     }
   }
   async createHouseholdInvite(): Promise<string> {
-    throw new Error(NEEDS_ACCOUNT);
+    throw new Error(NEEDS_ACCOUNT());
   }
   async removeMember(): Promise<void> {}
   async leaveHousehold(householdId: string): Promise<void> {
@@ -456,14 +459,14 @@ export class DemoBackend implements Backend {
     this.#emitCat(cat);
   }
   async createSitterInvite(): Promise<string> {
-    throw new Error(NEEDS_ACCOUNT);
+    throw new Error(NEEDS_ACCOUNT());
   }
   async listCatSitters(): Promise<CatSitter[]> {
     return [];
   }
   async removeCatSitter(): Promise<void> {}
   async acceptInvite(): Promise<InviteResult> {
-    throw new Error(NEEDS_ACCOUNT);
+    throw new Error(NEEDS_ACCOUNT());
   }
   async setPowerMode(catId: string, mode: PowerMode): Promise<void> {
     const cat = this.#cat(catId);
@@ -479,7 +482,7 @@ export class DemoBackend implements Backend {
   }
 
   async replaceCollar(): Promise<string> {
-    throw new Error(NEEDS_ACCOUNT_COLLAR);
+    throw new Error(NEEDS_ACCOUNT_COLLAR());
   }
 
   async getTrackRange(catId: string, fromIso: string, toIso: string): Promise<TrackPoint[]> {

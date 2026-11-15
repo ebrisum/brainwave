@@ -7,6 +7,8 @@ import QRCodeCore from 'qrcode/lib/core/qrcode';
 import { useMemo } from 'react';
 import { View } from 'react-native';
 
+import { t as tr } from '../i18n';
+
 export function QrCode({ value, size = 220, color = '#000000', background = '#FFFFFF' }: {
   value: string;
   size?: number;
@@ -36,7 +38,7 @@ export function QrCode({ value, size = 220, color = '#000000', background = '#FF
     <View
       style={{ width: size, height: size, backgroundColor: background }}
       accessibilityRole="image"
-      accessibilityLabel="QR code"
+      accessibilityLabel={tr('QR code')}
     >
       {rows.runs.map((row, y) =>
         row.map((r) => (
