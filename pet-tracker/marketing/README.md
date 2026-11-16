@@ -42,3 +42,21 @@ cd marketing && npm install                                   # three.js
 node product/render.cjs /tmp/renders                          # transparent PNGs
 node product/compose.cjs /tmp/renders /tmp/raw marketing      # cards + banner (needs the app screens)
 ```
+
+## lokate. collar (final design)
+
+`product/lokate.html` models the real design: a pill-shaped cream top with
+the debossed "lokate." wordmark and amber light, a dark-green base with strap
+loops, three pogo pins and four screws on the back, a woven olive collar with
+cream stitching and a steel buckle, in warm beige light with leaf shadows.
+
+| File | Use |
+|---|---|
+| `lokate/banner-nl.jpg`, `banner-en.jpg` | 2400×1350 website banner with headline |
+| `lokate/cards/<lang>/*.jpg` | 1200×1500 cards: collar, made for cats, magnetic charging, charging base |
+| `lokate/photos/*.jpg` | 2400×1350 product shots without text (hero, close-up, back, side, top, charger, overview) |
+
+```bash
+node product/render-lokate.cjs /tmp/lokate            # all shots (or add a shot name)
+node product/compose-lokate.cjs /tmp/lokate lokate    # cards, banners, photos
+```

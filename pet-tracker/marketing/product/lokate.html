@@ -1,0 +1,391 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  @font-face { font-family: Geist; src: url(../../app/node_modules/@expo-google-fonts/geist/600SemiBold/Geist_600SemiBold.ttf); }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #E8DCCB; }
+  canvas { display: block; }
+</style>
+<script type="importmap">
+  { "imports": { "three": "../node_modules/three/build/three.module.js", "three/addons/": "../node_modules/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<script type="module">
+/*
+ * lokate. collar tracker, after the product design: a pill-shaped cream top
+ * shell on a dark-green base with strap loops, debossed wordmark, amber LED,
+ * three pogo pins and four screws on the back, on a woven olive collar with
+ * cream stitching and a steel buckle. Warm beige set with leaf shadows.
+ * Units: mm. Options in the URL hash as JSON (see render-lokate.cjs).
+ */
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+await document.fonts.load('600 100px Geist');
+
+const o = Object.assign({ scene: 'hero', cam: [70, 45, 120], target: [0, 12, 0], fov: 28, leaves: true }, JSON.parse(decodeURIComponent(location.hash.slice(1) || '{}')));
+const C = { cream: '#EAE1CF', green: '#2F4A2C', olive: '#4E5B37', stitch: '#D9CBAE', bg: '#E8DCCB', amber: '#FF9A2A' };
+
+const W = innerWidth, H = innerHeight;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(W, H);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.VSMShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(C.bg);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.55;
+
+const camera = new THREE.PerspectiveCamera(o.fov, W / H, 1, 6000);
+camera.position.set(...o.cam);
+camera.lookAt(new THREE.Vector3(...o.target));
+
+// Warm late-afternoon sun from the upper left, through leaves.
+const sun = new THREE.DirectionalLight('#FFF0DA', 2.4);
+sun.position.set(-160, 260, 120);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1536, 1536);
+sun.shadow.radius = 22;
+sun.shadow.blurSamples = 40;
+sun.shadow.bias = -0.0006;
+Object.assign(sun.shadow.camera, { left: -260, right: 260, top: 260, bottom: -260, near: 10, far: 900 });
+scene.add(sun);
+scene.add(new THREE.HemisphereLight('#FFF6EA', '#C9B79C', 0.55));
+// Soft fill from the camera side so the cream reads warm, not grey.
+const fill = new THREE.DirectionalLight('#FFF1DF', 0.9);
+fill.position.copy(camera.position).add(new THREE.Vector3(0, 60, 0));
+scene.add(fill);
+
+// Seamless set: an unlit floor in exactly the background colour, with the
+// shadows on a separate layer just above it.
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshBasicMaterial({ color: C.bg, toneMapped: false }));
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.ShadowMaterial({ color: '#6B5540', opacity: 0.24 }));
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = 0.02;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Invisible leaves between the sun and the set: soft dappled shadows only.
+if (o.leaves) {
+  const leafShape = new THREE.Shape();
+  leafShape.moveTo(0, 0);
+  leafShape.bezierCurveTo(9, 8, 9, 26, 0, 36);
+  leafShape.bezierCurveTo(-9, 26, -9, 8, 0, 0);
+  const hidden = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const branch = new THREE.Group();
+  for (let i = 0; i < 70; i++) {
+    const leaf = new THREE.Mesh(new THREE.ShapeGeometry(leafShape), hidden);
+    leaf.castShadow = true;
+    leaf.position.set(-150 + rnd() * 300, 0, -40 + rnd() * 170);
+    leaf.rotation.set(-Math.PI / 2 + (rnd() - 0.5) * 0.6, 0, rnd() * Math.PI * 2);
+    leaf.scale.setScalar(1.2 + rnd() * 1.4);
+    branch.add(leaf);
+  }
+  branch.position.set(...(o.leafPos ?? [-60, 200, -90]));
+  scene.add(branch);
+}
+
+// ------------------------------------------------------------------ helpers
+function stadium(len, wid, r = wid / 2) {
+  const s = new THREE.Shape();
+  const x = -len / 2, y = -wid / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + len - r, y);
+  s.absarc(x + len - r, y + r, r, -Math.PI / 2, 0, false);
+  s.lineTo(x + len, y + wid - r);
+  s.absarc(x + len - r, y + wid - r, r, 0, Math.PI / 2, false);
+  s.lineTo(x + r, y + wid);
+  s.absarc(x + r, y + wid - r, r, Math.PI / 2, Math.PI, false);
+  s.lineTo(x, y + r);
+  s.absarc(x + r, y + r, r, Math.PI, Math.PI * 1.5, false);
+  return s;
+}
+
+function canvasTex(w, h, draw, srgb = true) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 16;
+  return t;
+}
+
+// ------------------------------------------------------------------ pod
+const POD = { L: 46, Wd: 25, top: 4.2, bevel: 3.4 };
+
+function makePod() {
+  const g = new THREE.Group();
+  const L = POD.L, Wd = POD.Wd;
+
+  // Cream top: slightly leathery, with the debossed wordmark (bump map).
+  const bump = canvasTex(2048, 1114, (x, w, h) => {
+    x.fillStyle = '#ffffff';
+    x.fillRect(0, 0, w, h);
+    for (let i = 0; i < 26000; i++) {
+      const v = 228 + Math.random() * 27;
+      x.fillStyle = `rgb(${v},${v},${v})`;
+      x.fillRect(Math.random() * w, Math.random() * h, 3, 3);
+    }
+    x.font = '600 178px Geist';
+    x.textAlign = 'right';
+    x.textBaseline = 'middle';
+    x.filter = 'blur(2px)';
+    x.fillStyle = '#000000';
+    x.fillText('lokate.', w * 0.86, h * 0.55);
+  }, false);
+  const color = canvasTex(2048, 1114, (x, w, h) => {
+    x.fillStyle = C.cream;
+    x.fillRect(0, 0, w, h);
+    x.font = '600 178px Geist';
+    x.textAlign = 'right';
+    x.textBaseline = 'middle';
+    x.fillStyle = 'rgba(70,60,45,0.30)';
+    x.fillText('lokate.', w * 0.86, h * 0.55);
+  });
+  for (const t of [bump, color]) {
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    t.repeat.set(1 / L, 1 / Wd);
+    t.offset.set(0.5, 0.5);
+  }
+  const topMat = new THREE.MeshPhysicalMaterial({ map: color, bumpMap: bump, bumpScale: 1.6, roughness: 0.68, sheen: 0.25, sheenColor: new THREE.Color('#ffffff') });
+  const sideMat = new THREE.MeshPhysicalMaterial({ color: C.cream, roughness: 0.72 });
+  const top = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(stadium(L - 2 * POD.bevel, Wd - 2 * POD.bevel), { depth: POD.top, bevelEnabled: true, bevelThickness: POD.bevel, bevelSize: POD.bevel, bevelSegments: 28, curveSegments: 64 }),
+    [topMat, sideMat],
+  );
+  top.position.z = 4.6;
+  top.castShadow = top.receiveShadow = true;
+  g.add(top);
+
+  // Green base, a little wider than the top: a visible rim all round.
+  const greenMat = new THREE.MeshPhysicalMaterial({ color: C.green, roughness: 0.55, clearcoat: 0.15 });
+  const base = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(stadium(L + 1.2 - 2.4, Wd + 1.2 - 2.4), { depth: 3.2, bevelEnabled: true, bevelThickness: 1.4, bevelSize: 1.2, bevelSegments: 12, curveSegments: 64 }),
+    greenMat,
+  );
+  base.position.z = 1.4;
+  base.castShadow = base.receiveShadow = true;
+  g.add(base);
+
+  // Strap loops at both ends.
+  const loopShape = stadium(8, 17, 3.2);
+  loopShape.holes.push(stadium(3.2, 11.5, 1.4));
+  for (const side of [-1, 1]) {
+    const loop = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(loopShape, { depth: 2.2, bevelEnabled: true, bevelThickness: 0.9, bevelSize: 0.9, bevelSegments: 8, curveSegments: 32 }),
+      greenMat,
+    );
+    loop.position.set(side * (L / 2 + 1.6), 0, 1.6);
+    loop.castShadow = loop.receiveShadow = true;
+    g.add(loop);
+  }
+
+  // Amber status light.
+  const ledZ = 4.6 + POD.top + POD.bevel + 0.05;
+  const led = new THREE.Mesh(new THREE.ShapeGeometry(stadium(3.4, 1.7)), new THREE.MeshBasicMaterial({ color: C.amber }));
+  led.position.set(-L / 2 + 9.5, 0.4, ledZ);
+  g.add(led);
+  const glowTex = canvasTex(256, 256, (x, w, h) => {
+    const gr = x.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    gr.addColorStop(0, 'rgba(255,190,90,0.85)');
+    gr.addColorStop(0.35, 'rgba(255,170,60,0.25)');
+    gr.addColorStop(1, 'rgba(255,160,50,0)');
+    x.fillStyle = gr;
+    x.fillRect(0, 0, w, h);
+  });
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(9, 9), new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  glow.position.set(led.position.x, led.position.y, ledZ + 0.02);
+  g.add(glow);
+
+  // Back: recessed pad with three gold pogo pins, four screws.
+  const backZ = -0.05;
+  const pad = new THREE.Mesh(new THREE.ShapeGeometry(stadium(13, 5.2)), new THREE.MeshStandardMaterial({ color: '#1E2A1C', roughness: 0.8 }));
+  pad.position.set(0, 0, backZ);
+  pad.rotation.y = Math.PI;
+  g.add(pad);
+  const gold = new THREE.MeshStandardMaterial({ color: '#B98F3E', metalness: 1, roughness: 0.38 });
+  for (const dx of [-3.2, 0, 3.2]) {
+    const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.5, 24), gold);
+    pin.rotation.x = Math.PI / 2;
+    pin.position.set(dx, 0, backZ - 0.2);
+    g.add(pin);
+  }
+  const screwMat = new THREE.MeshStandardMaterial({ color: '#22301F', metalness: 0.4, roughness: 0.5 });
+  for (const [sx, sy] of [[-15, 7.5], [15, 7.5], [-15, -7.5], [15, -7.5]]) {
+    const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.4, 20), screwMat);
+    screw.rotation.x = Math.PI / 2;
+    screw.position.set(sx, sy, backZ - 0.15);
+    g.add(screw);
+  }
+  return g;
+}
+
+// ------------------------------------------------------------------ collar
+const weaveTex = (() => {
+  const t = canvasTex(512, 256, (x, w, h) => {
+    x.fillStyle = C.olive;
+    x.fillRect(0, 0, w, h);
+    for (let yy = 0; yy < h; yy += 8) {
+      for (let xx = 0; xx < w; xx += 8) {
+        const odd = ((xx + yy) / 8) % 2;
+        x.fillStyle = odd ? 'rgba(0,0,0,0.20)' : 'rgba(255,255,230,0.07)';
+        x.fillRect(xx + (odd ? 0 : 1), yy, 7, 7);
+      }
+    }
+    x.fillStyle = C.stitch;
+    for (const yy of [h * 0.16, h * 0.84]) for (let xx = 4; xx < w; xx += 26) x.fillRect(xx, yy - 3, 15, 6);
+  });
+  t.wrapS = THREE.RepeatWrapping;
+  return t;
+})();
+
+function makeStrap(R = 46, width = 15, thick = 2.0) {
+  const seg = 360, pos = [], uv = [], idx = [];
+  const rings = [[R, width / 2, 0], [R, -width / 2, 1], [R - thick, -width / 2, 1], [R - thick, width / 2, 0]];
+  for (const [r, y, v] of rings) {
+    for (let i = 0; i <= seg; i++) {
+      const a = (Math.PI * 2 * i) / seg;
+      pos.push(Math.cos(a) * r, y, Math.sin(a) * r);
+      uv.push((i / seg) * ((2 * Math.PI * R) / 13), v);
+    }
+  }
+  const n = seg + 1;
+  for (let k = 0; k < 4; k++) {
+    const a0 = k * n, b0 = ((k + 1) % 4) * n;
+    for (let i = 0; i < seg; i++) idx.push(a0 + i, b0 + i, a0 + i + 1, a0 + i + 1, b0 + i, b0 + i + 1);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const tex = weaveTex.clone();
+  tex.needsUpdate = true;
+  const m = new THREE.Mesh(geo, new THREE.MeshPhysicalMaterial({ map: tex, bumpMap: tex, bumpScale: 1.2, roughness: 0.92, sheen: 0.5, sheenColor: new THREE.Color('#B9C29A'), side: THREE.DoubleSide }));
+  m.castShadow = m.receiveShadow = true;
+  return m;
+}
+
+function makeBuckle() {
+  const g = new THREE.Group();
+  const steel = new THREE.MeshPhysicalMaterial({ color: '#C8C6C0', metalness: 1, roughness: 0.32 });
+  const bar = (w, h, d, x, y, z) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), steel);
+    b.position.set(x, y, z);
+    b.castShadow = true;
+    g.add(b);
+  };
+  bar(2.2, 21, 2.2, 0, 0, -9);
+  bar(2.2, 21, 2.2, 0, 0, 9);
+  bar(2.2, 2.2, 20, 0, 9.5, 0);
+  bar(2.2, 2.2, 20, 0, -9.5, 0);
+  bar(1.6, 1.6, 18, 0.4, 0, 0);
+  return g;
+}
+
+function collar(R = 46) {
+  const g = new THREE.Group();
+  g.add(makeStrap(R));
+  const pod = makePod();
+  pod.rotation.y = Math.PI / 2; // top faces +x, outward; length along the strap
+  pod.position.set(R + 0.6, 0, 0);
+  g.add(pod);
+  const b = makeBuckle();
+  b.position.set(-R - 0.5, 0, 0);
+  g.add(b);
+  return g;
+}
+
+function charger() {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshPhysicalMaterial({ color: C.green, roughness: 0.55 });
+  const dock = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(stadium(58, 36), { depth: 3, bevelEnabled: true, bevelThickness: 2.4, bevelSize: 2.4, bevelSegments: 14, curveSegments: 64 }),
+    mat,
+  );
+  dock.rotation.x = -Math.PI / 2;
+  dock.castShadow = dock.receiveShadow = true;
+  g.add(dock);
+  const curve = new THREE.CatmullRomCurve3([[0, 2.6, -20], [0, 1.6, -42], [-25, 1.6, -66], [-70, 1.6, -76], [-120, 1.6, -64]].map((p) => new THREE.Vector3(...p)));
+  const cable = new THREE.Mesh(new THREE.TubeGeometry(curve, 160, 1.7, 18), new THREE.MeshPhysicalMaterial({ color: C.cream, roughness: 0.6 }));
+  cable.castShadow = true;
+  g.add(cable);
+  return g;
+}
+
+// ------------------------------------------------------------------ scenes
+const add = (obj) => (scene.add(obj), obj);
+switch (o.scene) {
+  case 'hero': {
+    const c = add(collar());
+    c.rotation.set(0, o.yaw ?? -0.35, 0);
+    c.position.y = 7.5 + 0.1;
+    break;
+  }
+  case 'float-back': { // floating, showing pins and screws (like the reference)
+    const p = add(makePod());
+    p.rotation.set(2.5, 0.22, -0.18); // back (pins, screws) towards the camera
+    p.position.y = 40;
+    break;
+  }
+  case 'float-side': {
+    const p = add(makePod());
+    p.rotation.set(-Math.PI / 2 + 0.12, 0, 0);
+    p.position.y = 42;
+    break;
+  }
+  case 'top': {
+    const p = add(makePod());
+    p.rotation.set(-Math.PI / 2, 0, o.spin ?? 0.35);
+    p.position.y = 0.05;
+    break;
+  }
+  case 'charger': {
+    add(charger());
+    const p = add(makePod());
+    p.rotation.set(-Math.PI / 2, 0, 0);
+    p.position.y = 5.5;
+    break;
+  }
+  case 'flatlay': {
+    const c = add(collar(46));
+    c.rotation.set(Math.PI / 2, 0, -0.5);
+    c.position.set(-20, 7.6, 0);
+    add(charger()).position.set(80, 0, 40);
+    const p = add(makePod());
+    p.rotation.set(-Math.PI / 2, 0, 1.2);
+    p.position.set(80, 5.5, 40);
+    break;
+  }
+  case 'trio': { // front, side and back next to each other
+    const a = add(collar(46));
+    a.rotation.set(0, -0.35, 0);
+    a.position.set(-40, 7.6, 0);
+    const s = add(makePod());
+    s.rotation.set(-Math.PI / 2 + 0.12, 0, 0);
+    s.position.set(95, 46, -10);
+    const b = add(makePod());
+    b.rotation.set(2.5, 0.22, -0.18);
+    b.position.set(95, 18, 25);
+    break;
+  }
+}
+
+renderer.render(scene, camera);
+window.__rendered = true;
+</script>
+</body>
+</html>
