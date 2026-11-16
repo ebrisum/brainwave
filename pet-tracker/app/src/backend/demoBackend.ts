@@ -35,7 +35,8 @@ import {
 } from './types';
 import { t as tr } from '../i18n';
 
-const DEFAULT_CENTER = { lat: 52.3676, lng: 4.9041 }; // Amsterdam, until the phone reports
+const DEFAULT_CENTER = { lat: 52.35335, lng: 4.87612 }; // a street near the Vondelpark, until the phone reports
+const HOME_ZONE_ID = 'demo-home';
 const SIM_TICK_MS = 4000;
 const MAX_TRACK = 4000;
 const DEMO_USER = 'demo-user';
@@ -51,6 +52,8 @@ const newId = (p: string) => `${p}-${Date.now().toString(36)}-${(nextId++).toStr
 interface SimState {
   heading: number;
   napUntil: number;
+  /** Stays at home unless lost (the demo's sleepy cat). */
+  homebody?: boolean;
 }
 
 export class DemoBackend implements Backend {
@@ -79,8 +82,20 @@ export class DemoBackend implements Backend {
   #households = new Map<string, { id: string; name: string }>([[DEMO_HOUSEHOLD, { id: DEMO_HOUSEHOLD, name: tr('Demo household') }]]);
 
   constructor() {
-    this.#seed('Tijger', '#6366F1', 180, 40);
-    this.#seed('Pluis', '#EC4899', 320, 210);
+    // A home zone for the demo household, so "At Home" / "Out", alerts and the
+    // day timeline have something to show.
+    this.#zones.set(`hh:${DEMO_HOUSEHOLD}`, [{
+      id: HOME_ZONE_ID, name: tr('Home'), lat: this.#center.lat, lng: this.#center.lng, radiusM: 35,
+      allCats: true, householdId: DEMO_HOUSEHOLD, householdName: tr('Demo household'),
+    }]);
+    this.#seed('Minoes', '#F59E0B', 6, 120, 0.15, true);
+    this.#seed('Tijger', '#6366F1', 230, 40, 0.65);
+    this.#seed('Pluis', '#EC4899', 120, 250, 0.45);
+    // A low battery yesterday (since charged), shown in the inbox.
+    const pluis = [...this.#cats.values()].find((c) => c.name === 'Pluis');
+    if (pluis) this.#alert(pluis, 'low_battery', { battery: 18 }, Date.now() - 26 * 3600_000);
+    this.#alerts.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+    this.#readUntil = Date.now() - 3 * 3600_000; // the last few hours are unread
   }
 
   #newCat(name: string, color: string, kind: Cat['kind']): Cat {
@@ -95,31 +110,59 @@ export class DemoBackend implements Backend {
     };
   }
 
-  #seed(name: string, color: string, distance: number, bearing: number) {
+  /**
+   * A simulated cat `distance` m from home, with three days of history: naps
+   * at home and at two favourite spots, short strolls and longer night walks.
+   * `outShare` is how much of the day it spends away from home.
+   */
+  #seed(name: string, color: string, distance: number, bearing: number, outShare: number, homebody = false) {
     const cat = this.#newCat(name, color, 'collar');
-    const p = offset(this.#center.lat, this.#center.lng, distance, bearing);
+    const home = this.#center;
+    const p = offset(home.lat, home.lng, distance, bearing);
     Object.assign(cat, {
       lastLat: p.lat, lastLng: p.lng, lastAccuracyM: 8,
       lastBatteryPct: 64 + Math.round(Math.random() * 30), lastFixAt: new Date().toISOString(),
     });
     this.#cats.set(cat.id, cat);
-    this.#sim.set(cat.id, { heading: Math.random() * 360, napUntil: 0 });
+    this.#sim.set(cat.id, { heading: Math.random() * 360, napUntil: 0, homebody });
 
-    // Three days of history, so route, heatmap and activity have content:
-    // naps at a few favourite spots, short strolls, a longer night walk.
-    const spots = [0, 1, 2].map((i) => offset(p.lat, p.lng, 60 + i * 70, bearing + i * 110));
+    const spots = [home, offset(home.lat, home.lng, 140 + distance / 3, bearing + 30), offset(home.lat, home.lng, 260, bearing - 50)];
     const pts: TrackPoint[] = [];
     const now = Date.now();
-    for (let m = 3 * 24 * 60; m > 0; m -= 15) {
+    for (let m = 10 * 24 * 60; m > 0; m -= 10) {
       const at = now - m * 60_000;
       const hour = new Date(at).getHours();
       const night = hour >= 21 || hour < 6;
-      const spot = spots[Math.floor((m / 180) % spots.length)]!;
-      const wander = night ? 40 + Math.random() * 160 : Math.random() < 0.7 ? Math.random() * 8 : 20 + Math.random() * 60;
+      const block = Math.floor(m / 90);
+      const away = ((block * 7919) % 100) / 100 < outShare || (night && block % 2 === 0);
+      const spot = away ? spots[1 + (block % 2)]! : spots[0]!;
+      const wander = away ? (night ? 15 + Math.random() * 45 : 5 + Math.random() * 20) : Math.random() * 4;
       const q = offset(spot.lat, spot.lng, wander, Math.random() * 360);
-      pts.push({ at: new Date(at).toISOString(), lat: q.lat, lng: q.lng, accuracyM: 6 + Math.random() * 10, batteryPct: 80 });
+      pts.push({ at: new Date(at).toISOString(), lat: q.lat, lng: q.lng, accuracyM: 6 + Math.random() * 8, batteryPct: 80 });
+    }
+    // The last stretch walks to where the cat is now.
+    const last = pts[pts.length - 1]!;
+    for (let k = 1; k <= 4; k++) {
+      pts.push({
+        at: new Date(now - (5 - k) * 2 * 60_000).toISOString(),
+        lat: last.lat + ((p.lat - last.lat) * k) / 4, lng: last.lng + ((p.lng - last.lng) * k) / 4, accuracyM: 8, batteryPct: 80,
+      });
     }
     this.#tracks.set(cat.id, pts);
+
+    // Zone changes in that history become events and alerts, as on the server.
+    const zone = this.#zonesFor(cat.id)[0];
+    if (!zone) return;
+    let was: boolean | null = null;
+    for (const pt of pts) {
+      const inside = insideZone(zone, pt, was);
+      if (was !== null && inside !== was && Date.parse(pt.at) > now - 2 * 86400_000) {
+        this.#events.unshift({ id: newId('ev'), catId: cat.id, transition: inside ? 'enter' : 'exit', zoneName: zone.name, at: pt.at });
+        this.#alert(cat, inside ? 'zone_enter' : 'zone_exit', { zone: zone.name }, Date.parse(pt.at));
+      }
+      was = inside;
+    }
+    this.#zoneState.set(`${cat.id}:${zone.id}`, was ?? false);
   }
 
   /** Re-anchor the simulated cats near the phone the first time it reports. */
@@ -129,6 +172,9 @@ export class DemoBackend implements Backend {
     const dLat = lat - this.#center.lat;
     const dLng = lng - this.#center.lng;
     this.#center = { lat, lng };
+    for (const [key, zs] of this.#zones) {
+      this.#zones.set(key, zs.map((z) => ({ ...z, lat: z.lat + dLat, lng: z.lng + dLng })));
+    }
     for (const [id, cat] of this.#cats) {
       if (!this.#sim.has(id) || cat.lastLat === null || cat.lastLng === null) continue;
       cat.lastLat += dLat;
@@ -192,6 +238,7 @@ export class DemoBackend implements Backend {
     for (const [id, s] of this.#sim) {
       const cat = this.#cats.get(id);
       if (!cat || cat.lastLat === null || cat.lastLng === null) continue;
+      if (s.homebody && !cat.lostMode) continue; // the sleepy one stays on the sofa
       if (now < s.napUntil && !cat.lostMode) continue; // cats sleep a lot
       if (Math.random() < 0.08 && !cat.lostMode) {
         s.napUntil = now + 20_000 + Math.random() * 40_000;
@@ -210,7 +257,7 @@ export class DemoBackend implements Backend {
     }
   };
 
-  #alert(cat: Cat, kind: AlertKind, meta: AlertItem['meta'] = {}) {
+  #alert(cat: Cat, kind: AlertKind, meta: AlertItem['meta'] = {}, at: number = Date.now()) {
     const titles: Record<AlertKind, string> = {
       zone_exit: tr('{name} left {zone}', { name: cat.name, zone: meta.zone ?? tr('a zone') }),
       zone_enter: tr('{name} is back in {zone}', { name: cat.name, zone: meta.zone ?? tr('a zone') }),
@@ -219,7 +266,7 @@ export class DemoBackend implements Backend {
       tracker_silent: tr("{name}'s tracker is silent", { name: cat.name }),
       found: tr('{name} is found', { name: cat.name }),
     };
-    this.#alerts.unshift({ id: newId('al'), catId: cat.id, kind, title: titles[kind], body: '', meta, at: new Date().toISOString(), unread: true });
+    this.#alerts.unshift({ id: newId('al'), catId: cat.id, kind, title: titles[kind], body: '', meta, at: new Date(at).toISOString(), unread: true });
     this.#alerts.splice(200);
   }
 
