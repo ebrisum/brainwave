@@ -22,3 +22,23 @@ Headlines and sublines live in `compose.cjs` (COPY, HERO). The brand name
 
 Map data © OpenStreetMap contributors, tiles OpenFreeMap / OpenMapTiles: keep a
 small credit near the images on the website (e.g. in the footer).
+
+## The collar (product renders)
+
+`product/scene.html` is a Three.js scene of the collar: a 19-gram pod on a
+breakaway collar, charging base, colours, size next to a 2-euro coin.
+**Illustrative:** Eview does not publish the EV-206M's exact shape or size,
+so swap these for real photos (or Eview's white-label renders with our logo)
+once the samples arrive.
+
+| File | Use |
+|---|---|
+| `hero-collar-nl.jpg`, `hero-collar-en.jpg` | 2400×1260 banner: collar + app |
+| `product-cards/<lang>/NN-*.jpg` | 1200×1500 cards: weight, no subscription, connected, charging, colours, size |
+| renders (zip, not in git) | transparent PNGs, 2000×1500 (colours 2400×1200) |
+
+```bash
+cd marketing && npm install                                   # three.js
+node product/render.cjs /tmp/renders                          # transparent PNGs
+node product/compose.cjs /tmp/renders /tmp/raw marketing      # cards + banner (needs the app screens)
+```

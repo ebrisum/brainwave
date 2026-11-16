@@ -1,0 +1,289 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+  canvas { display: block; }
+</style>
+<script type="importmap">
+  { "imports": { "three": "../node_modules/three/build/three.module.js", "three/addons/": "../node_modules/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<script type="module">
+/*
+ * Product renders of the collar tracker (illustrative: a 19 g pod on a
+ * breakaway collar; the exact EV-206M shape is not public). Units: mm.
+ * Scene options come from the URL hash as JSON, see render.cjs.
+ */
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const o = Object.assign({
+  scene: 'hero', pod: '#F4F5F7', strap: '#E8735A', bg: null, dark: false,
+  cam: [95, 55, 120], target: [20, 0, 0], fov: 30, brand: 'CAT TRACKER', led: '#2BD27F',
+}, JSON.parse(decodeURIComponent(location.hash.slice(1) || '{}')));
+
+const W = innerWidth, H = innerHeight;
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(W, H);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = o.dark ? 1.0 : 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+if (o.bg) scene.background = new THREE.Color(o.bg);
+
+const camera = new THREE.PerspectiveCamera(o.fov, W / H, 1, 5000);
+camera.position.set(...o.cam);
+camera.lookAt(new THREE.Vector3(...o.target));
+
+const key = new THREE.DirectionalLight(0xffffff, o.dark ? 2.2 : 1.6);
+key.position.set(80, 160, 90);
+key.castShadow = true;
+key.shadow.mapSize.set(4096, 4096);
+key.shadow.radius = 9;
+key.shadow.bias = -0.0004;
+Object.assign(key.shadow.camera, { left: -160, right: 160, top: 160, bottom: -160, near: 1, far: 600 });
+scene.add(key);
+const rim = new THREE.DirectionalLight(o.dark ? 0x7d9bff : 0xffffff, o.dark ? 1.4 : 0.5);
+rim.position.set(-120, 60, -100);
+scene.add(rim);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.ShadowMaterial({ opacity: o.dark ? 0.45 : 0.16 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ---------------------------------------------------------------- the pod
+const POD = { w: 38, h: 25, depth: 7, bevel: 3.6, r: 10 };
+
+function roundedRect(w, h, r) {
+  const s = new THREE.Shape();
+  const x = -w / 2, y = -h / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+  return s;
+}
+
+function logoTexture(color, ink) {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 680;
+  const g = c.getContext('2d');
+  g.fillStyle = ink;
+  // paw: four toes and a pad
+  const cx = 512, cy = 250;
+  const toe = (x, y, rx, ry, a) => { g.beginPath(); g.ellipse(x, y, rx, ry, a, 0, Math.PI * 2); g.fill(); };
+  toe(cx - 95, cy - 30, 34, 44, -0.35); toe(cx - 33, cy - 85, 34, 46, -0.1);
+  toe(cx + 33, cy - 85, 34, 46, 0.1); toe(cx + 95, cy - 30, 34, 44, 0.35);
+  g.beginPath();
+  g.moveTo(cx - 80, cy + 85);
+  g.bezierCurveTo(cx - 110, cy + 10, cx - 40, cy - 10, cx, cy + 10);
+  g.bezierCurveTo(cx + 40, cy - 10, cx + 110, cy + 10, cx + 80, cy + 85);
+  g.bezierCurveTo(cx + 60, cy + 120, cx - 60, cy + 120, cx - 80, cy + 85);
+  g.fill();
+  g.font = '700 74px "Helvetica Neue", Arial, sans-serif';
+  g.textAlign = 'center';
+  g.letterSpacing = '10px';
+  g.fillText(o.brand, cx, 520);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+function isDark(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return ((n >> 16) * 0.299 + ((n >> 8) & 255) * 0.587 + (n & 255) * 0.114) < 140;
+}
+
+function makePod(color) {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(roundedRect(POD.w - 2 * POD.bevel, POD.h - 2 * POD.bevel, POD.r - POD.bevel), {
+      depth: POD.depth, bevelEnabled: true, bevelThickness: POD.bevel, bevelSize: POD.bevel, bevelSegments: 24, curveSegments: 48,
+    }),
+    new THREE.MeshPhysicalMaterial({ color, roughness: 0.42, metalness: 0, clearcoat: 0.35, clearcoatRoughness: 0.35, sheen: 0.2 }),
+  );
+  body.castShadow = true;
+  body.receiveShadow = true;
+  group.add(body);
+  // a slim seam around the side
+  const seam = new THREE.Mesh(
+    new THREE.TorusGeometry(1, 0.18, 8, 64),
+    new THREE.MeshStandardMaterial({ color: isDark(color) ? '#000000' : '#C9CDD4', roughness: 0.6 }),
+  );
+  seam.visible = false;
+  group.add(seam);
+  // logo on the front face (z = depth + bevel)
+  const ink = isDark(color) ? 'rgba(255,255,255,0.88)' : 'rgba(12,18,32,0.82)';
+  const logo = new THREE.Mesh(
+    new THREE.PlaneGeometry(22, 14.6),
+    new THREE.MeshBasicMaterial({ map: logoTexture(color, ink), transparent: true, depthWrite: false }),
+  );
+  logo.position.set(0, 0.6, POD.depth + POD.bevel + 0.05);
+  group.add(logo);
+  // status light
+  const led = new THREE.Mesh(new THREE.CircleGeometry(0.9, 32), new THREE.MeshBasicMaterial({ color: o.led }));
+  led.position.set(POD.w / 2 - 7.5, -POD.h / 2 + 6, POD.depth + POD.bevel + 0.06);
+  group.add(led);
+  const glow = new THREE.Mesh(new THREE.CircleGeometry(2.4, 32), new THREE.MeshBasicMaterial({ color: o.led, transparent: true, opacity: 0.18, depthWrite: false }));
+  glow.position.copy(led.position).add(new THREE.Vector3(0, 0, -0.01));
+  group.add(glow);
+  // two charging contacts on the back
+  for (const dx of [-4, 4]) {
+    const pin = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.4, 24), new THREE.MeshStandardMaterial({ color: '#C8A55A', metalness: 1, roughness: 0.25 }));
+    pin.rotation.x = Math.PI / 2;
+    pin.position.set(dx, -4, -POD.bevel - 0.1);
+    group.add(pin);
+  }
+  // strap loops on the back
+  for (const dx of [-13, 13]) {
+    const loop = new THREE.Mesh(new THREE.BoxGeometry(4, POD.h - 6, 3), new THREE.MeshPhysicalMaterial({ color, roughness: 0.5 }));
+    loop.position.set(dx, 0, -POD.bevel - 1.2);
+    loop.castShadow = true;
+    group.add(loop);
+  }
+  return group;
+}
+
+// ---------------------------------------------------------------- the collar
+/** A flat band around a circle (radius R) in the XZ plane, width along Y. */
+function makeStrap(color, R = 44, width = 11, thick = 1.8, from = 0, to = Math.PI * 2) {
+  const seg = 220, pos = [], idx = [];
+  const ring = (r, y) => {
+    for (let i = 0; i <= seg; i++) {
+      const a = from + ((to - from) * i) / seg;
+      pos.push(Math.cos(a) * r, y, Math.sin(a) * r);
+    }
+  };
+  ring(R, width / 2); ring(R, -width / 2); ring(R - thick, -width / 2); ring(R - thick, width / 2);
+  const n = seg + 1;
+  for (let k = 0; k < 4; k++) {
+    const a0 = k * n, b0 = ((k + 1) % 4) * n;
+    for (let i = 0; i < seg; i++) idx.push(a0 + i, b0 + i, a0 + i + 1, a0 + i + 1, b0 + i, b0 + i + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, new THREE.MeshPhysicalMaterial({ color, roughness: 0.75, sheen: 0.6, sheenColor: new THREE.Color(color), side: THREE.DoubleSide }));
+  m.castShadow = true;
+  m.receiveShadow = true;
+  // stitching line
+  const stitch = new THREE.Mesh(
+    new THREE.TorusGeometry(R + 0.05, 0.12, 6, 400, to - from),
+    new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.35 }),
+  );
+  stitch.rotation.x = Math.PI / 2;
+  stitch.rotation.z = -from;
+  const group = new THREE.Group();
+  group.add(m);
+  for (const y of [width / 2 - 1.6, -width / 2 + 1.6]) {
+    const s = stitch.clone();
+    s.position.y = y;
+    group.add(s);
+  }
+  return group;
+}
+
+function makeBuckle(color) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshPhysicalMaterial({ color, roughness: 0.35, clearcoat: 0.4 });
+  const a = new THREE.Mesh(new THREE.BoxGeometry(5, 14, 16), mat);
+  a.castShadow = true;
+  g.add(a);
+  const slot = new THREE.Mesh(new THREE.BoxGeometry(5.2, 3, 6), new THREE.MeshStandardMaterial({ color: '#000000', roughness: 0.9 }));
+  slot.position.set(0, 0, 4);
+  g.add(slot);
+  return g;
+}
+
+function collarWithPod(podColor, strapColor, R = 44) {
+  const g = new THREE.Group();
+  g.add(makeStrap(strapColor, R));
+  const pod = makePod(podColor);
+  pod.rotation.y = Math.PI / 2; // front face points along +x, outward
+  pod.position.set(R + POD.bevel + 1.5, 0, 0);
+  g.add(pod);
+  const buckle = makeBuckle(isDark(strapColor) ? '#2A3140' : '#0C1220');
+  buckle.position.set(-R - 1, 0, 0);
+  g.add(buckle);
+  return g;
+}
+
+function coin2euro() {
+  const g = new THREE.Group();
+  const outer = new THREE.Mesh(new THREE.CylinderGeometry(12.875, 12.875, 2.2, 96), new THREE.MeshStandardMaterial({ color: '#C9CED6', metalness: 1, roughness: 0.32 }));
+  const inner = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 2.3, 96), new THREE.MeshStandardMaterial({ color: '#D8B45A', metalness: 1, roughness: 0.3 }));
+  for (const m of [outer, inner]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
+  return g;
+}
+
+function charger() {
+  const g = new THREE.Group();
+  const base = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(roundedRect(42, 32, 12), { depth: 3, bevelEnabled: true, bevelThickness: 2.5, bevelSize: 2.5, bevelSegments: 16, curveSegments: 40 }),
+    new THREE.MeshPhysicalMaterial({ color: '#1A2030', roughness: 0.5, clearcoat: 0.3 }),
+  );
+  base.rotation.x = -Math.PI / 2;
+  base.castShadow = true;
+  base.receiveShadow = true;
+  g.add(base);
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 2.5, -19), new THREE.Vector3(0, 1.5, -40), new THREE.Vector3(-20, 1.5, -62), new THREE.Vector3(-55, 1.5, -72), new THREE.Vector3(-95, 1.5, -64),
+  ]);
+  const cable = new THREE.Mesh(new THREE.TubeGeometry(curve, 120, 1.6, 16), new THREE.MeshPhysicalMaterial({ color: '#1A2030', roughness: 0.6 }));
+  cable.castShadow = true;
+  g.add(cable);
+  return g;
+}
+
+// ---------------------------------------------------------------- scenes
+const lift = (obj, y) => { obj.position.y += y; return obj; };
+if (o.scene === 'hero') {
+  const c = collarWithPod(o.pod, o.strap);
+  c.rotation.set(0.28, -0.35, 0.12);
+  scene.add(lift(c, 22));
+} else if (o.scene === 'pod') {
+  const p = makePod(o.pod);
+  p.rotation.set(-1.05, 0, 0.35);
+  scene.add(lift(p, 9));
+} else if (o.scene === 'colors') {
+  o.colors.forEach(([pod, strap], i) => {
+    const c = collarWithPod(pod, strap, 40);
+    c.rotation.set(0.22, -1.12, 0);
+    c.position.set((i - (o.colors.length - 1) / 2) * 112, 20, 0);
+    scene.add(c);
+  });
+} else if (o.scene === 'coin') {
+  const p = makePod(o.pod);
+  p.rotation.set(-Math.PI / 2, 0, 0.1);
+  p.position.set(-14, POD.bevel + 1.6, 0);
+  scene.add(p);
+  const c = coin2euro();
+  c.position.set(26, 1.1, 6);
+  scene.add(c);
+} else if (o.scene === 'charger') {
+  const ch = charger();
+  scene.add(ch);
+  const p = makePod(o.pod);
+  p.rotation.set(-Math.PI / 2, 0, 0);
+  p.position.set(0, 5.5 + POD.bevel + 1.6, 0);
+  scene.add(p);
+}
+
+renderer.render(scene, camera);
+window.__rendered = true;
+</script>
+</body>
+</html>
